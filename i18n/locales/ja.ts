@@ -1,0 +1,15 @@
+export default {
+  tabs: { quotes: '名言', grass: '芝生', settings: '設定' },
+  home: { loading: '名言を読み込み中...', speakAlong: '読む', writeAlong: '書く', typeAlong: 'タイプ' },
+  speak: { title: '読み上げ', instruction: '下の名言を声に出して読んでください', recognized: '認識されたテキスト:', listening: '聞いています...', tapMic: 'マイクボタンを押して開始', match: '一致度', unavailable: '音声認識はDevビルドでのみ使用できます。', unavailableFallback: 'Devビルドで使用可能', close: '閉じる' },
+  write: { title: '書き取り', instruction: '名言を紙に書いて写真を撮ってください', permissionNeeded: 'カメラ権限が必要です', allowPermission: '許可', processing: 'テキスト認識中...', recognized: '認識されたテキスト:', match: '一致度:', retake: '再撮影', close: '閉じる' },
+  type: { title: 'タイピング', instruction: '下の名言をそのままタイプしてください', placeholder: 'ここにタイプ...', close: '閉じる' },
+  praise: { title: 'よくできました！', continue: '続ける', fallback: '素晴らしい！あなたの努力が輝いています！' },
+  grass: { title: '私の芝生', subtitle: '毎日名言に挑戦して芝生を埋めましょう', todayActivity: '今日の活動', totalActivities: '合計', activeDays: '活動日数', emptyHint: '今日の活動はまだありません。名言タブから始めましょう！', less: '少', more: '多', streak: '日連続！', streakCongrats: '連続出席おめでとうございます！' },
+  settings: { title: '設定', subscription: 'サブスク', premium: 'プレミアム', premiumDesc: '広告なしで利用', premiumAlert: 'プレミアムを有効にすると広告なしで利用できます。\n\n(支払いは近日公開)', cancel: 'キャンセル', activate: '有効化', stats: '統計', quotesViewed: '閲覧した名言', language: '言語', selectLanguage: '言語選択', darkMode: 'ダークモード', darkModeDesc: 'ダークテーマを使用', category: 'カテゴリ', selectCategory: '名言カテゴリ選択', notifications: '通知', dailyReminder: '毎日のリマインダー', dailyReminderDesc: '毎日名言を確認できるように通知', account: 'アカウント', login: 'ログイン', loginDesc: 'Googleアカウントでログイン', logout: 'ログアウト', loggedInAs: 'ログイン中:', info: '情報', appVersion: 'アプリバージョン', madeBy: '制作者', terms: '利用規約', privacy: 'プライバシーポリシー' },
+  categories: { all: 'すべて', love: '愛', growth: '成長', life: '人生', morning: '朝', courage: '勇気', happiness: '幸福', patience: '忍耐', wisdom: '知恵', friendship: '友情', success: '成功' },
+  onboarding: { slide1Title: '毎日の良い言葉', slide1Desc: 'AIがあなたのために毎日温かい名言を生成します。', slide2Title: '読んで、書いて、タイプ', slide2Desc: '名言を声に出したり、手書きしたり、タイプして心に刻みましょう。', slide3Title: '芝生を埋めましょう', slide3Desc: '活動するたびに芝生が埋まります。毎日の努力が見えます！', slide4Title: '準備はいいですか？', slide4Desc: '今すぐ最初の名言に会いましょう！', next: '次へ', start: '始める', skip: 'スキップ' },
+  share: { shareQuote: '名言を共有' },
+  bookmark: { saved: '保存済み', save: '保存', title: '保存した名言', empty: 'まだ保存した名言がありません。' },
+  notification: { title: '今日の名言が待っています', body: 'Good Vibeで温かい名言を確認しましょう！' },
+};

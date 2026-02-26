@@ -1,6 +1,4 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
+# Dependencies
 node_modules/
 
 # Expo
@@ -9,19 +7,20 @@ dist/
 web-build/
 expo-env.d.ts
 
-# Native
-.kotlin/
-*.orig.*
+# Native builds
+ios/
+android/
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
+*.orig.*
 
 # Metro
 .metro-health-check*
 
-# debug
+# Debug
 npm-debug.*
 yarn-debug.*
 yarn-error.*
@@ -30,12 +29,34 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# typescript
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# TypeScript
 *.tsbuildinfo
 
-# generated native folders
-/ios
-/android
+# Sentry
+.sentryclirc
+
+# EAS
+.easignore
+
+# Internal deployment docs
+Deployment.md
+
+# Testing
+coverage/
+__tests__/
+
+# OS
+Thumbs.db
+
+repomix-output.xml

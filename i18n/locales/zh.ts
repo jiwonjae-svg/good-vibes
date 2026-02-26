@@ -1,0 +1,15 @@
+export default {
+  tabs: { quotes: '名言', grass: '草坪', settings: '设置' },
+  home: { loading: '正在加载名言...', speakAlong: '跟读', writeAlong: '跟写', typeAlong: '打字' },
+  speak: { title: '跟读', instruction: '请大声朗读下面的名言', recognized: '识别的文本：', listening: '正在聆听...', tapMic: '按麦克风按钮开始', match: '匹配度', unavailable: '语音识别仅在开发版本中可用。', unavailableFallback: '在开发版本中可用', close: '关闭' },
+  write: { title: '跟写', instruction: '把名言写在纸上，然后拍照', permissionNeeded: '需要相机权限', allowPermission: '允许', processing: '正在识别文本...', recognized: '识别的文本：', match: '匹配度：', retake: '重拍', close: '关闭' },
+  type: { title: '打字', instruction: '请原样输入下面的名言', placeholder: '在此输入...', close: '关闭' },
+  praise: { title: '做得好！', continue: '继续', fallback: '太棒了！你的坚持闪闪发光！' },
+  grass: { title: '我的草坪', subtitle: '每天跟随名言填充你的草坪', todayActivity: '今天的活动', totalActivities: '总活动', activeDays: '活动天数', emptyHint: '今天还没有活动。从名言标签开始吧！', less: '少', more: '多', streak: '天连续！', streakCongrats: '恭喜你连续出席！' },
+  settings: { title: '设置', subscription: '订阅', premium: '高级版', premiumDesc: '无广告体验', premiumAlert: '激活高级版可享受无广告体验。\n\n(支付即将推出)', cancel: '取消', activate: '激活', stats: '统计', quotesViewed: '已查看名言', language: '语言', selectLanguage: '选择语言', darkMode: '深色模式', darkModeDesc: '使用深色主题', category: '分类', selectCategory: '选择名言分类', notifications: '通知', dailyReminder: '每日提醒', dailyReminderDesc: '每天提醒查看名言', account: '账户', login: '登录', loginDesc: '使用Google账号登录', logout: '退出登录', loggedInAs: '已登录：', info: '信息', appVersion: '应用版本', madeBy: '制作者', terms: '服务条款', privacy: '隐私政策' },
+  categories: { all: '全部', love: '爱', growth: '成长', life: '人生', morning: '早晨', courage: '勇气', happiness: '幸福', patience: '耐心', wisdom: '智慧', friendship: '友谊', success: '成功' },
+  onboarding: { slide1Title: '每天一句好话', slide1Desc: 'AI每天为你生成温暖的名言。', slide2Title: '跟读、跟写、打字', slide2Desc: '朗读、手写或打字名言，铭记于心。', slide3Title: '填满你的草坪', slide3Desc: '每次活动都会填满草坪。看看你的努力！', slide4Title: '准备好了吗？', slide4Desc: '现在就来看看你的第一句名言吧！', next: '下一步', start: '开始', skip: '跳过' },
+  share: { shareQuote: '分享名言' },
+  bookmark: { saved: '已保存', save: '保存', title: '已保存的名言', empty: '还没有保存的名言。' },
+  notification: { title: '今天的名言在等你', body: '现在就到Good Vibe查看温暖的名言吧！' },
+};

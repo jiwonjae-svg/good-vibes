@@ -1,30 +1,77 @@
 {
   "expo": {
-    "name": "Project-Good-Vibes",
-    "slug": "Project-Good-Vibes",
+    "name": "Good Vibe",
+    "slug": "good-vibe",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "scheme": "goodvibe",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FFF8F0"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.goodvibe.app",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Speech recognition is used for the speak-along feature.",
+        "NSMicrophoneUsageDescription": "Microphone is used for the speak-along feature.",
+        "NSCameraUsageDescription": "Camera is used for the write-along feature."
+      }
     },
     "android": {
+      "package": "com.goodvibe.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#FFF8F0"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA"
+      ]
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
+    "plugins": [
+      "expo-router",
+      "expo-localization",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#FF9F7E"
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Microphone is needed for speak-along.",
+          "speechRecognitionPermission": "Speech recognition is used for speak-along."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Camera is needed for write-along."
+        }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy",
+          "iosAppId": "ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy"
+        }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "YOUR_ORG",
+          "project": "good-vibe"
+        }
+      ],
+      "expo-web-browser"
+    ]
   }
 }

@@ -6,11 +6,20 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "prepare": "husky",
+    "check:secrets": "node scripts/check-secrets.js",
+    "check:env": "node -e \"require('./constants/config.ts')\" || echo 'Run: npx ts-node constants/config.ts'"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,json,md}": [
+      "node scripts/check-secrets.js"
+    ]
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-firebase/app": "^23.8.6",
     "@sentry/react-native": "~7.2.0",
     "expo": "~54.0.33",
     "expo-auth-session": "~7.0.10",
@@ -46,6 +55,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "typescript": "~5.9.2"
   },
   "private": true

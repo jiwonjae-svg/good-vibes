@@ -1,0 +1,33 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_GROK_MODEL": "grok-4-1-fast-non-reasoning"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_GROK_MODEL": "grok-4-1-fast-non-reasoning"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_GROK_MODEL": "grok-4-1-fast-non-reasoning"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

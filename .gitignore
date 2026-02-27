@@ -38,7 +38,14 @@ yarn-error.*
 # Environment & Secrets
 .env
 .env.*
+.env.local
+.env.*.local
 !.env.example
+
+# Firebase / Google native config files (contain sensitive project credentials)
+# Inject these via CI/CD secrets — see Deployment.md for instructions
+google-services.json
+GoogleService-Info.plist
 
 # TypeScript
 *.tsbuildinfo

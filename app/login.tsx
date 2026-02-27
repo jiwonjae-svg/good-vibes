@@ -87,7 +87,11 @@ export default function LoginScreen() {
     try {
       const user = await signUpWithEmail(email.trim(), password, displayName.trim());
       await setAuth({ uid: user!.uid, displayName: user!.displayName, email: user!.email, photoURL: user!.photoURL });
-      await setAuthCompleted();
+      Alert.alert(
+        'Verification Email Sent',
+        'Please check your email inbox and verify your email address.',
+        [{ text: 'OK', onPress: () => setAuthCompleted() }],
+      );
     } catch (e: any) {
       Alert.alert('Sign Up Failed', e.message);
     } finally {
@@ -127,7 +131,7 @@ export default function LoginScreen() {
           {/* Header */}
           <View style={s.header}>
             <Text style={s.appIcon}>✨</Text>
-            <Text style={s.appName}>Good Vibe</Text>
+            <Text style={s.appName}>Good Vibes</Text>
             <Text style={s.appTagline}>
               {mode === 'login' ? 'Welcome back' : mode === 'signup' ? 'Create your account' : 'Reset your password'}
             </Text>

@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { FontSize, Spacing, BorderRadius, Fonts } from '../constants/theme';
 import { useUserStore } from '../stores/useUserStore';
@@ -17,6 +18,7 @@ import {
 type Mode = 'login' | 'signup' | 'forgot';
 
 export default function LoginScreen() {
+  const { t } = useTranslation();
   const colors = useThemeColors();
   const setAuth = useUserStore((s) => s.setAuth);
   const setAuthCompleted = useUserStore((s) => s.setAuthCompleted);
@@ -133,7 +135,7 @@ export default function LoginScreen() {
             <Text style={s.appIcon}>✨</Text>
             <Text style={s.appName}>Good Vibes</Text>
             <Text style={s.appTagline}>
-              {mode === 'login' ? 'Welcome back' : mode === 'signup' ? 'Create your account' : 'Reset your password'}
+              {mode === 'login' ? t('login.welcomeBack') : mode === 'signup' ? t('login.createAccount') : t('login.resetPassword')}
             </Text>
           </View>
 

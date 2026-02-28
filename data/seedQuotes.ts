@@ -1,6 +1,7 @@
 export interface SeedQuote {
   text: string;
   author: string;
+  category?: string;
 }
 
 export const seedQuotes: SeedQuote[] = [

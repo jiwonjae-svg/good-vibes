@@ -81,14 +81,13 @@ export default {
     ],
     extra: {
       eas: {
-        projectId: "good-vibes-3d443",
+        "projectId": "ec12b53d-6403-4d94-a4af-f950c64e8892"
       },
       firebaseApiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
       firebaseAuthDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
       firebaseProjectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
       firebaseStorageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
-      firebaseMessagingSenderId:
-        process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+      firebaseMessagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
       firebaseAppId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
       grokModel: process.env.EXPO_PUBLIC_GROK_MODEL,
       googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,

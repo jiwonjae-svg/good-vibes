@@ -3,12 +3,12 @@ import * as Sharing from 'expo-sharing';
 
 export async function shareQuoteText(text: string, author: string): Promise<void> {
   const authorLine = author && author !== '작자 미상' ? `\n— ${author}` : '';
-  const message = `"${text}"${authorLine}\n\n#GoodVibe #명언`;
+  const message = `"${text}"${authorLine}\n\n#goodvibes #명언`;
 
   try {
     await Share.share({
       message,
-      title: 'Good Vibe',
+      title: 'Good Vibes',
     });
   } catch { /* user cancelled */ }
 }
@@ -20,7 +20,7 @@ export async function shareQuoteImage(uri: string): Promise<void> {
   try {
     await Sharing.shareAsync(uri, {
       mimeType: 'image/png',
-      dialogTitle: 'Good Vibe',
+      dialogTitle: 'Good Vibes',
     });
   } catch { /* silent */ }
 }

@@ -1,6 +1,5 @@
 import { GROK_API_URL, GROK_MODEL, GROK_API_KEY } from '../constants/config';
 import i18n from '../i18n';
-import type { QuoteCategory } from '../stores/useUserStore';
 
 interface GrokMessage {
   role: 'system' | 'user' | 'assistant';
@@ -12,24 +11,13 @@ interface GrokResponse {
 }
 
 const LANG_NAMES: Record<string, string> = {
-  ko: '한국어', en: 'English', ja: '日本語', zh: '中文',
+  ko: 'Korean',
+  en: 'English',
+  ja: 'Japanese',
+  zh: 'Chinese',
 };
 
-const CATEGORY_PROMPTS: Record<QuoteCategory, string> = {
-  all: '다양한 주제(사랑, 용기, 행복, 성장, 인내 등)',
-  love: '사랑과 관계',
-  growth: '자기계발과 성장',
-  life: '인생과 삶의 지혜',
-  morning: '아침에 어울리는 활력과 긍정',
-  courage: '용기와 도전',
-  happiness: '행복과 기쁨',
-  patience: '인내와 끈기',
-  wisdom: '지혜와 통찰',
-  friendship: '우정과 사람',
-  success: '성공과 목표',
-};
-
-export async function callGrok(messages: GrokMessage[]): Promise<string> {
+export async function callGrok(messages: GrokMessage[], maxTokens = 500): Promise<string> {
   const response = await fetch(GROK_API_URL, {
     method: 'POST',
     headers: {
@@ -40,7 +28,7 @@ export async function callGrok(messages: GrokMessage[]): Promise<string> {
       model: GROK_MODEL,
       messages,
       temperature: 0.9,
-      max_tokens: 2000,
+      max_tokens: maxTokens,
     }),
   });
 
@@ -51,27 +39,34 @@ export async function callGrok(messages: GrokMessage[]): Promise<string> {
 
 export async function generateQuotes(
   count: number,
-  category: QuoteCategory = 'all',
-): Promise<{ text: string; author: string }[]> {
+  selectedCategories: string[] = [],
+): Promise<{ text: string; author: string; category?: string }[]> {
   const lang = i18n.language;
-  const langName = LANG_NAMES[lang] ?? LANG_NAMES.ko;
-  const catPrompt = CATEGORY_PROMPTS[category] ?? CATEGORY_PROMPTS.all;
+  const langName = LANG_NAMES[lang] ?? 'Korean';
 
-  const raw = await callGrok([
-    {
-      role: 'system',
-      content: `You are an expert at generating inspiring quotes. Generate quotes in ${langName}. Each quote should carry a positive, warm message about life.`,
-    },
-    {
-      role: 'user',
-      content: `Generate ${count} inspiring and warm quotes about "${catPrompt}" in ${langName}.
+  const categoryList =
+    selectedCategories.length > 0
+      ? selectedCategories.join(', ')
+      : 'various topics (life, love, courage, happiness, growth, wisdom, etc.)';
 
-Respond ONLY with a JSON array, no other text:
-[{"text": "quote content", "author": "author name"}]
+  const systemPrompt = `You are a professional expert in generating touching and inspirational quotes.
 
-Use real famous authors when possible, or "작자 미상" for unknown/original quotes.`,
-    },
-  ]);
+Rules:
+- Respond in ${langName}.
+- Generate quotes based on [${categoryList}].
+- For each quote, use only 1-4 relevant categories from the provided list, rather than mixing all of them.
+- Length: 1-2 sentences per quote. Keep it natural and impactful.
+- Output Format: Strictly JSON array only: [{ "text": "...", "author": "...", "category": "..." }]. No other text, explanations, or markdown outside the JSON.
+- Quantity: Generate exactly ${count} quotes at once.
+- Use real famous authors when possible, or use the appropriate "Unknown" translation for the language.`;
+
+  const raw = await callGrok(
+    [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `Generate ${count} inspiring quotes now.` },
+    ],
+    500,
+  );
 
   try {
     const jsonMatch = raw.match(/\[[\s\S]*\]/);
@@ -87,20 +82,23 @@ export async function generatePraise(
   quoteSample: string,
 ): Promise<string> {
   const lang = i18n.language;
-  const langName = LANG_NAMES[lang] ?? LANG_NAMES.ko;
+  const langName = LANG_NAMES[lang] ?? 'Korean';
   const activityName =
     activityType === 'speak' ? 'read aloud' : activityType === 'write' ? 'handwrite' : 'type';
 
-  const raw = await callGrok([
-    {
-      role: 'system',
-      content: `You are a warm, encouraging advisor. Give a short, heartfelt praise in ${langName}.`,
-    },
-    {
-      role: 'user',
-      content: `The user completed the "${activityName}" activity for the quote: "${quoteSample}". Give one sentence of warm praise in ${langName}.`,
-    },
-  ]);
+  const raw = await callGrok(
+    [
+      {
+        role: 'system',
+        content: `You are a warm, encouraging advisor. Give a short, heartfelt praise in ${langName}.`,
+      },
+      {
+        role: 'user',
+        content: `The user completed the "${activityName}" activity for the quote: "${quoteSample}". Give one sentence of warm praise in ${langName}.`,
+      },
+    ],
+    150,
+  );
 
   return raw.trim();
 }

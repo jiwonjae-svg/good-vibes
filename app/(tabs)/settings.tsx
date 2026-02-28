@@ -1,31 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, Switch, Alert,
+  View, Text, StyleSheet, ScrollView, Pressable, Switch, Modal, FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { Fonts, FontSize, Spacing, BorderRadius } from '../../constants/theme';
-import { useUserStore, type QuoteCategory } from '../../stores/useUserStore';
+import { useUserStore } from '../../stores/useUserStore';
 import { LANGUAGES, type LanguageCode } from '../../i18n';
 import { useGoogleAuth, signInWithGoogle, logOut, onAuthChange } from '../../services/authService';
 import { scheduleDailyReminder, cancelDailyReminder } from '../../services/notificationService';
 import LanguagePickerModal from '../../components/LanguagePickerModal';
-
-const CATEGORIES: { key: QuoteCategory; labelKey: string }[] = [
-  { key: 'all', labelKey: 'categories.all' },
-  { key: 'love', labelKey: 'categories.love' },
-  { key: 'growth', labelKey: 'categories.growth' },
-  { key: 'life', labelKey: 'categories.life' },
-  { key: 'morning', labelKey: 'categories.morning' },
-  { key: 'courage', labelKey: 'categories.courage' },
-  { key: 'happiness', labelKey: 'categories.happiness' },
-  { key: 'patience', labelKey: 'categories.patience' },
-  { key: 'wisdom', labelKey: 'categories.wisdom' },
-  { key: 'friendship', labelKey: 'categories.friendship' },
-  { key: 'success', labelKey: 'categories.success' },
-];
+import CategoryPickerModal from '../../components/CategoryPickerModal';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
@@ -34,14 +21,18 @@ export default function SettingsScreen() {
     isPremium, setPremium, totalQuotesViewed,
     isDarkMode, setDarkMode,
     language, setLanguage,
-    category, setCategory,
+    selectedCategories, setCategories,
     dailyReminderEnabled, setDailyReminder,
+    autoReadEnabled, setAutoRead,
     uid, displayName, email, setAuth,
     currentStreak,
+    todayViewedQuoteIds,
   } = useUserStore();
 
   const { response, promptAsync } = useGoogleAuth();
   const [langModalVisible, setLangModalVisible] = useState(false);
+  const [catModalVisible, setCatModalVisible] = useState(false);
+  const [viewedModalVisible, setViewedModalVisible] = useState(false);
 
   useEffect(() => {
     if (response?.type === 'success') {
@@ -61,30 +52,20 @@ export default function SettingsScreen() {
     return unsub;
   }, []);
 
-  const handlePremiumToggle = (value: boolean) => {
+  const handlePremiumToggle = async (value: boolean) => {
     if (value) {
-      Alert.alert(t('settings.premium'), t('settings.premiumAlert'), [
-        { text: t('settings.cancel'), style: 'cancel' },
-        { text: t('settings.activate'), onPress: () => setPremium(true) },
-      ]);
-    } else { setPremium(false); }
+      setPremium(true);
+    } else {
+      setPremium(false);
+    }
   };
 
   const handleLanguage = () => setLangModalVisible(true);
-
-  const handleCategory = () => {
-    Alert.alert(t('settings.selectCategory'), '', [
-      ...CATEGORIES.map((c) => ({
-        text: t(c.labelKey) + (category === c.key ? ' ✓' : ''),
-        onPress: () => setCategory(c.key),
-      })),
-      { text: t('settings.cancel'), style: 'cancel' as const },
-    ]);
-  };
+  const handleCategory = () => setCatModalVisible(true);
 
   const handleNotification = async (enabled: boolean) => {
-    if (enabled) { await scheduleDailyReminder(); }
-    else { await cancelDailyReminder(); }
+    if (enabled) await scheduleDailyReminder();
+    else await cancelDailyReminder();
     setDailyReminder(enabled);
   };
 
@@ -95,7 +76,13 @@ export default function SettingsScreen() {
 
   const s = makeStyles(colors);
   const currentLangLabel = LANGUAGES.find((l) => l.code === language)?.label ?? '한국어';
-  const currentCatLabel = t(CATEGORIES.find((c) => c.key === category)?.labelKey ?? 'categories.all');
+  const catCount = selectedCategories.length;
+  const catLabel = catCount === 0 ? t('settings.allCategories') : t('settings.categoriesSelected', { count: catCount });
+
+  const viewedQuotes = todayViewedQuoteIds.map((q) => {
+    const [id, ...textParts] = q.split('|');
+    return { id, text: textParts.join('|') };
+  });
 
   return (
     <SafeAreaView style={[s.safe]} edges={['top']}>
@@ -105,6 +92,43 @@ export default function SettingsScreen() {
         onSelect={(lang) => setLanguage(lang)}
         onClose={() => setLangModalVisible(false)}
       />
+      <CategoryPickerModal
+        visible={catModalVisible}
+        selected={selectedCategories}
+        onSelect={setCategories}
+        onClose={() => setCatModalVisible(false)}
+      />
+
+      {/* Today's Viewed Quotes Modal */}
+      <Modal transparent visible={viewedModalVisible} animationType="fade" onRequestClose={() => setViewedModalVisible(false)}>
+        <Pressable style={s.modalOverlay} onPress={() => setViewedModalVisible(false)}>
+          <View style={[s.modalSheet, { backgroundColor: colors.surface }]}>
+            <View style={[s.modalHeader, { borderBottomColor: colors.grass0 }]}>
+              <Text style={[s.modalTitle, { color: colors.textPrimary }]}>{t('settings.todayQuotes')}</Text>
+              <Pressable onPress={() => setViewedModalVisible(false)}>
+                <Ionicons name="close" size={24} color={colors.textMuted} />
+              </Pressable>
+            </View>
+            {viewedQuotes.length === 0 ? (
+              <View style={s.emptyView}>
+                <Text style={[s.emptyText, { color: colors.textSecondary }]}>{t('settings.noQuotesToday')}</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={viewedQuotes}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <View style={[s.quoteItem, { borderBottomColor: colors.grass0 }]}>
+                    <Text style={[s.quoteItemText, { color: colors.textPrimary }]}>"{item.text}"</Text>
+                  </View>
+                )}
+                style={{ maxHeight: 400 }}
+              />
+            )}
+          </View>
+        </Pressable>
+      </Modal>
+
       <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
         <Text style={s.header}>{t('settings.title')}</Text>
 
@@ -170,7 +194,7 @@ export default function SettingsScreen() {
 
         {/* Preferences */}
         <View style={s.section}>
-          <Text style={s.sectionTitle}>{t('settings.language')}</Text>
+          <Text style={s.sectionTitle}>{t('settings.preferences')}</Text>
           <View style={s.card}>
             <Pressable style={s.row} onPress={handleLanguage}>
               <View style={s.rowLeft}>
@@ -200,10 +224,21 @@ export default function SettingsScreen() {
                 <Text style={s.rowTitle}>{t('settings.category')}</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Text style={s.rowValue}>{currentCatLabel}</Text>
+                <Text style={s.rowValue}>{catLabel}</Text>
                 <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
               </View>
             </Pressable>
+            <View style={s.divider} />
+            <View style={s.row}>
+              <View style={s.rowLeft}>
+                <Ionicons name="volume-high-outline" size={22} color={colors.textSecondary} />
+                <View>
+                  <Text style={s.rowTitle}>{t('settings.autoRead')}</Text>
+                  <Text style={s.rowSubtitle}>{t('settings.autoReadDesc')}</Text>
+                </View>
+              </View>
+              <Switch value={autoReadEnabled} onValueChange={setAutoRead} trackColor={{ false: colors.grass0, true: colors.primaryLight }} thumbColor={autoReadEnabled ? colors.primary : '#f4f3f4'} />
+            </View>
           </View>
         </View>
 
@@ -228,10 +263,13 @@ export default function SettingsScreen() {
         <View style={s.section}>
           <Text style={s.sectionTitle}>{t('settings.stats')}</Text>
           <View style={s.card}>
-            <View style={s.statRow}>
+            <Pressable style={s.statRow} onPress={() => setViewedModalVisible(true)}>
               <Text style={s.statLabel}>{t('settings.quotesViewed')}</Text>
-              <Text style={s.statValue}>{totalQuotesViewed}</Text>
-            </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={s.statValue}>{totalQuotesViewed}</Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+              </View>
+            </Pressable>
           </View>
         </View>
 
@@ -252,13 +290,13 @@ export default function SettingsScreen() {
                 <Ionicons name="heart-outline" size={22} color={colors.textSecondary} />
                 <Text style={s.rowTitle}>{t('settings.madeBy')}</Text>
               </View>
-              <Text style={s.rowValue}>Good Vibe Team</Text>
+              <Text style={s.rowValue}>Good Vibes Team</Text>
             </View>
           </View>
         </View>
 
         <View style={s.footer}>
-          <Text style={[s.footerText, { color: colors.primaryLight }]}>Good Vibe</Text>
+          <Text style={[s.footerText, { color: colors.primaryLight }]}>Good Vibes</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -286,5 +324,13 @@ function makeStyles(colors: any) {
     divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.grass0, marginLeft: Spacing.xxl + Spacing.sm },
     footer: { alignItems: 'center', paddingVertical: Spacing.xxl },
     footerText: { ...Fonts.heading, fontSize: FontSize.lg },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: Spacing.xl },
+    modalSheet: { width: '100%', borderRadius: BorderRadius.xl, maxHeight: '70%' },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: Spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth },
+    modalTitle: { ...Fonts.heading, fontSize: FontSize.lg },
+    emptyView: { padding: Spacing.xxl, alignItems: 'center' },
+    emptyText: { ...Fonts.body, fontSize: FontSize.md },
+    quoteItem: { padding: Spacing.md, borderBottomWidth: StyleSheet.hairlineWidth },
+    quoteItemText: { ...Fonts.body, fontSize: FontSize.sm, lineHeight: 22 },
   });
 }

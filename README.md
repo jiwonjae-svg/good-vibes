@@ -1,6 +1,6 @@
 <div align="center">
 
-# ✨ Good Vibe
+# ✨ Good Vibes
 
 **Your AI-Powered Daily Quote Companion**
 
@@ -18,9 +18,9 @@
 
 </div>
 
-## 🎯 What is Good Vibe?
+## 🎯 What is Good Vibes?
 
-Good Vibe is a **mobile app for daily positive habits** powered by AI-generated quotes. Each day, the app delivers fresh, inspirational quotes in your language, and challenges you to engage with them — by speaking, handwriting, or typing — turning passive reading into active learning.
+Good Vibes is a **mobile app for daily positive habits** powered by AI-generated quotes. Each day, the app delivers fresh, inspirational quotes in your language, and challenges you to engage with them — by speaking, handwriting, or typing — turning passive reading into active learning.
 
 Perfect for:
 - 📖 **Learners** building a daily reading or writing habit
@@ -32,8 +32,9 @@ Perfect for:
 
 ### 🤖 AI-Powered Quotes
 - **Daily Generation**: Grok 4.1 Fast (xAI) generates fresh, warm quotes
-- **Category Filters**: Love, Growth, Life, Morning, Courage, Happiness, Patience, Wisdom, Friendship, Success
-- **Multi-language**: Quotes generated in your selected language
+- **150+ Categories**: Organized into 5 themes (Life/Growth, Emotion/Relationship, Work/Business, Nature/Philosophy, Special)
+- **Multi-Select**: Choose up to 10 categories to personalize your feed
+- **Multi-language**: Quotes generated in your selected language (Korean, English, Japanese, Chinese)
 - **Offline Fallback**: 100+ seed quotes when no internet connection
 
 ### 📱 Engaging Activities
@@ -43,10 +44,11 @@ Perfect for:
 - **AI Praise**: Personalized encouragement after every completed activity
 
 ### 📊 Progress & Gamification
-- **Grass Field**: GitHub-style 365-day activity contribution graph
+- **Grass Field**: GitHub-style 365-day activity contribution graph with touch-to-view details
 - **Daily Streak**: Consecutive day tracking with special milestone rewards
 - **Bookmark**: Save your favorite quotes for later
-- **Statistics**: Total quotes viewed and active days tracked
+- **Statistics**: Total quotes viewed, today's viewed quotes list, and active days tracked
+- **Auto-Read**: Optional automatic TTS when viewing new quotes
 
 ### 🔐 Account & Sync
 - **Google OAuth**: One-tap sign-in with Google
@@ -98,23 +100,30 @@ npx expo run:ios
 
 > **Note**: Features like Speech Recognition, AdMob, and Push Notifications require a development build. They are not supported in Expo Go.
 
-### Configure API Keys
+### Configure Environment Variables
 
-Edit `constants/config.ts`:
-
-```ts
-export const GROK_API_KEY = 'xai-...';      // xAI API key
-export const FIREBASE_CONFIG = { ... };      // Firebase project config
+1. Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
 ```
 
-Edit `services/authService.ts`:
-```ts
-export const GOOGLE_CLIENT_IDS = {
-  webClientId: '...apps.googleusercontent.com',
-  iosClientId: '...apps.googleusercontent.com',
-  androidClientId: '...apps.googleusercontent.com',
-};
+2. Fill in your API keys in `.env`:
+```env
+# xAI Grok API
+EXPO_PUBLIC_GROK_API_KEY=xai-...
+
+# Firebase
+EXPO_PUBLIC_FIREBASE_API_KEY=...
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=...
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=...
+
+# Google OAuth (required for Google Sign-In)
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=...apps.googleusercontent.com
+EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=...apps.googleusercontent.com
+EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=...apps.googleusercontent.com
 ```
+
+See `.env.example` for detailed instructions on obtaining each key.
 
 > The app runs fully offline without any API keys — seed quotes and local storage handle everything.
 
@@ -178,8 +187,9 @@ good-vibes/
 │   ├── WriteAlongSheet.tsx        # Camera + OCR bottom sheet
 │   ├── TypeAlongSheet.tsx         # Typing challenge with highlights
 │   ├── PraiseModal.tsx            # Celebration modal with TTS
-│   ├── GrassGrid.tsx              # 365-day contribution grid
+│   ├── GrassGrid.tsx              # 365-day contribution grid with touch details
 │   ├── LanguagePickerModal.tsx    # Language selection modal
+│   ├── CategoryPickerModal.tsx    # Hierarchical category selection (150+ categories)
 │   └── AdInterstitial.tsx         # AdMob interstitial manager
 │
 ├── 📁 services/                   # Business logic & API
@@ -219,7 +229,8 @@ good-vibes/
 │
 ├── 📁 data/                       # Seed data
 │   ├── seedQuotes.ts              # 100+ offline Korean quotes
-│   └── seedPraises.ts             # 20 offline praise messages
+│   ├── seedPraises.ts             # 20 offline praise messages
+│   └── categories.ts              # 150+ hierarchical categories
 │
 └── 📁 utils/                      # Utilities
     ├── similarity.ts              # Levenshtein text similarity
@@ -228,7 +239,7 @@ good-vibes/
 
 ## 🏗️ Architecture
 
-Good Vibe follows a **layered architecture** with clean separation of concerns:
+Good Vibes follows a **layered architecture** with clean separation of concerns:
 
 ```
 ┌──────────────────────────────────────────────┐
@@ -308,4 +319,4 @@ Modules incompatible with Expo Go are conditionally loaded:
 
 ## 📄 License
 
-MIT © [Good Vibe Team](https://github.com/jiwonjae-svg/good-vibes)
+MIT © [Good Vibes Team](https://github.com/jiwonjae-svg/good-vibes)

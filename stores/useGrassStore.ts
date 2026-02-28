@@ -21,7 +21,7 @@ interface GrassState {
   getLevel: (date: string) => number;
 }
 
-const STORAGE_KEY = '@good_vibe_grass';
+const STORAGE_KEY = '@dailyglow_grass';
 
 function todayKey(): string {
   const d = new Date();

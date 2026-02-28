@@ -1,10 +1,10 @@
 <div align="center">
 
-# ✨ Good Vibes
+# ✨ DailyGlow
 
 **Your AI-Powered Daily Quote Companion**
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/jiwonjae-svg/good-vibes)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/jiwonjae-svg/dailyglow)
 [![Expo SDK](https://img.shields.io/badge/Expo-SDK%2054-blue.svg?logo=expo)](https://expo.dev)
 [![React Native](https://img.shields.io/badge/React%20Native-0.81-blue.svg?logo=react)](https://reactnative.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg?logo=typescript)](https://www.typescriptlang.org)
@@ -18,9 +18,9 @@
 
 </div>
 
-## 🎯 What is Good Vibes?
+## 🎯 What is DailyGlow?
 
-Good Vibes is a **mobile app for daily positive habits** powered by AI-generated quotes. Each day, the app delivers fresh, inspirational quotes in your language, and challenges you to engage with them — by speaking, handwriting, or typing — turning passive reading into active learning.
+DailyGlow is a **mobile app for daily positive habits** powered by AI-generated quotes. Each day, the app delivers fresh, inspirational quotes in your language, and challenges you to engage with them — by speaking, handwriting, or typing — turning passive reading into active learning.
 
 Perfect for:
 - 📖 **Learners** building a daily reading or writing habit
@@ -78,8 +78,8 @@ Perfect for:
 
 ```bash
 # Clone the repository
-git clone https://github.com/jiwonjae-svg/good-vibes.git
-cd good-vibes
+git clone https://github.com/jiwonjae-svg/dailyglow.git
+cd dailyglow
 
 # Install dependencies
 npm install
@@ -165,7 +165,7 @@ See `.env.example` for detailed instructions on obtaining each key.
 ## 📁 Project Structure
 
 ```
-good-vibes/
+dailyglow/
 │
 ├── 📄 app.json                    # Expo config (plugins, permissions)
 ├── 📄 package.json                # Dependencies
@@ -239,7 +239,7 @@ good-vibes/
 
 ## 🏗️ Architecture
 
-Good Vibes follows a **layered architecture** with clean separation of concerns:
+DailyGlow follows a **layered architecture** with clean separation of concerns:
 
 ```
 ┌──────────────────────────────────────────────┐
@@ -319,4 +319,4 @@ Modules incompatible with Expo Go are conditionally loaded:
 
 ## 📄 License
 
-MIT © [Good Vibes Team](https://github.com/jiwonjae-svg/good-vibes)
+MIT © [DailyGlow Team](https://github.com/jiwonjae-svg/dailyglow)

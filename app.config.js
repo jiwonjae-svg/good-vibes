@@ -1,13 +1,13 @@
 export default {
   expo: {
-    name: "Good Vibes",
-    slug: "good-vibes",
+    name: "DailyGlow",
+    slug: "dailyglow",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
-    scheme: "com.jiwonjae.goodvibes",
+    scheme: "com.jiwonjae.dailyglow",
     splash: {
       image: "./assets/splash-icon.png",
       resizeMode: "contain",
@@ -15,7 +15,7 @@ export default {
     },
     ios: {
       supportsTablet: true,
-      bundleIdentifier: "com.jiwonjae.goodvibes",
+      bundleIdentifier: "com.jiwonjae.dailyglow",
       googleServicesFile: "./GoogleService-Info.plist",
       infoPlist: {
         NSSpeechRecognitionUsageDescription:
@@ -26,7 +26,7 @@ export default {
       },
     },
     android: {
-      package: "com.jiwonjae.goodvibes",
+      package: "com.jiwonjae.dailyglow",
       googleServicesFile: "./google-services.json",
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
@@ -73,7 +73,7 @@ export default {
         "@sentry/react-native/expo",
         {
           organization: "YOUR_ORG",
-          project: "good-vibes",
+          project: "dailyglow",
         },
       ],
       "expo-web-browser",

@@ -1,5 +1,4 @@
 import {
-  getAuth,
   signInWithCredential,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -13,7 +12,7 @@ import {
 } from 'firebase/auth';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
-import { initFirebase } from './firebaseConfig';
+import { getFirebaseAuth } from './firebaseConfig';
 import {
   syncUserToFirestore,
   logLoginActivity,
@@ -51,19 +50,6 @@ export function useGoogleAuth() {
   });
 
   return { request, response, promptAsync };
-}
-
-// =============================================================================
-// Firebase Auth Helpers
-// =============================================================================
-
-function getFirebaseAuth() {
-  try {
-    initFirebase();
-    return getAuth();
-  } catch {
-    return null;
-  }
 }
 
 // =============================================================================

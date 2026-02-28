@@ -1,8 +1,12 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import {
+  initializeAuth,
+  getAuth,
+  getReactNativePersistence,
+  Auth,
+} from 'firebase/auth';
 import {
   initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
   getFirestore,
   collection,
   addDoc,
@@ -11,50 +15,87 @@ import {
   orderBy,
   limit,
   Firestore,
+  memoryLocalCache,
 } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FIREBASE_CONFIG } from '../constants/config';
 import type { Quote } from '../stores/useQuoteStore';
 import type { GrassDay } from '../stores/useGrassStore';
 
+let app: FirebaseApp | null = null;
+let auth: Auth | null = null;
 let db: Firestore | null = null;
 
 function isConfigured(): boolean {
   return (
     FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY' &&
-    FIREBASE_CONFIG.projectId !== 'YOUR_PROJECT_ID'
+    FIREBASE_CONFIG.projectId !== 'YOUR_PROJECT_ID' &&
+    FIREBASE_CONFIG.apiKey !== '' &&
+    FIREBASE_CONFIG.projectId !== ''
   );
 }
 
-export function initFirebase(): Firestore | null {
-  if (!isConfigured()) return null;
+export function initFirebase(): { app: FirebaseApp; auth: Auth; db: Firestore } | null {
+  if (!isConfigured()) {
+    console.warn('[firebaseConfig] Firebase not configured. Check .env file.');
+    return null;
+  }
 
   try {
-    const app = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApp();
-    db = initializeFirestore(app, {
-      localCache: persistentLocalCache({
-        tabManager: persistentMultipleTabManager(),
-      }),
-    });
-    return db;
-  } catch {
-    try {
-      const app = getApp();
-      db = getFirestore(app);
-      return db;
-    } catch {
-      return null;
+    if (getApps().length === 0) {
+      app = initializeApp(FIREBASE_CONFIG);
+
+      auth = initializeAuth(app, {
+        persistence: getReactNativePersistence(AsyncStorage),
+      });
+
+      db = initializeFirestore(app, {
+        localCache: memoryLocalCache(),
+      });
+    } else {
+      app = getApp();
+
+      try {
+        auth = getAuth(app);
+      } catch {
+        auth = initializeAuth(app, {
+          persistence: getReactNativePersistence(AsyncStorage),
+        });
+      }
+
+      try {
+        db = getFirestore(app);
+      } catch {
+        db = initializeFirestore(app, {
+          localCache: memoryLocalCache(),
+        });
+      }
     }
+
+    return { app, auth, db };
+  } catch (e) {
+    console.error('[firebaseConfig] Failed to initialize Firebase:', e);
+    return null;
   }
 }
 
+export function getFirebaseAuth(): Auth | null {
+  if (auth) return auth;
+  const result = initFirebase();
+  return result?.auth ?? null;
+}
+
 export function getDb(): Firestore | null {
-  return db;
+  if (db) return db;
+  const result = initFirebase();
+  return result?.db ?? null;
 }
 
 export async function saveQuotesToFirestore(quotes: Quote[]): Promise<void> {
-  if (!db) return;
+  const firestore = getDb();
+  if (!firestore) return;
   try {
-    const col = collection(db, 'quotes');
+    const col = collection(firestore, 'quotes');
     for (const q of quotes) {
       await addDoc(col, {
         text: q.text,
@@ -71,9 +112,10 @@ export async function saveQuotesToFirestore(quotes: Quote[]): Promise<void> {
 export async function loadQuotesFromFirestore(
   count: number
 ): Promise<Quote[]> {
-  if (!db) return [];
+  const firestore = getDb();
+  if (!firestore) return [];
   try {
-    const col = collection(db, 'quotes');
+    const col = collection(firestore, 'quotes');
     const q = query(col, orderBy('createdAt', 'desc'), limit(count));
     const snap = await getDocs(q);
     return snap.docs.map((doc) => ({
@@ -89,9 +131,10 @@ export async function loadQuotesFromFirestore(
 }
 
 export async function saveGrassDayToFirestore(day: GrassDay): Promise<void> {
-  if (!db) return;
+  const firestore = getDb();
+  if (!firestore) return;
   try {
-    const col = collection(db, 'grass');
+    const col = collection(firestore, 'grass');
     await addDoc(col, day);
   } catch {
     // silent

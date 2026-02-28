@@ -4,8 +4,6 @@ import i18n from '../i18n';
 import type { LanguageCode } from '../i18n';
 import { clearQuoteCache } from '../services/quoteService';
 
-export type QuoteCategory = 'all' | 'love' | 'growth' | 'life' | 'morning' | 'courage' | 'happiness' | 'patience' | 'wisdom' | 'friendship' | 'success';
-
 interface UserState {
   isPremium: boolean;
   scrollCount: number;
@@ -13,11 +11,14 @@ interface UserState {
   isLoaded: boolean;
   isDarkMode: boolean;
   language: LanguageCode;
-  category: QuoteCategory;
+  selectedCategories: string[];
   dailyReminderEnabled: boolean;
+  autoReadEnabled: boolean;
   hasSeenOnboarding: boolean;
   hasCompletedAuth: boolean;
   bookmarkedQuoteIds: string[];
+  todayViewedQuoteIds: string[];
+  todayViewedDate: string | null;
 
   // Auth
   uid: string | null;
@@ -37,7 +38,8 @@ interface UserState {
   shouldShowAd: () => boolean;
   setDarkMode: (dark: boolean) => Promise<void>;
   setLanguage: (lang: LanguageCode) => Promise<void>;
-  setCategory: (cat: QuoteCategory) => Promise<void>;
+  setCategories: (cats: string[]) => Promise<void>;
+  setAutoRead: (enabled: boolean) => Promise<void>;
   setDailyReminder: (enabled: boolean) => Promise<void>;
   setOnboardingSeen: () => Promise<void>;
   setAuthCompleted: () => Promise<void>;
@@ -45,9 +47,12 @@ interface UserState {
   isBookmarked: (quoteId: string) => boolean;
   setAuth: (user: { uid: string; displayName: string | null; email: string | null; photoURL: string | null } | null) => Promise<void>;
   updateStreak: (todayStr: string) => Promise<void>;
+  addViewedQuote: (quoteId: string, quoteText: string, todayStr: string) => Promise<void>;
+  getTodayViewedQuotes: () => string[];
 }
 
-const USER_KEY = '@good_vibe_user_v2';
+const USER_KEY = '@good_vibe_user_v3';
+const VIEWED_QUOTES_KEY = '@good_vibe_viewed_quotes';
 
 export const useUserStore = create<UserState>((set, get) => ({
   isPremium: false,
@@ -56,11 +61,14 @@ export const useUserStore = create<UserState>((set, get) => ({
   isLoaded: false,
   isDarkMode: false,
   language: 'ko',
-  category: 'all',
+  selectedCategories: [],
   dailyReminderEnabled: false,
+  autoReadEnabled: false,
   hasSeenOnboarding: false,
   hasCompletedAuth: false,
   bookmarkedQuoteIds: [],
+  todayViewedQuoteIds: [],
+  todayViewedDate: null,
   uid: null,
   displayName: null,
   email: null,
@@ -71,6 +79,10 @@ export const useUserStore = create<UserState>((set, get) => ({
   loadUser: async () => {
     try {
       const raw = await AsyncStorage.getItem(USER_KEY);
+      const viewedRaw = await AsyncStorage.getItem(VIEWED_QUOTES_KEY);
+      let viewedData = { ids: [], date: null };
+      if (viewedRaw) viewedData = JSON.parse(viewedRaw);
+
       if (raw) {
         const d = JSON.parse(raw);
         const lang = d.language ?? 'ko';
@@ -81,11 +93,14 @@ export const useUserStore = create<UserState>((set, get) => ({
           totalQuotesViewed: d.totalQuotesViewed ?? 0,
           isDarkMode: d.isDarkMode ?? false,
           language: lang,
-          category: d.category ?? 'all',
+          selectedCategories: d.selectedCategories ?? [],
           dailyReminderEnabled: d.dailyReminderEnabled ?? false,
+          autoReadEnabled: d.autoReadEnabled ?? false,
           hasSeenOnboarding: d.hasSeenOnboarding ?? false,
           hasCompletedAuth: d.hasCompletedAuth ?? false,
           bookmarkedQuoteIds: d.bookmarkedQuoteIds ?? [],
+          todayViewedQuoteIds: viewedData.ids ?? [],
+          todayViewedDate: viewedData.date ?? null,
           uid: d.uid ?? null,
           displayName: d.displayName ?? null,
           email: d.email ?? null,
@@ -111,8 +126,9 @@ export const useUserStore = create<UserState>((set, get) => ({
         totalQuotesViewed: s.totalQuotesViewed,
         isDarkMode: s.isDarkMode,
         language: s.language,
-        category: s.category,
+        selectedCategories: s.selectedCategories,
         dailyReminderEnabled: s.dailyReminderEnabled,
+        autoReadEnabled: s.autoReadEnabled,
         hasSeenOnboarding: s.hasSeenOnboarding,
         hasCompletedAuth: s.hasCompletedAuth,
         bookmarkedQuoteIds: s.bookmarkedQuoteIds,
@@ -165,8 +181,18 @@ export const useUserStore = create<UserState>((set, get) => ({
     } catch { /* silent */ }
   },
 
-  setCategory: async (cat) => {
-    set({ category: cat });
+  setCategories: async (cats) => {
+    set({ selectedCategories: cats });
+    await get().persistUser();
+    await clearQuoteCache();
+    try {
+      const { useQuoteStore } = require('./useQuoteStore');
+      useQuoteStore.getState().setQuotes([]);
+    } catch { /* silent */ }
+  },
+
+  setAutoRead: async (enabled) => {
+    set({ autoReadEnabled: enabled });
     await get().persistUser();
   },
 
@@ -207,7 +233,7 @@ export const useUserStore = create<UserState>((set, get) => ({
 
   updateStreak: async (todayStr) => {
     const { lastActiveDate, currentStreak } = get();
-    if (lastActiveDate === todayStr) return; // already counted today
+    if (lastActiveDate === todayStr) return;
 
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
@@ -216,5 +242,26 @@ export const useUserStore = create<UserState>((set, get) => ({
     const newStreak = lastActiveDate === yStr ? currentStreak + 1 : 1;
     set({ currentStreak: newStreak, lastActiveDate: todayStr });
     await get().persistUser();
+  },
+
+  addViewedQuote: async (quoteId, quoteText, todayStr) => {
+    const { todayViewedDate, todayViewedQuoteIds } = get();
+    let newIds: string[];
+
+    if (todayViewedDate !== todayStr) {
+      newIds = [`${quoteId}|${quoteText}`];
+    } else {
+      if (todayViewedQuoteIds.some((q) => q.startsWith(quoteId))) return;
+      newIds = [...todayViewedQuoteIds, `${quoteId}|${quoteText}`];
+    }
+
+    set({ todayViewedQuoteIds: newIds, todayViewedDate: todayStr });
+    try {
+      await AsyncStorage.setItem(VIEWED_QUOTES_KEY, JSON.stringify({ ids: newIds, date: todayStr }));
+    } catch { /* silent */ }
+  },
+
+  getTodayViewedQuotes: () => {
+    return get().todayViewedQuoteIds;
   },
 }));

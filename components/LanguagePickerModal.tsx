@@ -5,13 +5,27 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { FontSize, Spacing, BorderRadius, Fonts } from '../constants/theme';
-import { LANGUAGES, type LanguageCode } from '../i18n';
+import { type LanguageCode } from '../i18n';
+
+const ORDERED_LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'ja', label: '日本語' },
+  { code: 'zh', label: '中文' },
+  { code: 'ko', label: '한국어' },
+] as const;
 
 const LANG_FLAGS: Record<LanguageCode, string> = {
   ko: '🇰🇷',
   en: '🇺🇸',
   ja: '🇯🇵',
   zh: '🇨🇳',
+};
+
+const LANG_WORD: Record<LanguageCode, string> = {
+  ko: '언어',
+  en: '',
+  ja: '言語',
+  zh: '语言',
 };
 
 interface LanguagePickerModalProps {
@@ -26,19 +40,22 @@ export default function LanguagePickerModal({
 }: LanguagePickerModalProps) {
   const colors = useThemeColors();
 
+  const langSuffix = LANG_WORD[current];
+  const titleText = langSuffix ? `Language / ${langSuffix}` : 'Language';
+
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={[styles.sheet, { backgroundColor: colors.surface }]} onPress={() => {}}>
           <View style={[styles.header, { borderBottomColor: colors.grass0 }]}>
-            <Text style={[styles.title, { color: colors.textPrimary }]}>Language / 언어</Text>
+            <Text style={[styles.title, { color: colors.textPrimary }]}>{titleText}</Text>
             <Pressable onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={22} color={colors.textMuted} />
             </Pressable>
           </View>
 
           <FlatList
-            data={LANGUAGES}
+            data={ORDERED_LANGUAGES}
             keyExtractor={(item) => item.code}
             renderItem={({ item }) => {
               const isSelected = item.code === current;

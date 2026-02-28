@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { Spacing, BorderRadius, FontSize, Fonts } from '../constants/theme';
@@ -13,7 +13,8 @@ const DAYS_TO_SHOW = 365;
 export default function GrassGrid() {
   const { t } = useTranslation();
   const colors = useThemeColors();
-  const { getLevel, grassData } = useGrassStore();
+  const { getLevel, grassData, getTotalForDay } = useGrassStore();
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   const LEVEL_COLORS = [colors.grass0, colors.grass1, colors.grass2, colors.grass3, colors.grass4];
 
@@ -39,8 +40,53 @@ export default function GrassGrid() {
     Object.values(grassData).filter((day) => day.speakCount + day.writeCount + day.typeCount > 0).length,
     [grassData]);
 
+  const handleCellPress = (day: string) => {
+    if (day) setSelectedDay(day);
+  };
+
+  const formatDate = (dateStr: string) => {
+    const [year, month, dayNum] = dateStr.split('-');
+    return `${year}. ${month}. ${dayNum}`;
+  };
+
+  const selectedDayData = selectedDay ? grassData[selectedDay] : null;
+  const selectedTotal = selectedDay ? getTotalForDay(selectedDay) : 0;
+
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
+      {/* Tooltip Modal */}
+      <Modal transparent visible={!!selectedDay} animationType="fade" onRequestClose={() => setSelectedDay(null)}>
+        <Pressable style={styles.tooltipOverlay} onPress={() => setSelectedDay(null)}>
+          <View style={[styles.tooltip, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.tooltipDate, { color: colors.textPrimary }]}>
+              {selectedDay && formatDate(selectedDay)}
+            </Text>
+            <Text style={[styles.tooltipValue, { color: colors.primary }]}>
+              {selectedTotal}{t('grass.activities')}
+            </Text>
+            {selectedDayData && (
+              <View style={styles.tooltipDetails}>
+                {selectedDayData.speakCount > 0 && (
+                  <Text style={[styles.tooltipDetail, { color: colors.textSecondary }]}>
+                    🎤 {selectedDayData.speakCount}
+                  </Text>
+                )}
+                {selectedDayData.writeCount > 0 && (
+                  <Text style={[styles.tooltipDetail, { color: colors.textSecondary }]}>
+                    ✍️ {selectedDayData.writeCount}
+                  </Text>
+                )}
+                {selectedDayData.typeCount > 0 && (
+                  <Text style={[styles.tooltipDetail, { color: colors.textSecondary }]}>
+                    ⌨️ {selectedDayData.typeCount}
+                  </Text>
+                )}
+              </View>
+            )}
+          </View>
+        </Pressable>
+      </Modal>
+
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
           <Text style={[styles.statValue, { color: colors.primary }]}>{totalActivities}</Text>
@@ -57,7 +103,13 @@ export default function GrassGrid() {
           {weeks.map((week, wi) => (
             <View key={wi} style={styles.weekColumn}>
               {week.map((day, di) => (
-                <View key={`${wi}-${di}`} style={[styles.cell, { backgroundColor: day ? LEVEL_COLORS[getLevel(day)] : 'transparent' }]} />
+                <Pressable
+                  key={`${wi}-${di}`}
+                  onPress={() => handleCellPress(day)}
+                  disabled={!day}
+                >
+                  <View style={[styles.cell, { backgroundColor: day ? LEVEL_COLORS[getLevel(day)] : 'transparent' }]} />
+                </Pressable>
               ))}
             </View>
           ))}
@@ -88,4 +140,10 @@ const styles = StyleSheet.create({
   legend: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: Spacing.md },
   legendCell: { width: CELL_SIZE, height: CELL_SIZE, borderRadius: 3 },
   legendLabel: { ...Fonts.body, fontSize: 10 },
+  tooltipOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' },
+  tooltip: { padding: Spacing.lg, borderRadius: BorderRadius.lg, alignItems: 'center', minWidth: 150, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8 },
+  tooltipDate: { ...Fonts.heading, fontSize: FontSize.md, marginBottom: Spacing.xs },
+  tooltipValue: { ...Fonts.heading, fontSize: FontSize.xl },
+  tooltipDetails: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm },
+  tooltipDetail: { ...Fonts.body, fontSize: FontSize.sm },
 });

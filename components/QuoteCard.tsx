@@ -61,6 +61,14 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
             <Text style={[styles.quoteMarkEnd, { color: colors.primary }]}>{'\u201D'}</Text>
           </View>
 
+          {quote.category && (
+            <View style={[styles.categoryBadge, { backgroundColor: colors.surfaceAlt }]}>
+              <Text style={[styles.categoryText, { color: colors.textSecondary }]}>
+                {quote.category}
+              </Text>
+            </View>
+          )}
+
           {showAuthor && (
             <Text style={[styles.author, { color: colors.textSecondary }]}>— {quote.author}</Text>
           )}
@@ -94,8 +102,10 @@ const styles = StyleSheet.create({
   quoteWrapper: { alignItems: 'center', paddingHorizontal: Spacing.md },
   quoteMark: { ...Fonts.quote, fontSize: 60, opacity: 0.4, lineHeight: 70, marginBottom: -20 },
   quoteText: { ...Fonts.quote, fontSize: FontSize.xxl, textAlign: 'center', lineHeight: 48, letterSpacing: 0.5 },
-  quoteMarkEnd: { ...Fonts.quote, fontSize: 60, opacity: 0.4, lineHeight: 70, marginTop: -10, alignSelf: 'flex-end' },
-  author: { ...Fonts.body, fontSize: FontSize.md, marginTop: Spacing.lg },
+  quoteMarkEnd: { ...Fonts.quote, fontSize: 60, opacity: 0.4, lineHeight: 70, marginTop: -10 },
+  categoryBadge: { marginTop: Spacing.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.full },
+  categoryText: { ...Fonts.body, fontSize: FontSize.sm },
+  author: { ...Fonts.body, fontSize: FontSize.md, marginTop: Spacing.sm },
   floatingActions: { position: 'absolute', bottom: 100, flexDirection: 'row', gap: Spacing.md },
   actionButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 2, borderRadius: BorderRadius.full, ...Shadows.floating },
   actionLabel: { ...Fonts.body, fontSize: FontSize.sm },

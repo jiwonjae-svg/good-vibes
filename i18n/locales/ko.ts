@@ -2,7 +2,17 @@ export default {
   tabs: {
     quotes: '명언',
     grass: '잔디밭',
+    my: '보관함',
     settings: '설정',
+  },
+  my: {
+    title: '나의 보관함',
+    saved: '저장됨',
+    today: '오늘 본',
+    noSaved: '저장된 명언이 없어요',
+    noSavedHint: '마음에 드는 명언의 북마크를 눌러보세요',
+    noToday: '오늘 본 명언이 없어요',
+    noTodayHint: '명언 탭에서 명언을 둘러보세요',
   },
   home: {
     loading: '명언을 불러오는 중...',

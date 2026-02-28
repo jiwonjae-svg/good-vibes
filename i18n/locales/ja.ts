@@ -1,5 +1,6 @@
 export default {
-  tabs: { quotes: '名言', grass: '芝生', settings: '設定' },
+  tabs: { quotes: '名言', grass: '芝生', my: 'マイ', settings: '設定' },
+  my: { title: 'マイコレクション', saved: '保存済み', today: '今日見た', noSaved: '保存された名言がありません', noSavedHint: 'お気に入りの名言のブックマークをタップしてください', noToday: '今日見た名言がありません', noTodayHint: '名言タブで名言を見てみましょう' },
   home: { loading: '名言を読み込み中...', speakAlong: '読む', writeAlong: '書く', typeAlong: 'タイプ' },
   speak: { title: '読み上げ', instruction: '下の名言を声に出して読んでください', recognized: '認識されたテキスト:', listening: '聞いています...', tapMic: 'マイクボタンを押して開始', match: '一致度', unavailable: '音声認識はDevビルドでのみ使用できます。', unavailableFallback: 'Devビルドで使用可能', close: '閉じる' },
   write: { title: '書き取り', instruction: '名言を紙に書いて写真を撮ってください', permissionNeeded: 'カメラ権限が必要です', allowPermission: '許可', processing: 'テキスト認識中...', recognized: '認識されたテキスト:', match: '一致度:', retake: '再撮影', close: '閉じる' },

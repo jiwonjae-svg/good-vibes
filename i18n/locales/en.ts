@@ -2,7 +2,17 @@ export default {
   tabs: {
     quotes: 'Quotes',
     grass: 'Grass',
+    my: 'My',
     settings: 'Settings',
+  },
+  my: {
+    title: 'My Collection',
+    saved: 'Saved',
+    today: 'Today',
+    noSaved: 'No saved quotes yet',
+    noSavedHint: 'Tap the bookmark on quotes you love',
+    noToday: 'No quotes viewed today',
+    noTodayHint: 'Browse quotes in the Quotes tab',
   },
   home: {
     loading: 'Loading quotes...',

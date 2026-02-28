@@ -80,8 +80,8 @@ export default {
       "@react-native-firebase/app",
     ],
     extra: {
-      eas: {
-        "projectId": "ec12b53d-6403-4d94-a4af-f950c64e8892"
+      "eas": {
+        "projectId": "69609514-3e81-487d-8804-c52500f5d001"
       },
       firebaseApiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
       firebaseAuthDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,

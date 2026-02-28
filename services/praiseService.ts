@@ -1,7 +1,8 @@
 import { generatePraise } from './grokApi';
-import { seedPraises } from '../data/seedPraises';
+import { getPraisesByLanguage, seedPraises } from '../data/seedPraises';
+import i18n from '../i18n';
 
-let praiseIndex = 0;
+const praiseIndexByLang = new Map<string, number>();
 
 export async function getPraise(
   activityType: 'speak' | 'write' | 'type',
@@ -15,7 +16,23 @@ export async function getPraise(
 }
 
 function getOfflinePraise(): string {
-  const praise = seedPraises[praiseIndex % seedPraises.length];
-  praiseIndex++;
-  return praise;
+  const lang = i18n.language;
+  let praises = getPraisesByLanguage(lang);
+
+  if (praises.length === 0) {
+    praises = getPraisesByLanguage('en');
+  }
+  if (praises.length === 0) {
+    praises = seedPraises;
+  }
+
+  if (!praiseIndexByLang.has(lang)) {
+    praiseIndexByLang.set(lang, 0);
+  }
+
+  const index = praiseIndexByLang.get(lang)!;
+  const praise = praises[index % praises.length];
+  praiseIndexByLang.set(lang, index + 1);
+
+  return praise.text;
 }

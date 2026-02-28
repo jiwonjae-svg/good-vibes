@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
 // =============================================================================
 // TypeScript Interfaces
@@ -97,7 +98,6 @@ const REQUIRED_ENV_VARS = [
   'EXPO_PUBLIC_FIREBASE_PROJECT_ID',
   'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET',
   'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
-  'EXPO_PUBLIC_FIREBASE_APP_ID',
 ] as const;
 
 function validateEnv(): void {
@@ -151,10 +151,9 @@ export const FIREBASE_CONFIG: FirebaseConfig = {
     'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
     getExtra('firebaseMessagingSenderId', ''),
   ),
-  appId: getEnv(
-    'EXPO_PUBLIC_FIREBASE_APP_ID',
-    getExtra('firebaseAppId', ''),
-  ),
+  appId: Platform.OS === 'ios'
+    ? getEnv('EXPO_PUBLIC_FIREBASE_APP_ID_IOS', getExtra('firebaseAppIdIos', ''))
+    : getEnv('EXPO_PUBLIC_FIREBASE_APP_ID_ANDROID', getExtra('firebaseAppIdAndroid', '')),
 };
 
 export const AD_CONFIG: AdConfig = {

@@ -26,7 +26,7 @@ export default function HomeScreen() {
   const { t } = useTranslation();
   const colors = useThemeColors();
   const { quotes, isLoading, isGenerating, setQuotes, appendQuotes, setIsLoading, setIsGenerating } = useQuoteStore();
-  const { incrementScroll, updateStreak } = useUserStore();
+  const { incrementScroll, updateStreak, addViewedQuote } = useUserStore();
   const language = useUserStore((s) => s.language);
   const { recordActivity } = useGrassStore();
   const { tryShowAd } = useAdInterstitial();
@@ -38,14 +38,19 @@ export default function HomeScreen() {
   const flatListRef = useRef<FlatList>(null);
   const lastViewedIndex = useRef(0);
 
+  const isInitialMount = useRef(true);
+
   useEffect(() => {
     loadQuotes();
     updateStreak(todayString());
   }, []);
 
-  // Reload quotes when language changes
   useEffect(() => {
-    if (quotes.length > 0) loadQuotes();
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    loadQuotes();
   }, [language]);
 
   const loadQuotes = async () => {
@@ -71,11 +76,14 @@ export default function HomeScreen() {
         lastViewedIndex.current = idx;
         setActiveQuoteIndex(idx);
         const q = quotes[idx];
-        if (q) saveQuoteForWidget(q.text, q.author);
+        if (q) {
+          saveQuoteForWidget(q.text, q.author);
+          addViewedQuote(q.id, q.text, todayString());
+        }
         if (quotes.length - idx <= QUOTE_CONFIG.prefetchThreshold) prefetchMore();
       }
     },
-    [quotes.length, prefetchMore],
+    [quotes.length, prefetchMore, addViewedQuote],
   );
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;

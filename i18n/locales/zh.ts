@@ -1,5 +1,6 @@
 export default {
-  tabs: { quotes: '名言', grass: '草坪', settings: '设置' },
+  tabs: { quotes: '名言', grass: '草坪', my: '我的', settings: '设置' },
+  my: { title: '我的收藏', saved: '已保存', today: '今日已看', noSaved: '还没有保存的名言', noSavedHint: '点击您喜欢的名言上的书签', noToday: '今天还没有看名言', noTodayHint: '去名言标签页浏览名言吧' },
   home: { loading: '正在加载名言...', speakAlong: '跟读', writeAlong: '跟写', typeAlong: '打字' },
   speak: { title: '跟读', instruction: '请大声朗读下面的名言', recognized: '识别的文本：', listening: '正在聆听...', tapMic: '按麦克风按钮开始', match: '匹配度', unavailable: '语音识别仅在开发版本中可用。', unavailableFallback: '在开发版本中可用', close: '关闭' },
   write: { title: '跟写', instruction: '把名言写在纸上，然后拍照', permissionNeeded: '需要相机权限', allowPermission: '允许', processing: '正在识别文本...', recognized: '识别的文本：', match: '匹配度：', retake: '重拍', close: '关闭' },

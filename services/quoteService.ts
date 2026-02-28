@@ -1,13 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { generateQuotes } from './grokApi';
-import { seedQuotes } from '../data/seedQuotes';
+import { getQuotesByLanguage, seedQuotes } from '../data/seedQuotes';
 import { LightColors } from '../constants/theme';
 import { useUserStore } from '../stores/useUserStore';
 import type { Quote } from '../stores/useQuoteStore';
+import i18n from '../i18n';
 
-const CACHE_KEY = '@good_vibe_quotes_cache';
+const CACHE_KEY = '@dailyglow_quotes_cache';
 const BATCH_SIZE = 5;
-let usedSeedIndices = new Set<number>();
+let usedSeedIndices = new Map<string, Set<number>>();
 
 function makeQuote(text: string, author: string, category?: string): Quote {
   return {
@@ -36,16 +37,30 @@ export async function fetchQuoteBatch(): Promise<Quote[]> {
 }
 
 function getOfflineQuotes(count: number): Quote[] {
-  const available = seedQuotes.length;
+  const lang = i18n.language;
+  let langQuotes = getQuotesByLanguage(lang);
+
+  if (langQuotes.length === 0) {
+    langQuotes = getQuotesByLanguage('en');
+  }
+  if (langQuotes.length === 0) {
+    langQuotes = seedQuotes;
+  }
+
+  if (!usedSeedIndices.has(lang)) {
+    usedSeedIndices.set(lang, new Set());
+  }
+  const usedSet = usedSeedIndices.get(lang)!;
+
   const quotes: Quote[] = [];
   for (let i = 0; i < count; i++) {
-    if (usedSeedIndices.size >= available) usedSeedIndices.clear();
+    if (usedSet.size >= langQuotes.length) usedSet.clear();
     let idx: number;
     do {
-      idx = Math.floor(Math.random() * available);
-    } while (usedSeedIndices.has(idx));
-    usedSeedIndices.add(idx);
-    const seed = seedQuotes[idx];
+      idx = Math.floor(Math.random() * langQuotes.length);
+    } while (usedSet.has(idx));
+    usedSet.add(idx);
+    const seed = langQuotes[idx];
     quotes.push(makeQuote(seed.text, seed.author, seed.category));
   }
   return quotes;

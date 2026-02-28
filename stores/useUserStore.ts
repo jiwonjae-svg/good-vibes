@@ -51,8 +51,8 @@ interface UserState {
   getTodayViewedQuotes: () => string[];
 }
 
-const USER_KEY = '@good_vibe_user_v3';
-const VIEWED_QUOTES_KEY = '@good_vibe_viewed_quotes';
+const USER_KEY = '@dailyglow_user_v1';
+const VIEWED_QUOTES_KEY = '@dailyglow_viewed_quotes';
 
 export const useUserStore = create<UserState>((set, get) => ({
   isPremium: false,

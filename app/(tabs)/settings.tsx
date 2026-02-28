@@ -290,13 +290,13 @@ export default function SettingsScreen() {
                 <Ionicons name="heart-outline" size={22} color={colors.textSecondary} />
                 <Text style={s.rowTitle}>{t('settings.madeBy')}</Text>
               </View>
-              <Text style={s.rowValue}>Good Vibes Team</Text>
+              <Text style={s.rowValue}>DailyGlow Team</Text>
             </View>
           </View>
         </View>
 
         <View style={s.footer}>
-          <Text style={[s.footerText, { color: colors.primaryLight }]}>Good Vibes</Text>
+          <Text style={[s.footerText, { color: colors.primaryLight }]}>DailyGlow</Text>
         </View>
       </ScrollView>
     </SafeAreaView>

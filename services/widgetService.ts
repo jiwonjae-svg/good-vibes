@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const WIDGET_QUOTE_KEY = '@good_vibe_widget_quote';
+const WIDGET_QUOTE_KEY = '@dailyglow_widget_quote';
 
 export interface WidgetQuoteData {
   text: string;

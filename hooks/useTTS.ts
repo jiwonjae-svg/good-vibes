@@ -1,16 +1,28 @@
 import { useCallback, useRef, useState } from 'react';
 import * as Speech from 'expo-speech';
+import { useUserStore } from '../stores/useUserStore';
+
+const LANGUAGE_MAP: Record<string, string> = {
+  ko: 'ko-KR',
+  en: 'en-US',
+  ja: 'ja-JP',
+  zh: 'zh-CN',
+};
 
 interface TTSOptions {
-  language?: string;
   rate?: number;
   pitch?: number;
 }
 
 export function useTTS(options: TTSOptions = {}) {
-  const { language = 'ko-KR', rate = 0.9, pitch = 1.0 } = options;
+  const { rate = 0.9, pitch = 1.0 } = options;
   const [isSpeaking, setIsSpeaking] = useState(false);
   const speakingRef = useRef(false);
+  const userLanguage = useUserStore((s) => s.language);
+
+  const getLanguageCode = useCallback(() => {
+    return LANGUAGE_MAP[userLanguage] || 'ko-KR';
+  }, [userLanguage]);
 
   const speak = useCallback(
     async (text: string) => {
@@ -21,8 +33,10 @@ export function useTTS(options: TTSOptions = {}) {
       speakingRef.current = true;
       setIsSpeaking(true);
 
+      const langCode = getLanguageCode();
+
       Speech.speak(text, {
-        language,
+        language: langCode,
         rate,
         pitch,
         onDone: () => {
@@ -39,7 +53,7 @@ export function useTTS(options: TTSOptions = {}) {
         },
       });
     },
-    [language, rate, pitch]
+    [getLanguageCode, rate, pitch]
   );
 
   const stop = useCallback(async () => {

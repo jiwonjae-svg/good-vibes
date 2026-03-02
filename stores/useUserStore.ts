@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import i18n from '../i18n';
 import type { LanguageCode } from '../i18n';
 import { clearQuoteCache } from '../services/quoteService';
+import { updatePremiumStatus, fetchPremiumStatus, logActivity, saveBookmarkedQuotes, fetchBookmarkedQuotes, logQuoteBookmarked } from '../services/firestoreUserService';
 
 interface UserState {
   isPremium: boolean;
@@ -19,6 +20,7 @@ interface UserState {
   bookmarkedQuoteIds: string[];
   todayViewedQuoteIds: string[];
   todayViewedDate: string | null;
+  showOnboardingFlag: boolean;
 
   // Auth
   uid: string | null;
@@ -29,6 +31,9 @@ interface UserState {
   // Streak
   currentStreak: number;
   lastActiveDate: string | null;
+  
+  // Guest trial
+  guestTrialCount: number;
 
   loadUser: () => Promise<void>;
   persistUser: () => Promise<void>;
@@ -49,6 +54,8 @@ interface UserState {
   updateStreak: (todayStr: string) => Promise<void>;
   addViewedQuote: (quoteId: string, quoteText: string, todayStr: string) => Promise<void>;
   getTodayViewedQuotes: () => string[];
+  incrementGuestTrial: () => number;
+  setShowOnboardingFlag: (show: boolean) => void;
 }
 
 const USER_KEY = '@dailyglow_user_v1';
@@ -69,12 +76,14 @@ export const useUserStore = create<UserState>((set, get) => ({
   bookmarkedQuoteIds: [],
   todayViewedQuoteIds: [],
   todayViewedDate: null,
+  showOnboardingFlag: false,
   uid: null,
   displayName: null,
   email: null,
   photoURL: null,
   currentStreak: 0,
   lastActiveDate: null,
+  guestTrialCount: 0,
 
   loadUser: async () => {
     try {
@@ -153,8 +162,14 @@ export const useUserStore = create<UserState>((set, get) => ({
   resetScrollCount: () => set({ scrollCount: 0 }),
 
   setPremium: async (premium) => {
+    const uid = get().uid;
     set({ isPremium: premium });
     await get().persistUser();
+    
+    if (uid) {
+      await updatePremiumStatus(uid, premium);
+      await logActivity(uid, premium ? 'premium_purchased' : 'premium_cancelled');
+    }
   },
 
   shouldShowAd: () => {
@@ -212,12 +227,19 @@ export const useUserStore = create<UserState>((set, get) => ({
   },
 
   toggleBookmark: async (quoteId) => {
+    const uid = get().uid;
     const ids = get().bookmarkedQuoteIds;
-    const next = ids.includes(quoteId)
+    const isCurrentlyBookmarked = ids.includes(quoteId);
+    const next = isCurrentlyBookmarked
       ? ids.filter((id) => id !== quoteId)
       : [...ids, quoteId];
     set({ bookmarkedQuoteIds: next });
     await get().persistUser();
+    
+    if (uid) {
+      saveBookmarkedQuotes(uid, next);
+      logQuoteBookmarked(uid, quoteId, !isCurrentlyBookmarked);
+    }
   },
 
   isBookmarked: (quoteId) => get().bookmarkedQuoteIds.includes(quoteId),
@@ -225,8 +247,23 @@ export const useUserStore = create<UserState>((set, get) => ({
   setAuth: async (user) => {
     if (user) {
       set({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
+      
+      const [premiumStatus, cloudBookmarks] = await Promise.all([
+        fetchPremiumStatus(user.uid),
+        fetchBookmarkedQuotes(user.uid),
+      ]);
+      
+      if (premiumStatus) {
+        set({ isPremium: true });
+      }
+      
+      if (cloudBookmarks.length > 0) {
+        const localBookmarks = get().bookmarkedQuoteIds;
+        const merged = [...new Set([...localBookmarks, ...cloudBookmarks])];
+        set({ bookmarkedQuoteIds: merged });
+      }
     } else {
-      set({ uid: null, displayName: null, email: null, photoURL: null });
+      set({ uid: null, displayName: null, email: null, photoURL: null, isPremium: false });
     }
     await get().persistUser();
   },
@@ -263,5 +300,15 @@ export const useUserStore = create<UserState>((set, get) => ({
 
   getTodayViewedQuotes: () => {
     return get().todayViewedQuoteIds;
+  },
+  
+  incrementGuestTrial: () => {
+    const newCount = get().guestTrialCount + 1;
+    set({ guestTrialCount: newCount });
+    return newCount;
+  },
+  
+  setShowOnboardingFlag: (show) => {
+    set({ showOnboardingFlag: show });
   },
 }));

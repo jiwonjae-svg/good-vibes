@@ -8,22 +8,49 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_GROK_MODEL": "grok-4-1-fast-non-reasoning"
+        "EXPO_PUBLIC_GROK_MODEL": "grok-4-1-fast-non-reasoning",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "good-vibes-3d443.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "good-vibes-3d443",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "good-vibes-3d443.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "283135556174",
+        "EXPO_PUBLIC_FIREBASE_APP_ID_IOS": "1:283135556174:ios:a876cf9a483b1bd872e11f",
+        "EXPO_PUBLIC_FIREBASE_APP_ID_ANDROID": "1:283135556174:android:45b46d13a0dd494b72e11f",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "283135556174-tgllbp9p5hoctse770dlbmmp5hhdacja.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "283135556174-qkn959caniptc67dojun86qpa0glgvt7.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "283135556174-ce5u747ielueuvqe981346rpg0d2fhje.apps.googleusercontent.com"
       }
     },
     "preview": {
       "distribution": "internal",
-      "env": {
-        "EXPO_PUBLIC_GROK_MODEL": "grok-4-1-fast-non-reasoning"
-      },
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_GROK_MODEL": "grok-4-1-fast-non-reasoning",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "good-vibes-3d443.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "good-vibes-3d443",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "good-vibes-3d443.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "283135556174",
+        "EXPO_PUBLIC_FIREBASE_APP_ID_IOS": "1:283135556174:ios:a876cf9a483b1bd872e11f",
+        "EXPO_PUBLIC_FIREBASE_APP_ID_ANDROID": "1:283135556174:android:45b46d13a0dd494b72e11f",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "283135556174-tgllbp9p5hoctse770dlbmmp5hhdacja.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "283135556174-qkn959caniptc67dojun86qpa0glgvt7.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "283135556174-ce5u747ielueuvqe981346rpg0d2fhje.apps.googleusercontent.com"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_GROK_MODEL": "grok-4-1-fast-non-reasoning"
+        "EXPO_PUBLIC_GROK_MODEL": "grok-4-1-fast-non-reasoning",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "good-vibes-3d443.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "good-vibes-3d443",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "good-vibes-3d443.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "283135556174",
+        "EXPO_PUBLIC_FIREBASE_APP_ID_IOS": "1:283135556174:ios:a876cf9a483b1bd872e11f",
+        "EXPO_PUBLIC_FIREBASE_APP_ID_ANDROID": "1:283135556174:android:45b46d13a0dd494b72e11f",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "283135556174-tgllbp9p5hoctse770dlbmmp5hhdacja.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "283135556174-qkn959caniptc67dojun86qpa0glgvt7.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "283135556174-ce5u747ielueuvqe981346rpg0d2fhje.apps.googleusercontent.com"
       }
     }
   },

@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { useTTS } from '../../hooks/useTTS';
 import { Fonts, FontSize, Spacing } from '../../constants/theme';
 import { useQuoteStore, Quote } from '../../stores/useQuoteStore';
 import { useUserStore } from '../../stores/useUserStore';
@@ -11,6 +12,7 @@ import { useGrassStore } from '../../stores/useGrassStore';
 import { getInitialQuotes, fetchQuoteBatch } from '../../services/quoteService';
 import { getPraise } from '../../services/praiseService';
 import { saveQuoteForWidget } from '../../services/widgetService';
+import { logActivityCompletion } from '../../services/firestoreUserService';
 import { QUOTE_CONFIG } from '../../constants/config';
 import { useAdInterstitial } from '../../components/AdInterstitial';
 import { todayString } from '../../utils/dateUtils';
@@ -19,15 +21,19 @@ import SpeakAlongSheet from '../../components/SpeakAlongSheet';
 import WriteAlongSheet from '../../components/WriteAlongSheet';
 import TypeAlongSheet from '../../components/TypeAlongSheet';
 import PraiseModal from '../../components/PraiseModal';
+import LoginPromptModal from '../../components/LoginPromptModal';
 
 type SheetType = 'speak' | 'write' | 'type' | null;
 
 export default function HomeScreen() {
   const { t } = useTranslation();
   const colors = useThemeColors();
+  const { speak, stop, isSpeaking } = useTTS();
   const { quotes, isLoading, isGenerating, setQuotes, appendQuotes, setIsLoading, setIsGenerating } = useQuoteStore();
   const { incrementScroll, updateStreak, addViewedQuote } = useUserStore();
   const language = useUserStore((s) => s.language);
+  const autoReadEnabled = useUserStore((s) => s.autoReadEnabled);
+  const isPremium = useUserStore((s) => s.isPremium);
   const { recordActivity } = useGrassStore();
   const { tryShowAd } = useAdInterstitial();
 
@@ -35,10 +41,16 @@ export default function HomeScreen() {
   const [activeQuoteIndex, setActiveQuoteIndex] = useState(0);
   const [praiseVisible, setPraiseVisible] = useState(false);
   const [praiseText, setPraiseText] = useState('');
+  const [loginPromptVisible, setLoginPromptVisible] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const lastViewedIndex = useRef(0);
+  const loginPromptShown = useRef(false);
+  const lastAutoReadIndex = useRef(-1);
 
   const isInitialMount = useRef(true);
+  const uid = useUserStore((s) => s.uid);
+  const isGuest = !uid;
+  const selectedCategories = useUserStore((s) => s.selectedCategories);
 
   useEffect(() => {
     loadQuotes();
@@ -52,6 +64,12 @@ export default function HomeScreen() {
     }
     loadQuotes();
   }, [language]);
+
+  useEffect(() => {
+    if (quotes.length === 0 && !isLoading) {
+      loadQuotes();
+    }
+  }, [selectedCategories, quotes.length, isLoading]);
 
   const loadQuotes = async () => {
     setIsLoading(true);
@@ -77,27 +95,52 @@ export default function HomeScreen() {
         setActiveQuoteIndex(idx);
         const q = quotes[idx];
         if (q) {
-          saveQuoteForWidget(q.text, q.author);
+          if (isPremium) {
+            saveQuoteForWidget(q.text, q.author, q.category);
+          }
           addViewedQuote(q.id, q.text, todayString());
+          
+          if (autoReadEnabled && idx !== lastAutoReadIndex.current) {
+            lastAutoReadIndex.current = idx;
+            setTimeout(() => speak(q.text), 300);
+          }
         }
         if (quotes.length - idx <= QUOTE_CONFIG.prefetchThreshold) prefetchMore();
+        
+        if (isGuest && idx >= 7 && !loginPromptShown.current) {
+          loginPromptShown.current = true;
+          setTimeout(() => setLoginPromptVisible(true), 300);
+        }
       }
     },
-    [quotes.length, prefetchMore, addViewedQuote],
+    [quotes.length, prefetchMore, addViewedQuote, isGuest, autoReadEnabled, speak, isPremium],
   );
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
   const handleActivitySuccess = async (type: 'speak' | 'write' | 'type') => {
     setActiveSheet(null);
-    await recordActivity(type);
-    await updateStreak(todayString());
-    const quoteText = quotes[activeQuoteIndex]?.text ?? '';
+    
+    const currentQuote = quotes[activeQuoteIndex];
+    const quoteText = currentQuote?.text ?? '';
+    
+    if (!isGuest && currentQuote && uid) {
+      await recordActivity(type, currentQuote.id, currentQuote.text);
+      await updateStreak(todayString());
+      const activityType = type === 'speak' ? 'speak_along' : type === 'write' ? 'write_along' : 'type_along';
+      logActivityCompletion(uid, activityType);
+    }
+    
     let praise: string;
     try { praise = await getPraise(type, quoteText); }
     catch { praise = t('praise.fallback'); }
     setPraiseText(praise);
     setPraiseVisible(true);
+    
+    if (isGuest && !loginPromptShown.current) {
+      loginPromptShown.current = true;
+      setTimeout(() => setLoginPromptVisible(true), 2000);
+    }
   };
 
   const activeQuote = quotes[activeQuoteIndex];
@@ -146,6 +189,11 @@ export default function HomeScreen() {
         </>
       )}
       <PraiseModal visible={praiseVisible} praise={praiseText} onClose={() => setPraiseVisible(false)} />
+      <LoginPromptModal
+        visible={loginPromptVisible}
+        onClose={() => setLoginPromptVisible(false)}
+        description={t('guest.loginPromptDesc')}
+      />
     </View>
   );
 }

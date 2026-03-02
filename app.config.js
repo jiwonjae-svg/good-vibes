@@ -23,6 +23,7 @@ export default {
         NSMicrophoneUsageDescription:
           "Microphone is used for the speak-along feature.",
         NSCameraUsageDescription: "Camera is used for the write-along feature.",
+        ITSAppUsesNonExemptEncryption: false,
       },
     },
     android: {
@@ -33,6 +34,9 @@ export default {
         backgroundColor: "#FFF8F0",
       },
       edgeToEdgeEnabled: true,
+      navigationBar: {
+        backgroundColor: "#FFF8F0",
+      },
       permissions: [
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA",
@@ -62,27 +66,22 @@ export default {
           cameraPermission: "Camera is needed for write-along.",
         },
       ],
+      "expo-web-browser",
+      "@react-native-firebase/app",
       [
         "react-native-google-mobile-ads",
         {
-          androidAppId: "ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy",
-          iosAppId: "ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy",
+          androidAppId: "ca-app-pub-3940256099942544~3347511713",
+          iosAppId: "ca-app-pub-3940256099942544~1458002511",
         },
       ],
-      [
-        "@sentry/react-native/expo",
-        {
-          organization: "YOUR_ORG",
-          project: "dailyglow",
-        },
-      ],
-      "expo-web-browser",
-      "@react-native-firebase/app",
     ],
     extra: {
       "eas": {
         "projectId": "69609514-3e81-487d-8804-c52500f5d001"
       },
+      grokApiKey: process.env.EXPO_PUBLIC_GROK_API_KEY,
+      grokModel: process.env.EXPO_PUBLIC_GROK_MODEL,
       firebaseApiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
       firebaseAuthDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
       firebaseProjectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
@@ -90,7 +89,6 @@ export default {
       firebaseMessagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
       firebaseAppIdIos: process.env.EXPO_PUBLIC_FIREBASE_APP_ID_IOS,
       firebaseAppIdAndroid: process.env.EXPO_PUBLIC_FIREBASE_APP_ID_ANDROID,
-      grokModel: process.env.EXPO_PUBLIC_GROK_MODEL,
       googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
       googleIosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
       googleAndroidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,

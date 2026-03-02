@@ -182,10 +182,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    maxHeight: '85%',
+    height: '85%',
     borderTopLeftRadius: BorderRadius.xl,
     borderTopRightRadius: BorderRadius.xl,
-    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
@@ -205,7 +204,7 @@ const styles = StyleSheet.create({
   },
   countText: { ...Fonts.body, fontSize: FontSize.sm },
   clearText: { ...Fonts.body, fontSize: FontSize.sm },
-  scrollArea: { flex: 1 },
+  scrollArea: { flex: 1, minHeight: 200 },
   themeSection: { marginBottom: Spacing.xs },
   themeHeader: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, Dimensions, Pressable } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Dimensions, Pressable, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { FontSize, Spacing, BorderRadius, Shadows, Fonts } from '../constants/theme';
 import { useThemeColors } from '../hooks/useThemeColors';
@@ -9,9 +9,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTTS } from '../hooks/useTTS';
 import { useTranslation } from 'react-i18next';
 import { shareQuoteText } from '../services/shareService';
+import LoginPromptModal from './LoginPromptModal';
 
-const ACTION_BG_LIGHT = 'rgba(255,255,255,0.88)';
-const ACTION_BG_DARK = 'rgba(30,30,30,0.82)';
+const ACTION_BG_LIGHT = 'rgba(255,255,255,0.92)';
+const ACTION_BG_DARK = 'rgba(30,30,30,0.85)';
+
+const QUOTE_OPEN_IMG = require('../assets/double quotes-front.png');
+const QUOTE_CLOSE_IMG = require('../assets/double quotes-back.png');
 
 interface QuoteCardProps {
   quote: Quote;
@@ -23,90 +27,179 @@ interface QuoteCardProps {
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 export const CARD_HEIGHT = SCREEN_HEIGHT;
 
-const HIDDEN_AUTHORS = ['작자 미상', 'Unknown', '不明', '佚名'];
-
 export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlong }: QuoteCardProps) {
   const { t } = useTranslation();
   const colors = useThemeColors();
   const { speak, stop, isSpeaking } = useTTS();
   const toggleBookmark = useUserStore((s) => s.toggleBookmark);
   const isBookmarked = useUserStore((s) => s.isBookmarked);
+  const uid = useUserStore((s) => s.uid);
+  const incrementGuestTrial = useUserStore((s) => s.incrementGuestTrial);
   const bookmarked = isBookmarked(quote.id);
   const isDark = useUserStore((s) => s.isDarkMode);
   const gradient = colors.cardGradients[quote.gradientIndex % colors.cardGradients.length];
-  const showAuthor = quote.author && !HIDDEN_AUTHORS.includes(quote.author);
   const actionBg = isDark ? ACTION_BG_DARK : ACTION_BG_LIGHT;
+  const isGuest = !uid;
+  
+  const [loginPromptVisible, setLoginPromptVisible] = useState(false);
+
+  const quoteMarkColor = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(50,50,50,0.4)';
+  const quoteTextColor = isDark ? '#ffffff' : '#2d2d2d';
 
   const handleTTS = () => (isSpeaking ? stop() : speak(quote.text));
+  
+  const handleBookmark = () => {
+    if (isGuest) {
+      setLoginPromptVisible(true);
+      return;
+    }
+    toggleBookmark(quote.id);
+  };
+  
+  const handleShare = () => {
+    if (isGuest) {
+      setLoginPromptVisible(true);
+      return;
+    }
+    shareQuoteText(quote.text, quote.author);
+  };
+  
+  const handleActivity = (action: () => void) => {
+    if (isGuest) {
+      const count = incrementGuestTrial();
+      if (count > 3) {
+        setLoginPromptVisible(true);
+        return;
+      }
+    }
+    action();
+  };
 
   return (
     <View style={styles.container}>
       <LinearGradient colors={gradient} style={styles.gradient}>
-        <View style={styles.content}>
+        <View style={styles.cardFrame}>
+          <View style={styles.quoteContent}>
+            <Image
+              source={QUOTE_OPEN_IMG}
+              style={[styles.quoteMarkOpen, { tintColor: quoteMarkColor }]}
+              resizeMode="contain"
+            />
+            
+            <Text style={[styles.quoteText, { color: quoteTextColor }]}>{quote.text}</Text>
+            
+            <Image
+              source={QUOTE_CLOSE_IMG}
+              style={[styles.quoteMarkClose, { tintColor: quoteMarkColor }]}
+              resizeMode="contain"
+            />
+          </View>
+          
           <View style={styles.topActions}>
-            <Pressable onPress={handleTTS} style={styles.iconBtn}>
-              <Ionicons name={isSpeaking ? 'volume-high' : 'volume-medium-outline'} size={24} color={colors.textSecondary} />
+            <Pressable onPress={handleTTS} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
+              <Ionicons name={isSpeaking ? 'volume-high' : 'volume-medium-outline'} size={20} color={colors.textPrimary} />
             </Pressable>
-            <Pressable onPress={() => toggleBookmark(quote.id)} style={styles.iconBtn}>
-              <Ionicons name={bookmarked ? 'bookmark' : 'bookmark-outline'} size={24} color={bookmarked ? colors.primary : colors.textSecondary} />
+            <Pressable onPress={handleBookmark} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
+              <Ionicons name={bookmarked ? 'heart' : 'heart-outline'} size={20} color={bookmarked ? '#FF6B6B' : colors.textPrimary} />
             </Pressable>
-            <Pressable onPress={() => shareQuoteText(quote.text, quote.author)} style={styles.iconBtn}>
-              <Ionicons name="share-outline" size={24} color={colors.textSecondary} />
+            <Pressable onPress={handleShare} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
+              <Ionicons name="share-social-outline" size={20} color={colors.textPrimary} />
             </Pressable>
           </View>
-
-          <View style={styles.quoteWrapper}>
-            <Text style={[styles.quoteMark, { color: colors.primary }]}>{'\u201C'}</Text>
-            <Text style={[styles.quoteText, { color: colors.textPrimary }]}>{quote.text}</Text>
-            <Text style={[styles.quoteMarkEnd, { color: colors.primary }]}>{'\u201D'}</Text>
-          </View>
-
-          {quote.category && (
-            <View style={[styles.categoryBadge, { backgroundColor: colors.surfaceAlt }]}>
-              <Text style={[styles.categoryText, { color: colors.textSecondary }]}>
-                {quote.category}
-              </Text>
-            </View>
-          )}
-
-          {showAuthor && (
-            <Text style={[styles.author, { color: colors.textSecondary }]}>— {quote.author}</Text>
-          )}
         </View>
 
         <View style={styles.floatingActions}>
-          <Pressable style={[styles.actionButton, { backgroundColor: actionBg }]} onPress={onSpeakAlong}>
+          <Pressable style={[styles.actionButton, { backgroundColor: actionBg }]} onPress={() => handleActivity(onSpeakAlong)}>
             <Ionicons name="mic-outline" size={22} color={colors.textPrimary} />
             <Text style={[styles.actionLabel, { color: colors.textPrimary }]}>{t('home.speakAlong')}</Text>
           </Pressable>
-          <Pressable style={[styles.actionButton, { backgroundColor: actionBg }]} onPress={onWriteAlong}>
+          <Pressable style={[styles.actionButton, { backgroundColor: actionBg }]} onPress={() => handleActivity(onWriteAlong)}>
             <Ionicons name="pencil-outline" size={22} color={colors.textPrimary} />
             <Text style={[styles.actionLabel, { color: colors.textPrimary }]}>{t('home.writeAlong')}</Text>
           </Pressable>
-          <Pressable style={[styles.actionButton, { backgroundColor: actionBg }]} onPress={onTypeAlong}>
+          <Pressable style={[styles.actionButton, { backgroundColor: actionBg }]} onPress={() => handleActivity(onTypeAlong)}>
             <Ionicons name="keypad-outline" size={22} color={colors.textPrimary} />
             <Text style={[styles.actionLabel, { color: colors.textPrimary }]}>{t('home.typeAlong')}</Text>
           </Pressable>
         </View>
+
+        <LoginPromptModal
+          visible={loginPromptVisible}
+          onClose={() => setLoginPromptVisible(false)}
+        />
       </LinearGradient>
     </View>
   );
 }
 
+const QUOTE_MARK_SIZE = FontSize.xl * 2;
+
 const styles = StyleSheet.create({
   container: { height: CARD_HEIGHT, width: SCREEN_WIDTH },
   gradient: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.lg },
-  content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 120 },
-  topActions: { position: 'absolute', top: 56, right: 0, flexDirection: 'row', gap: Spacing.xs },
-  iconBtn: { padding: Spacing.sm },
-  quoteWrapper: { alignItems: 'center', paddingHorizontal: Spacing.md },
-  quoteMark: { ...Fonts.quote, fontSize: 60, opacity: 0.4, lineHeight: 70, marginBottom: -20 },
-  quoteText: { ...Fonts.quote, fontSize: FontSize.xxl, textAlign: 'center', lineHeight: 48, letterSpacing: 0.5 },
-  quoteMarkEnd: { ...Fonts.quote, fontSize: 60, opacity: 0.4, lineHeight: 70, marginTop: -10 },
-  categoryBadge: { marginTop: Spacing.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.full },
-  categoryText: { ...Fonts.body, fontSize: FontSize.sm },
-  author: { ...Fonts.body, fontSize: FontSize.md, marginTop: Spacing.sm },
-  floatingActions: { position: 'absolute', bottom: 100, flexDirection: 'row', gap: Spacing.md },
-  actionButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 2, borderRadius: BorderRadius.full, ...Shadows.floating },
+  cardFrame: {
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: BorderRadius.xl,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.4)',
+    padding: Spacing.xl,
+    marginBottom: Spacing.lg,
+    position: 'relative',
+  },
+  quoteContent: {
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+  },
+  quoteMarkOpen: {
+    width: QUOTE_MARK_SIZE,
+    height: QUOTE_MARK_SIZE,
+    alignSelf: 'flex-start',
+    marginBottom: Spacing.sm,
+  },
+  quoteText: {
+    ...Fonts.quote,
+    fontSize: FontSize.xl,
+    textAlign: 'center',
+    lineHeight: 34,
+    letterSpacing: 0.3,
+    paddingHorizontal: Spacing.sm,
+  },
+  quoteMarkClose: {
+    width: QUOTE_MARK_SIZE,
+    height: QUOTE_MARK_SIZE,
+    alignSelf: 'flex-end',
+    marginTop: Spacing.sm,
+  },
+  topActions: {
+    position: 'absolute',
+    top: Spacing.md,
+    right: Spacing.md,
+    flexDirection: 'row',
+    gap: Spacing.xs,
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.floating,
+  },
+  floatingActions: {
+    position: 'absolute',
+    bottom: 100,
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm + 2,
+    borderRadius: BorderRadius.full,
+    ...Shadows.floating,
+  },
   actionLabel: { ...Fonts.body, fontSize: FontSize.sm },
 });

@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, Switch, Modal, FlatList,
+  View, Text, StyleSheet, ScrollView, Pressable, Switch, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import { useRouter } from 'expo-router';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { Fonts, FontSize, Spacing, BorderRadius } from '../../constants/theme';
+import { Fonts, FontSize, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { useUserStore } from '../../stores/useUserStore';
 import { LANGUAGES, type LanguageCode } from '../../i18n';
 import { useGoogleAuth, signInWithGoogle, logOut, onAuthChange } from '../../services/authService';
@@ -17,8 +18,9 @@ import CategoryPickerModal from '../../components/CategoryPickerModal';
 export default function SettingsScreen() {
   const { t } = useTranslation();
   const colors = useThemeColors();
+  const router = useRouter();
   const {
-    isPremium, setPremium, totalQuotesViewed,
+    isPremium, setPremium,
     isDarkMode, setDarkMode,
     language, setLanguage,
     selectedCategories, setCategories,
@@ -26,13 +28,14 @@ export default function SettingsScreen() {
     autoReadEnabled, setAutoRead,
     uid, displayName, email, setAuth,
     currentStreak,
-    todayViewedQuoteIds,
+    setShowOnboardingFlag,
   } = useUserStore();
 
+  const isGuest = !uid;
   const { response, promptAsync } = useGoogleAuth();
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [catModalVisible, setCatModalVisible] = useState(false);
-  const [viewedModalVisible, setViewedModalVisible] = useState(false);
+  const [premiumModalVisible, setPremiumModalVisible] = useState(false);
 
   useEffect(() => {
     if (response?.type === 'success') {
@@ -52,18 +55,19 @@ export default function SettingsScreen() {
     return unsub;
   }, []);
 
-  const handlePremiumToggle = async (value: boolean) => {
-    if (value) {
-      setPremium(true);
-    } else {
-      setPremium(false);
-    }
+  const handlePremiumPurchase = () => {
+    setPremium(true);
+    setPremiumModalVisible(false);
   };
 
   const handleLanguage = () => setLangModalVisible(true);
-  const handleCategory = () => setCatModalVisible(true);
+  const handleCategory = () => {
+    if (isGuest) return;
+    setCatModalVisible(true);
+  };
 
   const handleNotification = async (enabled: boolean) => {
+    if (isGuest || !isPremium) return;
     if (enabled) await scheduleDailyReminder();
     else await cancelDailyReminder();
     setDailyReminder(enabled);
@@ -74,15 +78,18 @@ export default function SettingsScreen() {
     setAuth(null);
   };
 
+  const handleLoginNavigation = () => {
+    router.push('/login');
+  };
+
+  const handleReplayOnboarding = () => {
+    setShowOnboardingFlag(true);
+  };
+
   const s = makeStyles(colors);
   const currentLangLabel = LANGUAGES.find((l) => l.code === language)?.label ?? '한국어';
   const catCount = selectedCategories.length;
   const catLabel = catCount === 0 ? t('settings.allCategories') : t('settings.categoriesSelected', { count: catCount });
-
-  const viewedQuotes = todayViewedQuoteIds.map((q) => {
-    const [id, ...textParts] = q.split('|');
-    return { id, text: textParts.join('|') };
-  });
 
   return (
     <SafeAreaView style={[s.safe]} edges={['top']}>
@@ -99,46 +106,63 @@ export default function SettingsScreen() {
         onClose={() => setCatModalVisible(false)}
       />
 
-      {/* Today's Viewed Quotes Modal */}
-      <Modal transparent visible={viewedModalVisible} animationType="fade" onRequestClose={() => setViewedModalVisible(false)}>
-        <Pressable style={s.modalOverlay} onPress={() => setViewedModalVisible(false)}>
-          <View style={[s.modalSheet, { backgroundColor: colors.surface }]}>
-            <View style={[s.modalHeader, { borderBottomColor: colors.grass0 }]}>
-              <Text style={[s.modalTitle, { color: colors.textPrimary }]}>{t('settings.todayQuotes')}</Text>
-              <Pressable onPress={() => setViewedModalVisible(false)}>
-                <Ionicons name="close" size={24} color={colors.textMuted} />
-              </Pressable>
+      {/* Premium Modal */}
+      <Modal
+        transparent
+        visible={premiumModalVisible}
+        animationType="fade"
+        onRequestClose={() => setPremiumModalVisible(false)}
+      >
+        <Pressable style={s.modalOverlay} onPress={() => setPremiumModalVisible(false)}>
+          <Pressable style={[s.modalSheet, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
+            <View style={[s.premiumIconWrapper, { backgroundColor: colors.primary + '20' }]}>
+              <Ionicons name="diamond" size={48} color={colors.primary} />
             </View>
-            {viewedQuotes.length === 0 ? (
-              <View style={s.emptyView}>
-                <Text style={[s.emptyText, { color: colors.textSecondary }]}>{t('settings.noQuotesToday')}</Text>
+            <Text style={[s.premiumModalTitle, { color: colors.textPrimary }]}>{t('premium.title')}</Text>
+            <Text style={[s.premiumModalDesc, { color: colors.textSecondary }]}>{t('premium.description')}</Text>
+
+            <View style={s.benefitList}>
+              <View style={s.benefitItem}>
+                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                <Text style={[s.benefitText, { color: colors.textPrimary }]}>{t('premium.benefit1')}</Text>
               </View>
-            ) : (
-              <FlatList
-                data={viewedQuotes}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <View style={[s.quoteItem, { borderBottomColor: colors.grass0 }]}>
-                    <Text style={[s.quoteItemText, { color: colors.textPrimary }]}>"{item.text}"</Text>
-                  </View>
-                )}
-                style={{ maxHeight: 400 }}
-              />
-            )}
-          </View>
+              <View style={s.benefitItem}>
+                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                <Text style={[s.benefitText, { color: colors.textPrimary }]}>{t('premium.benefit2')}</Text>
+              </View>
+              <View style={s.benefitItem}>
+                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                <Text style={[s.benefitText, { color: colors.textPrimary }]}>{t('premium.benefit3')}</Text>
+              </View>
+              <View style={s.benefitItem}>
+                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                <Text style={[s.benefitText, { color: colors.textPrimary }]}>{t('premium.benefit4')}</Text>
+              </View>
+            </View>
+
+            <Pressable
+              style={[s.purchaseBtn, { backgroundColor: colors.primary }]}
+              onPress={handlePremiumPurchase}
+            >
+              <Text style={s.purchaseBtnText}>{t('premium.purchase')}</Text>
+            </Pressable>
+            <Pressable style={s.laterBtn} onPress={() => setPremiumModalVisible(false)}>
+              <Text style={[s.laterBtnText, { color: colors.textMuted }]}>{t('premium.later')}</Text>
+            </Pressable>
+          </Pressable>
         </Pressable>
       </Modal>
 
       <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
         <Text style={s.header}>{t('settings.title')}</Text>
 
-        {currentStreak > 1 && (
+        {currentStreak > 1 && !isGuest && (
           <View style={s.streakBanner}>
             <Text style={s.streakText}>🔥 {currentStreak}{t('grass.streak')}</Text>
           </View>
         )}
 
-        {/* Account */}
+        {/* Account Section */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>{t('settings.account')}</Text>
           <View style={s.card}>
@@ -161,36 +185,71 @@ export default function SettingsScreen() {
                 </Pressable>
               </>
             ) : (
-              <Pressable style={s.row} onPress={() => promptAsync()}>
-                <View style={s.rowLeft}>
-                  <Ionicons name="logo-google" size={22} color={colors.textSecondary} />
-                  <View>
-                    <Text style={s.rowTitle}>{t('settings.login')}</Text>
-                    <Text style={s.rowSubtitle}>{t('settings.loginDesc')}</Text>
+              <>
+                <View style={[s.guestBanner, { backgroundColor: colors.surfaceAlt }]}>
+                  <Ionicons name="person-outline" size={32} color={colors.primary} />
+                  <View style={s.guestBannerText}>
+                    <Text style={[s.guestTitle, { color: colors.textPrimary }]}>{t('settings.guestMode')}</Text>
+                    <Text style={[s.guestDesc, { color: colors.textSecondary }]}>{t('settings.guestModeDesc')}</Text>
                   </View>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-              </Pressable>
+                
+                <Pressable
+                  style={[
+                    s.loginBtn,
+                    {
+                      backgroundColor: isDarkMode ? colors.surfaceAlt : '#fff',
+                      borderColor: isDarkMode ? colors.grass0 : '#dadce0',
+                    },
+                  ]}
+                  onPress={() => promptAsync()}
+                >
+                  <Ionicons name="logo-google" size={20} color="#EA4335" />
+                  <Text style={[s.loginBtnText, { color: colors.textPrimary }]}>{t('settings.loginWithGoogle')}</Text>
+                </Pressable>
+                
+                <Pressable style={[s.loginBtn, { backgroundColor: colors.primary }]} onPress={handleLoginNavigation}>
+                  <Ionicons name="mail-outline" size={20} color="#fff" />
+                  <Text style={[s.loginBtnText, { color: '#fff' }]}>{t('settings.loginWithEmail')}</Text>
+                </Pressable>
+              </>
             )}
           </View>
         </View>
 
-        {/* Subscription */}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>{t('settings.subscription')}</Text>
-          <View style={s.card}>
-            <View style={s.row}>
-              <View style={s.rowLeft}>
-                <Ionicons name="diamond-outline" size={22} color={colors.primary} />
-                <View>
-                  <Text style={s.rowTitle}>{t('settings.premium')}</Text>
-                  <Text style={s.rowSubtitle}>{t('settings.premiumDesc')}</Text>
+        {/* Premium Section - Show for logged in users */}
+        {!isGuest && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>{t('settings.subscription')}</Text>
+            <View style={s.card}>
+              {isPremium ? (
+                <View style={s.row}>
+                  <View style={s.rowLeft}>
+                    <Ionicons name="diamond" size={22} color={colors.primary} />
+                    <View>
+                      <Text style={s.rowTitle}>{t('premium.active')}</Text>
+                      <Text style={s.rowSubtitle}>{t('premium.activeDesc')}</Text>
+                    </View>
+                  </View>
+                  <View style={[s.premiumBadge, { backgroundColor: colors.primary }]}>
+                    <Text style={s.premiumBadgeText}>PRO</Text>
+                  </View>
                 </View>
-              </View>
-              <Switch value={isPremium} onValueChange={handlePremiumToggle} trackColor={{ false: colors.grass0, true: colors.primaryLight }} thumbColor={isPremium ? colors.primary : '#f4f3f4'} />
+              ) : (
+                <Pressable style={s.row} onPress={() => setPremiumModalVisible(true)}>
+                  <View style={s.rowLeft}>
+                    <Ionicons name="diamond-outline" size={22} color={colors.primary} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.rowTitle}>{t('premium.upgrade')}</Text>
+                      <Text style={[s.rowSubtitle, { color: colors.textSecondary }]}>{t('premium.upgradeDesc')}</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                </Pressable>
+              )}
             </View>
           </View>
-        </View>
+        )}
 
         {/* Preferences */}
         <View style={s.section}>
@@ -218,13 +277,17 @@ export default function SettingsScreen() {
               <Switch value={isDarkMode} onValueChange={setDarkMode} trackColor={{ false: colors.grass0, true: colors.primaryLight }} thumbColor={isDarkMode ? colors.primary : '#f4f3f4'} />
             </View>
             <View style={s.divider} />
-            <Pressable style={s.row} onPress={handleCategory}>
+            <Pressable style={[s.row, isGuest && s.disabledRow]} onPress={handleCategory} disabled={isGuest}>
               <View style={s.rowLeft}>
-                <Ionicons name="pricetag-outline" size={22} color={colors.textSecondary} />
-                <Text style={s.rowTitle}>{t('settings.category')}</Text>
+                <Ionicons name="pricetag-outline" size={22} color={isGuest ? colors.textMuted : colors.textSecondary} />
+                <View>
+                  <Text style={[s.rowTitle, isGuest && { color: colors.textMuted }]}>{t('settings.category')}</Text>
+                  {isGuest && <Text style={[s.rowSubtitle, { color: colors.textMuted }]}>{t('settings.loginRequired')}</Text>}
+                </View>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Text style={s.rowValue}>{catLabel}</Text>
+                {!isGuest && <Text style={s.rowValue}>{catLabel}</Text>}
+                {isGuest && <Ionicons name="lock-closed" size={16} color={colors.textMuted} />}
                 <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
               </View>
             </Pressable>
@@ -242,34 +305,29 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Notifications */}
+        {/* Notifications - Premium feature */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>{t('settings.notifications')}</Text>
           <View style={s.card}>
-            <View style={s.row}>
+            <View style={[s.row, (isGuest || !isPremium) && s.disabledRow]}>
               <View style={s.rowLeft}>
-                <Ionicons name="notifications-outline" size={22} color={colors.textSecondary} />
+                <Ionicons name="notifications-outline" size={22} color={(isGuest || !isPremium) ? colors.textMuted : colors.textSecondary} />
                 <View>
-                  <Text style={s.rowTitle}>{t('settings.dailyReminder')}</Text>
-                  <Text style={s.rowSubtitle}>{t('settings.dailyReminderDesc')}</Text>
+                  <Text style={[s.rowTitle, (isGuest || !isPremium) && { color: colors.textMuted }]}>{t('settings.dailyReminder')}</Text>
+                  <Text style={[s.rowSubtitle, { color: (isGuest || !isPremium) ? colors.textMuted : colors.textSecondary }]}>
+                    {isGuest ? t('settings.loginRequired') : !isPremium ? t('settings.premiumRequired') : t('settings.dailyReminderDesc')}
+                  </Text>
                 </View>
               </View>
-              <Switch value={dailyReminderEnabled} onValueChange={handleNotification} trackColor={{ false: colors.grass0, true: colors.primaryLight }} thumbColor={dailyReminderEnabled ? colors.primary : '#f4f3f4'} />
+              {isGuest || !isPremium ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="diamond-outline" size={16} color={colors.primary} />
+                  <Ionicons name="lock-closed" size={16} color={colors.textMuted} />
+                </View>
+              ) : (
+                <Switch value={dailyReminderEnabled} onValueChange={handleNotification} trackColor={{ false: colors.grass0, true: colors.primaryLight }} thumbColor={dailyReminderEnabled ? colors.primary : '#f4f3f4'} />
+              )}
             </View>
-          </View>
-        </View>
-
-        {/* Stats */}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>{t('settings.stats')}</Text>
-          <View style={s.card}>
-            <Pressable style={s.statRow} onPress={() => setViewedModalVisible(true)}>
-              <Text style={s.statLabel}>{t('settings.quotesViewed')}</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Text style={s.statValue}>{totalQuotesViewed}</Text>
-                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-              </View>
-            </Pressable>
           </View>
         </View>
 
@@ -277,6 +335,17 @@ export default function SettingsScreen() {
         <View style={s.section}>
           <Text style={s.sectionTitle}>{t('settings.info')}</Text>
           <View style={s.card}>
+            <Pressable style={s.row} onPress={handleReplayOnboarding}>
+              <View style={s.rowLeft}>
+                <Ionicons name="play-circle-outline" size={22} color={colors.textSecondary} />
+                <View>
+                  <Text style={s.rowTitle}>{t('settings.replayOnboarding')}</Text>
+                  <Text style={s.rowSubtitle}>{t('settings.replayOnboardingDesc')}</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            </Pressable>
+            <View style={s.divider} />
             <View style={s.row}>
               <View style={s.rowLeft}>
                 <Ionicons name="information-circle-outline" size={22} color={colors.textSecondary} />
@@ -312,25 +381,35 @@ function makeStyles(colors: any) {
     streakText: { ...Fonts.heading, fontSize: FontSize.lg, color: colors.primary },
     section: { marginBottom: Spacing.lg },
     sectionTitle: { ...Fonts.heading, fontSize: FontSize.sm, color: colors.textMuted, textTransform: 'uppercase', marginHorizontal: Spacing.lg, marginBottom: Spacing.sm, letterSpacing: 1 },
-    card: { backgroundColor: colors.surface, marginHorizontal: Spacing.md, borderRadius: BorderRadius.lg, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
+    card: { backgroundColor: colors.surface, marginHorizontal: Spacing.md, borderRadius: BorderRadius.lg, overflow: 'hidden', ...Shadows.floating },
     row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: Spacing.md },
+    disabledRow: { opacity: 0.6 },
     rowLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flex: 1 },
     rowTitle: { ...Fonts.body, fontSize: FontSize.md, color: colors.textPrimary },
     rowSubtitle: { ...Fonts.body, fontSize: FontSize.xs, color: colors.textSecondary, marginTop: 2 },
     rowValue: { ...Fonts.body, fontSize: FontSize.sm, color: colors.textSecondary },
-    statRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: Spacing.md },
-    statLabel: { ...Fonts.body, fontSize: FontSize.md, color: colors.textPrimary },
-    statValue: { ...Fonts.heading, fontSize: FontSize.md, color: colors.primary },
     divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.grass0, marginLeft: Spacing.xxl + Spacing.sm },
     footer: { alignItems: 'center', paddingVertical: Spacing.xxl },
     footerText: { ...Fonts.heading, fontSize: FontSize.lg },
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: Spacing.xl },
-    modalSheet: { width: '100%', borderRadius: BorderRadius.xl, maxHeight: '70%' },
-    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: Spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth },
-    modalTitle: { ...Fonts.heading, fontSize: FontSize.lg },
-    emptyView: { padding: Spacing.xxl, alignItems: 'center' },
-    emptyText: { ...Fonts.body, fontSize: FontSize.md },
-    quoteItem: { padding: Spacing.md, borderBottomWidth: StyleSheet.hairlineWidth },
-    quoteItemText: { ...Fonts.body, fontSize: FontSize.sm, lineHeight: 22 },
+    guestBanner: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.lg, margin: Spacing.sm, borderRadius: BorderRadius.md },
+    guestBannerText: { flex: 1 },
+    guestTitle: { ...Fonts.heading, fontSize: FontSize.md },
+    guestDesc: { ...Fonts.body, fontSize: FontSize.xs, marginTop: 2 },
+    loginBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, padding: Spacing.md, marginHorizontal: Spacing.sm, marginBottom: Spacing.sm, borderRadius: BorderRadius.md, borderWidth: 1.5 },
+    loginBtnText: { ...Fonts.body, fontSize: FontSize.md },
+    premiumBadge: { paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: BorderRadius.sm },
+    premiumBadgeText: { ...Fonts.heading, fontSize: FontSize.xs, color: '#fff' },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: Spacing.lg },
+    modalSheet: { width: '100%', maxWidth: 340, borderRadius: BorderRadius.xl, padding: Spacing.xl, alignItems: 'center' },
+    premiumIconWrapper: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.md },
+    premiumModalTitle: { ...Fonts.heading, fontSize: FontSize.xl, marginBottom: Spacing.sm, textAlign: 'center' },
+    premiumModalDesc: { ...Fonts.body, fontSize: FontSize.sm, textAlign: 'center', marginBottom: Spacing.lg, lineHeight: 20 },
+    benefitList: { width: '100%', marginBottom: Spacing.lg },
+    benefitItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.sm },
+    benefitText: { ...Fonts.body, fontSize: FontSize.sm },
+    purchaseBtn: { width: '100%', padding: Spacing.md, borderRadius: BorderRadius.md, alignItems: 'center', marginBottom: Spacing.sm },
+    purchaseBtnText: { ...Fonts.heading, fontSize: FontSize.md, color: '#fff' },
+    laterBtn: { padding: Spacing.sm },
+    laterBtnText: { ...Fonts.body, fontSize: FontSize.sm },
   });
 }

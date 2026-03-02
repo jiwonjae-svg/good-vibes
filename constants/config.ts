@@ -52,18 +52,15 @@ export interface AppConfig {
 // =============================================================================
 
 /**
- * Reads a required EXPO_PUBLIC_ env var.
- * Throws a descriptive error at startup if the value is missing.
+ * Reads a value from app.json's `extra` field (set at build time).
+ * Falls back to the provided default if the value is absent.
  */
-function requireEnv(key: string): string {
-  const value = process.env[key];
-  if (!value || value.trim() === '') {
-    throw new Error(
-      `[config] Missing required environment variable: "${key}"\n` +
-        'Copy .env.example → .env and fill in all required values.',
-    );
+function getExtra<T>(key: string, fallback: T): T {
+  const extra = Constants.expoConfig?.extra as Record<string, unknown> | undefined;
+  if (extra && key in extra && extra[key] !== undefined) {
+    return extra[key] as T;
   }
-  return value.trim();
+  return fallback;
 }
 
 /**
@@ -75,49 +72,16 @@ function getEnv(key: string, fallback: string): string {
 }
 
 /**
- * Reads a value from app.json's `extra` field (set at build time).
- * Falls back to the provided default if the value is absent.
- * Useful for non-sensitive build-time config managed via expo-constants.
+ * Reads a required env var with fallback from extra config.
+ * Returns empty string if not found (won't crash).
  */
-function getExtra<T>(key: string, fallback: T): T {
-  const extra = Constants.expoConfig?.extra as Record<string, unknown> | undefined;
-  if (extra && key in extra && extra[key] !== undefined) {
-    return extra[key] as T;
+function getEnvOrExtra(envKey: string, extraKey: string, fallback: string = ''): string {
+  const envValue = process.env[envKey];
+  if (envValue && envValue.trim() !== '') {
+    return envValue.trim();
   }
-  return fallback;
+  return getExtra(extraKey, fallback);
 }
-
-// =============================================================================
-// Startup Validation
-// =============================================================================
-
-const REQUIRED_ENV_VARS = [
-  'EXPO_PUBLIC_GROK_API_KEY',
-  'EXPO_PUBLIC_FIREBASE_API_KEY',
-  'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN',
-  'EXPO_PUBLIC_FIREBASE_PROJECT_ID',
-  'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET',
-  'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
-] as const;
-
-function validateEnv(): void {
-  const missing = REQUIRED_ENV_VARS.filter(
-    (key) => !process.env[key] || process.env[key]!.trim() === '',
-  );
-
-  if (missing.length > 0) {
-    const list = missing.map((k) => `  • ${k}`).join('\n');
-    throw new Error(
-      `[config] App cannot start — missing required environment variables:\n${list}\n\n` +
-        'Steps to fix:\n' +
-        '  1. Copy .env.example to .env\n' +
-        '  2. Fill in the missing values\n' +
-        '  3. Restart the Expo dev server (npx expo start --clear)\n',
-    );
-  }
-}
-
-validateEnv();
 
 // =============================================================================
 // Config Values
@@ -125,35 +89,27 @@ validateEnv();
 
 export const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
 
-export const GROK_MODEL = getEnv(
+export const GROK_MODEL = getEnvOrExtra(
   'EXPO_PUBLIC_GROK_MODEL',
-  getExtra('grokModel', 'grok-4-1-fast-non-reasoning'),
+  'grokModel',
+  'grok-4-1-fast-non-reasoning',
 );
 
-export const GROK_API_KEY = requireEnv('EXPO_PUBLIC_GROK_API_KEY');
+export const GROK_API_KEY = getEnvOrExtra(
+  'EXPO_PUBLIC_GROK_API_KEY',
+  'grokApiKey',
+  '',
+);
 
 export const FIREBASE_CONFIG: FirebaseConfig = {
-  apiKey: requireEnv('EXPO_PUBLIC_FIREBASE_API_KEY'),
-  // Non-sensitive values fall back to app.json extra (set at build time via EAS)
-  authDomain: getEnv(
-    'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN',
-    getExtra('firebaseAuthDomain', ''),
-  ),
-  projectId: getEnv(
-    'EXPO_PUBLIC_FIREBASE_PROJECT_ID',
-    getExtra('firebaseProjectId', ''),
-  ),
-  storageBucket: getEnv(
-    'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET',
-    getExtra('firebaseStorageBucket', ''),
-  ),
-  messagingSenderId: getEnv(
-    'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
-    getExtra('firebaseMessagingSenderId', ''),
-  ),
+  apiKey: getEnvOrExtra('EXPO_PUBLIC_FIREBASE_API_KEY', 'firebaseApiKey', ''),
+  authDomain: getEnvOrExtra('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN', 'firebaseAuthDomain', ''),
+  projectId: getEnvOrExtra('EXPO_PUBLIC_FIREBASE_PROJECT_ID', 'firebaseProjectId', ''),
+  storageBucket: getEnvOrExtra('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET', 'firebaseStorageBucket', ''),
+  messagingSenderId: getEnvOrExtra('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID', 'firebaseMessagingSenderId', ''),
   appId: Platform.OS === 'ios'
-    ? getEnv('EXPO_PUBLIC_FIREBASE_APP_ID_IOS', getExtra('firebaseAppIdIos', ''))
-    : getEnv('EXPO_PUBLIC_FIREBASE_APP_ID_ANDROID', getExtra('firebaseAppIdAndroid', '')),
+    ? getEnvOrExtra('EXPO_PUBLIC_FIREBASE_APP_ID_IOS', 'firebaseAppIdIos', '')
+    : getEnvOrExtra('EXPO_PUBLIC_FIREBASE_APP_ID_ANDROID', 'firebaseAppIdAndroid', ''),
 };
 
 export const AD_CONFIG: AdConfig = {

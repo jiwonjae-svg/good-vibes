@@ -23,6 +23,8 @@ export interface FirestoreUser {
   createdAt?: Timestamp;
   emailVerified?: boolean;
   provider?: string;
+  isPremium?: boolean;
+  premiumPurchasedAt?: Timestamp;
 }
 
 export type ActivityType =
@@ -36,7 +38,9 @@ export type ActivityType =
   | 'write_along_completed'
   | 'type_along_completed'
   | 'password_reset_requested'
-  | 'email_verification_sent';
+  | 'email_verification_sent'
+  | 'premium_purchased'
+  | 'premium_cancelled';
 
 export interface UserActivity {
   uid: string;
@@ -105,6 +109,47 @@ export async function getUserFromFirestore(
     return null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Updates the premium status for a user in Firestore.
+ */
+export async function updatePremiumStatus(
+  uid: string,
+  isPremium: boolean,
+): Promise<boolean> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return false;
+
+    const userRef = doc(db, 'users', uid);
+    const updateData: Partial<FirestoreUser> = {
+      isPremium,
+    };
+
+    if (isPremium) {
+      updateData.premiumPurchasedAt = serverTimestamp() as Timestamp;
+    }
+
+    await setDoc(userRef, updateData, { merge: true });
+    return true;
+  } catch (error) {
+    console.warn('[firestoreUserService] Failed to update premium status:', error);
+    return false;
+  }
+}
+
+/**
+ * Fetches the premium status for a user from Firestore.
+ */
+export async function fetchPremiumStatus(uid: string): Promise<boolean> {
+  try {
+    const user = await getUserFromFirestore(uid);
+    return user?.isPremium ?? false;
+  } catch {
+    return false;
   }
 }
 
@@ -188,4 +233,46 @@ export async function logActivityCompletion(
 ): Promise<void> {
   const type: ActivityType = `${activityType}_completed`;
   await logActivity(uid, type, { score });
+}
+
+/**
+ * Save bookmarked quotes to Firestore
+ */
+export async function saveBookmarkedQuotes(
+  uid: string,
+  bookmarkedQuoteIds: string[],
+): Promise<void> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return;
+
+    const userRef = doc(db, 'users', uid);
+    await setDoc(userRef, { bookmarkedQuoteIds }, { merge: true });
+  } catch (error) {
+    console.warn('[firestoreUserService] Failed to save bookmarks:', error);
+  }
+}
+
+/**
+ * Fetch bookmarked quotes from Firestore
+ */
+export async function fetchBookmarkedQuotes(uid: string): Promise<string[]> {
+  try {
+    const user = await getUserFromFirestore(uid);
+    return (user as any)?.bookmarkedQuoteIds ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Log quote bookmarked event
+ */
+export async function logQuoteBookmarked(
+  uid: string,
+  quoteId: string,
+  isBookmarked: boolean,
+): Promise<void> {
+  await logActivity(uid, 'quote_bookmarked', { quoteId, isBookmarked });
 }

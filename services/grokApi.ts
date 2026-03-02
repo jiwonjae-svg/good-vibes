@@ -1,5 +1,6 @@
 import { GROK_API_URL, GROK_MODEL, GROK_API_KEY } from '../constants/config';
 import i18n from '../i18n';
+import { useUserStore } from '../stores/useUserStore';
 
 interface GrokMessage {
   role: 'system' | 'user' | 'assistant';
@@ -10,11 +11,11 @@ interface GrokResponse {
   choices: { message: { content: string } }[];
 }
 
-const LANG_NAMES: Record<string, string> = {
-  ko: 'Korean',
-  en: 'English',
-  ja: 'Japanese',
-  zh: 'Chinese',
+const LANG_MAP: Record<string, { name: string; author: string }> = {
+  ko: { name: '한국어', author: '마음의 속삭임' },
+  en: { name: 'English', author: 'Whisper of Heart' },
+  ja: { name: '日本語', author: '心のささやき' },
+  zh: { name: '中文', author: '心灵低语' },
 };
 
 export async function callGrok(messages: GrokMessage[], maxTokens = 500): Promise<string> {
@@ -27,7 +28,7 @@ export async function callGrok(messages: GrokMessage[], maxTokens = 500): Promis
     body: JSON.stringify({
       model: GROK_MODEL,
       messages,
-      temperature: 0.9,
+      temperature: 0.95,
       max_tokens: maxTokens,
     }),
   });
@@ -37,35 +38,36 @@ export async function callGrok(messages: GrokMessage[], maxTokens = 500): Promis
   return data.choices[0]?.message?.content ?? '';
 }
 
+function getRecentQuoteTexts(): string[] {
+  const viewed = useUserStore.getState().todayViewedQuoteIds;
+  return viewed.slice(-10).map((q) => q.split('|')[1] || '').filter(Boolean);
+}
+
 export async function generateQuotes(
   count: number,
   selectedCategories: string[] = [],
 ): Promise<{ text: string; author: string; category?: string }[]> {
   const lang = i18n.language;
-  const langName = LANG_NAMES[lang] ?? 'Korean';
+  const langInfo = LANG_MAP[lang] ?? LANG_MAP.ko;
+  const cats = selectedCategories.length > 0 ? selectedCategories.join(',') : 'life,love,courage,happiness,growth,wisdom';
+  
+  const recentQuotes = getRecentQuoteTexts();
+  const avoidPart = recentQuotes.length > 0 
+    ? `\nAvoid similar to: ${recentQuotes.slice(0, 5).map(q => q.slice(0, 30)).join('; ')}`
+    : '';
 
-  const categoryList =
-    selectedCategories.length > 0
-      ? selectedCategories.join(', ')
-      : 'various topics (life, love, courage, happiness, growth, wisdom, etc.)';
-
-  const systemPrompt = `You are a professional expert in generating touching and inspirational quotes.
-
-Rules:
-- Respond in ${langName}.
-- Generate quotes based on [${categoryList}].
-- For each quote, use only 1-4 relevant categories from the provided list, rather than mixing all of them.
-- Length: 1-2 sentences per quote. Keep it natural and impactful.
-- Output Format: Strictly JSON array only: [{ "text": "...", "author": "...", "category": "..." }]. No other text, explanations, or markdown outside the JSON.
-- Quantity: Generate exactly ${count} quotes at once.
-- Use real famous authors when possible, or use the appropriate "Unknown" translation for the language.`;
+  const systemPrompt = `Create ${count} original inspirational quotes.
+STRICT: Write ONLY in ${langInfo.name}. No other language.
+Topics: ${cats}
+Author: "${langInfo.author}"
+Format: JSON array only [{"text":"...","author":"${langInfo.author}","category":"..."}]${avoidPart}`;
 
   const raw = await callGrok(
     [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: `Generate ${count} inspiring quotes now.` },
+      { role: 'user', content: 'Generate now.' },
     ],
-    500,
+    400,
   );
 
   try {
@@ -82,22 +84,21 @@ export async function generatePraise(
   quoteSample: string,
 ): Promise<string> {
   const lang = i18n.language;
-  const langName = LANG_NAMES[lang] ?? 'Korean';
-  const activityName =
-    activityType === 'speak' ? 'read aloud' : activityType === 'write' ? 'handwrite' : 'type';
+  const langInfo = LANG_MAP[lang] ?? LANG_MAP.ko;
+  const activity = activityType === 'speak' ? 'read aloud' : activityType === 'write' ? 'write' : 'type';
 
   const raw = await callGrok(
     [
       {
         role: 'system',
-        content: `You are a warm, encouraging advisor. Give a short, heartfelt praise in ${langName}.`,
+        content: `Give 1 short warm praise in ${langInfo.name} ONLY. No other language.`,
       },
       {
         role: 'user',
-        content: `The user completed the "${activityName}" activity for the quote: "${quoteSample}". Give one sentence of warm praise in ${langName}.`,
+        content: `User completed ${activity}: "${quoteSample.slice(0, 50)}"`,
       },
     ],
-    150,
+    100,
   );
 
   return raw.trim();

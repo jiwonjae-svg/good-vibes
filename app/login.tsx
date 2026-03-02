@@ -7,6 +7,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import { useRouter } from 'expo-router';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { FontSize, Spacing, BorderRadius, Fonts } from '../constants/theme';
 import { useUserStore } from '../stores/useUserStore';
@@ -23,8 +24,11 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export default function LoginScreen() {
   const { t } = useTranslation();
   const colors = useThemeColors();
+  const router = useRouter();
   const setAuth = useUserStore((s) => s.setAuth);
   const setAuthCompleted = useUserStore((s) => s.setAuthCompleted);
+  const hasSeenOnboarding = useUserStore((s) => s.hasSeenOnboarding);
+  const isDarkMode = useUserStore((s) => s.isDarkMode);
 
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
@@ -54,6 +58,9 @@ export default function LoginScreen() {
       if (user) {
         await setAuth({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
         await setAuthCompleted();
+        if (hasSeenOnboarding) {
+          router.replace('/(tabs)');
+        }
       }
     } finally {
       setLoading(false);
@@ -92,6 +99,9 @@ export default function LoginScreen() {
 
       await setAuth({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
       await setAuthCompleted();
+      if (hasSeenOnboarding) {
+        router.replace('/(tabs)');
+      }
     } catch (e: any) {
       Alert.alert(t('login.loginFailed'), e.message);
     } finally {
@@ -169,6 +179,9 @@ export default function LoginScreen() {
 
   const handleSkip = async () => {
     await setAuthCompleted();
+    if (hasSeenOnboarding) {
+      router.replace('/(tabs)');
+    }
   };
 
   const s = makeStyles(colors);
@@ -228,7 +241,17 @@ export default function LoginScreen() {
             {/* Google Sign In */}
             {mode !== 'forgot' && (
               <>
-                <Pressable style={[s.googleBtn, { borderColor: colors.grass0 }]} onPress={() => promptAsync()} disabled={loading}>
+                <Pressable
+                  style={[
+                    s.googleBtn,
+                    {
+                      backgroundColor: isDarkMode ? colors.surfaceAlt : '#fff',
+                      borderColor: isDarkMode ? colors.grass0 : '#dadce0',
+                    },
+                  ]}
+                  onPress={() => promptAsync()}
+                  disabled={loading}
+                >
                   <Ionicons name="logo-google" size={20} color="#EA4335" />
                   <Text style={[s.googleBtnText, { color: colors.textPrimary }]}>{t('login.continueWithGoogle')}</Text>
                 </Pressable>

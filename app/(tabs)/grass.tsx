@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal, FlatList, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -10,6 +10,10 @@ import { useUserStore } from '../../stores/useUserStore';
 import GrassGrid from '../../components/GrassGrid';
 import LoginPromptModal from '../../components/LoginPromptModal';
 import { todayString } from '../../utils/dateUtils';
+
+const MIC_ICON = require('../../assets/mic-elem-icon.png');
+const WRITING_ICON = require('../../assets/writing-elem-icon.png');
+const KEYBOARD_ICON = require('../../assets/keyboard-elem-icon.png');
 
 type ActivityType = 'speak' | 'write' | 'type';
 
@@ -58,6 +62,14 @@ export default function GrassScreen() {
       case 'speak': return 'mic-outline';
       case 'write': return 'pencil-outline';
       case 'type': return 'keypad-outline';
+    }
+  };
+
+  const getActivityImage = (type: ActivityType) => {
+    switch (type) {
+      case 'speak': return MIC_ICON;
+      case 'write': return WRITING_ICON;
+      case 'type': return KEYBOARD_ICON;
     }
   };
 
@@ -123,29 +135,32 @@ export default function GrassScreen() {
           <Text style={[styles.todayTitle, { color: colors.textPrimary }]}>{t('grass.todayActivity')}</Text>
           <View style={styles.todayRow}>
             <ActivityItem
-              icon="🎤"
+              iconSource={getActivityImage('speak')}
               label={t('home.speakAlong')}
               count={todayData.speakCount}
               color={colors.textPrimary}
               subColor={colors.textSecondary}
+              iconTint={colors.primary}
               onPress={() => handleActivityPress('speak')}
               hasQuotes={todayData.speakCount > 0}
             />
             <ActivityItem
-              icon="✍️"
+              iconSource={getActivityImage('write')}
               label={t('home.writeAlong')}
               count={todayData.writeCount}
               color={colors.textPrimary}
               subColor={colors.textSecondary}
+              iconTint={colors.secondary}
               onPress={() => handleActivityPress('write')}
               hasQuotes={todayData.writeCount > 0}
             />
             <ActivityItem
-              icon="⌨️"
+              iconSource={getActivityImage('type')}
               label={t('home.typeAlong')}
               count={todayData.typeCount}
               color={colors.textPrimary}
               subColor={colors.textSecondary}
+              iconTint={colors.accent}
               onPress={() => handleActivityPress('type')}
               hasQuotes={todayData.typeCount > 0}
             />
@@ -211,19 +226,24 @@ export default function GrassScreen() {
 }
 
 interface ActivityItemProps {
-  icon: string;
+  iconSource: any;
   label: string;
   count: number;
   color: string;
   subColor: string;
+  iconTint: string;
   onPress: () => void;
   hasQuotes: boolean;
 }
 
-function ActivityItem({ icon, label, count, color, subColor, onPress, hasQuotes }: ActivityItemProps) {
+function ActivityItem({ iconSource, label, count, color, subColor, iconTint, onPress, hasQuotes }: ActivityItemProps) {
   return (
     <Pressable style={styles.activityItem} onPress={onPress} disabled={!hasQuotes}>
-      <Text style={styles.activityIcon}>{icon}</Text>
+      <Image 
+        source={iconSource} 
+        style={[styles.activityIcon, { tintColor: iconTint }]}
+        resizeMode="contain"
+      />
       <Text style={[styles.activityCount, { color }]}>{count}</Text>
       <Text style={[styles.activityLabel, { color: subColor }]}>{label}</Text>
     </Pressable>
@@ -242,7 +262,7 @@ const styles = StyleSheet.create({
   todayTitle: { ...Fonts.heading, fontSize: FontSize.lg, marginBottom: Spacing.md, textAlign: 'center' },
   todayRow: { flexDirection: 'row', justifyContent: 'space-around' },
   activityItem: { alignItems: 'center', gap: 4, paddingVertical: Spacing.sm },
-  activityIcon: { fontSize: 28 },
+  activityIcon: { width: 32, height: 32 },
   activityCount: { ...Fonts.heading, fontSize: FontSize.xl },
   activityLabel: { ...Fonts.body, fontSize: FontSize.xs },
   emptyHint: { ...Fonts.body, fontSize: FontSize.sm, textAlign: 'center', marginTop: Spacing.md },

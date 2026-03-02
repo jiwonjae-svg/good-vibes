@@ -1,4 +1,8 @@
 export default {
+  common: {
+    ok: 'OK',
+    cancel: 'Cancel',
+  },
   tabs: {
     quotes: 'Quotes',
     grass: 'Grass',
@@ -20,6 +24,7 @@ export default {
     speakAlong: 'Speak',
     writeAlong: 'Write',
     typeAlong: 'Type',
+    autoPlay: 'Auto Play',
   },
   speak: {
     title: 'Speak Along',
@@ -126,6 +131,9 @@ export default {
     activeDesc: 'You have access to all premium features',
     upgrade: 'Upgrade to Premium',
     upgradeDesc: 'Remove ads, widgets, custom notifications and more',
+    requiredTitle: 'Premium Feature',
+    featureDesc: '{{feature}} is available for premium members only.',
+    generalDesc: 'This feature is available for premium members only.',
   },
   login: {
     welcomeBack: 'Positive energy is waiting for you',

@@ -5,11 +5,13 @@ import { FontSize, Spacing, BorderRadius, Shadows, Fonts } from '../constants/th
 import { useThemeColors } from '../hooks/useThemeColors';
 import type { Quote } from '../stores/useQuoteStore';
 import { useUserStore } from '../stores/useUserStore';
+import { useAutoPlayStore } from '../stores/useAutoPlayStore';
 import { Ionicons } from '@expo/vector-icons';
 import { useTTS } from '../hooks/useTTS';
 import { useTranslation } from 'react-i18next';
 import { shareQuoteText } from '../services/shareService';
 import LoginPromptModal from './LoginPromptModal';
+import PremiumPromptModal from './PremiumPromptModal';
 
 const ACTION_BG_LIGHT = 'rgba(255,255,255,0.92)';
 const ACTION_BG_DARK = 'rgba(30,30,30,0.85)';
@@ -27,21 +29,28 @@ interface QuoteCardProps {
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 export const CARD_HEIGHT = SCREEN_HEIGHT;
 
-export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlong }: QuoteCardProps) {
+interface QuoteCardPropsExtended extends QuoteCardProps {
+  onToggleAutoPlay?: () => void;
+}
+
+export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlong, onToggleAutoPlay }: QuoteCardPropsExtended) {
   const { t } = useTranslation();
   const colors = useThemeColors();
   const { speak, stop, isSpeaking } = useTTS();
   const toggleBookmark = useUserStore((s) => s.toggleBookmark);
   const isBookmarked = useUserStore((s) => s.isBookmarked);
   const uid = useUserStore((s) => s.uid);
+  const isPremium = useUserStore((s) => s.isPremium);
   const incrementGuestTrial = useUserStore((s) => s.incrementGuestTrial);
   const bookmarked = isBookmarked(quote.id);
   const isDark = useUserStore((s) => s.isDarkMode);
+  const isAutoPlaying = useAutoPlayStore((s) => s.isAutoPlaying);
   const gradient = colors.cardGradients[quote.gradientIndex % colors.cardGradients.length];
   const actionBg = isDark ? ACTION_BG_DARK : ACTION_BG_LIGHT;
   const isGuest = !uid;
   
   const [loginPromptVisible, setLoginPromptVisible] = useState(false);
+  const [premiumPromptVisible, setPremiumPromptVisible] = useState(false);
 
   const quoteMarkColor = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(50,50,50,0.4)';
   const quoteTextColor = isDark ? '#ffffff' : '#2d2d2d';
@@ -54,6 +63,18 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
       return;
     }
     toggleBookmark(quote.id);
+  };
+  
+  const handleAutoPlay = () => {
+    if (isGuest) {
+      setLoginPromptVisible(true);
+      return;
+    }
+    if (!isPremium) {
+      setPremiumPromptVisible(true);
+      return;
+    }
+    onToggleAutoPlay?.();
   };
   
   const handleShare = () => {
@@ -102,6 +123,13 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
             <Pressable onPress={handleBookmark} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
               <Ionicons name={bookmarked ? 'heart' : 'heart-outline'} size={20} color={bookmarked ? '#FF6B6B' : colors.textPrimary} />
             </Pressable>
+            <Pressable onPress={handleAutoPlay} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
+              <Ionicons 
+                name={isAutoPlaying ? 'pause-circle' : 'play-circle-outline'} 
+                size={20} 
+                color={isAutoPlaying ? colors.primary : colors.textPrimary} 
+              />
+            </Pressable>
             <Pressable onPress={handleShare} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
               <Ionicons name="share-social-outline" size={20} color={colors.textPrimary} />
             </Pressable>
@@ -126,6 +154,11 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
         <LoginPromptModal
           visible={loginPromptVisible}
           onClose={() => setLoginPromptVisible(false)}
+        />
+        <PremiumPromptModal
+          visible={premiumPromptVisible}
+          onClose={() => setPremiumPromptVisible(false)}
+          featureName={t('home.autoPlay')}
         />
       </LinearGradient>
     </View>

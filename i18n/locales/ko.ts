@@ -1,4 +1,8 @@
 export default {
+  common: {
+    ok: '확인',
+    cancel: '취소',
+  },
   tabs: {
     quotes: '명언',
     grass: '잔디밭',
@@ -20,6 +24,7 @@ export default {
     speakAlong: '따라읽기',
     writeAlong: '따라쓰기',
     typeAlong: '타이핑',
+    autoPlay: '자동 재생',
   },
   speak: {
     title: '따라 읽기',
@@ -126,6 +131,9 @@ export default {
     activeDesc: '모든 프리미엄 기능을 이용할 수 있습니다',
     upgrade: '프리미엄 업그레이드',
     upgradeDesc: '광고 제거, 위젯, 맞춤 알림 등 더 많은 기능을 즐겨보세요',
+    requiredTitle: '프리미엄 기능입니다',
+    featureDesc: '{{feature}} 기능은 프리미엄 회원만 이용할 수 있습니다.',
+    generalDesc: '이 기능은 프리미엄 회원만 이용할 수 있습니다.',
   },
   login: {
     welcomeBack: '당신을 위한 긍정의 기운이 기다리고 있습니다',

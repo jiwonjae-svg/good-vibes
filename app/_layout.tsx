@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import { StyleSheet } from 'react-native';
 import '../i18n';
 import { initFirebase } from '../services/firebaseConfig';
 import { initSentry } from '../services/sentryService';
@@ -10,6 +10,7 @@ import { initNotificationHandler } from '../services/notificationService';
 import { useGrassStore } from '../stores/useGrassStore';
 import { useUserStore } from '../stores/useUserStore';
 import OnboardingScreen from '../components/OnboardingScreen';
+import AnimatedSplash from '../components/AnimatedSplash';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -25,6 +26,7 @@ export default function RootLayout() {
   const setShowOnboardingFlag = useUserStore((s) => s.setShowOnboardingFlag);
   
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     initSentry();
@@ -35,7 +37,7 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (!isLoaded) return;
+    if (!isLoaded || showSplash) return;
 
     const inAuthGroup = segments[0] === 'login';
     const inTabsGroup = segments[0] === '(tabs)';
@@ -58,7 +60,7 @@ export default function RootLayout() {
         router.replace('/(tabs)');
       }
     }
-  }, [isLoaded, hasCompletedAuth, hasSeenOnboarding, segments, showOnboardingFlag]);
+  }, [isLoaded, hasCompletedAuth, hasSeenOnboarding, segments, showOnboardingFlag, showSplash]);
 
   const handleOnboardingComplete = async () => {
     await setOnboardingSeen();
@@ -72,12 +74,15 @@ export default function RootLayout() {
     }
   };
 
-  if (!isLoaded) {
+  const handleSplashComplete = useCallback(() => {
+    setShowSplash(false);
+  }, []);
+
+  if (showSplash) {
     return (
       <GestureHandlerRootView style={styles.root}>
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" />
-        </View>
+        <StatusBar style="dark" />
+        <AnimatedSplash onAnimationComplete={handleSplashComplete} />
       </GestureHandlerRootView>
     );
   }

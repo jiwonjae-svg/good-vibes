@@ -1,7 +1,8 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react';
 import {
-  View, FlatList, StyleSheet, Dimensions, ActivityIndicator, Text, ViewToken,
+  View, FlatList, StyleSheet, ActivityIndicator, Text, ViewToken, AppState,
 } from 'react-native';
+import { Audio } from 'expo-av';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useTTS } from '../../hooks/useTTS';
@@ -9,6 +10,7 @@ import { Fonts, FontSize, Spacing } from '../../constants/theme';
 import { useQuoteStore, Quote } from '../../stores/useQuoteStore';
 import { useUserStore } from '../../stores/useUserStore';
 import { useGrassStore } from '../../stores/useGrassStore';
+import { useAutoPlayStore } from '../../stores/useAutoPlayStore';
 import { getInitialQuotes, fetchQuoteBatch } from '../../services/quoteService';
 import { getPraise } from '../../services/praiseService';
 import { saveQuoteForWidget } from '../../services/widgetService';
@@ -36,6 +38,7 @@ export default function HomeScreen() {
   const isPremium = useUserStore((s) => s.isPremium);
   const { recordActivity } = useGrassStore();
   const { tryShowAd } = useAdInterstitial();
+  const { isAutoPlaying, setAutoPlaying, intervalSeconds } = useAutoPlayStore();
 
   const [activeSheet, setActiveSheet] = useState<SheetType>(null);
   const [activeQuoteIndex, setActiveQuoteIndex] = useState(0);
@@ -46,6 +49,7 @@ export default function HomeScreen() {
   const lastViewedIndex = useRef(0);
   const loginPromptShown = useRef(false);
   const lastAutoReadIndex = useRef(-1);
+  const autoPlayTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isInitialMount = useRef(true);
   const uid = useUserStore((s) => s.uid);
@@ -53,9 +57,66 @@ export default function HomeScreen() {
   const selectedCategories = useUserStore((s) => s.selectedCategories);
 
   useEffect(() => {
+    const setupAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          staysActiveInBackground: true,
+          playsInSilentModeIOS: true,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+      } catch {}
+    };
+    setupAudio();
     loadQuotes();
     updateStreak(todayString());
   }, []);
+
+  useEffect(() => {
+    if (isAutoPlaying && quotes.length > 0) {
+      const currentQuote = quotes[activeQuoteIndex];
+      if (currentQuote) {
+        speak(currentQuote.text);
+      }
+      
+      autoPlayTimerRef.current = setInterval(() => {
+        const nextIndex = activeQuoteIndex + 1;
+        if (nextIndex < quotes.length) {
+          flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
+        } else {
+          prefetchMore();
+        }
+      }, intervalSeconds * 1000);
+    } else {
+      if (autoPlayTimerRef.current) {
+        clearInterval(autoPlayTimerRef.current);
+        autoPlayTimerRef.current = null;
+      }
+    }
+    
+    return () => {
+      if (autoPlayTimerRef.current) {
+        clearInterval(autoPlayTimerRef.current);
+      }
+    };
+  }, [isAutoPlaying, activeQuoteIndex, intervalSeconds, quotes.length]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'background' && !isAutoPlaying) {
+        stop();
+      }
+    });
+    return () => subscription?.remove();
+  }, [isAutoPlaying, stop]);
+
+  const handleToggleAutoPlay = useCallback(() => {
+    if (isAutoPlaying) {
+      stop();
+    }
+    setAutoPlaying(!isAutoPlaying);
+  }, [isAutoPlaying, setAutoPlaying, stop]);
 
   useEffect(() => {
     if (isInitialMount.current) {
@@ -152,8 +213,9 @@ export default function HomeScreen() {
         onSpeakAlong={() => { setActiveQuoteIndex(index); setActiveSheet('speak'); }}
         onWriteAlong={() => { setActiveQuoteIndex(index); setActiveSheet('write'); }}
         onTypeAlong={() => { setActiveQuoteIndex(index); setActiveSheet('type'); }}
+        onToggleAutoPlay={handleToggleAutoPlay}
       />
-    ), [],
+    ), [handleToggleAutoPlay],
   );
 
   if (isLoading) {

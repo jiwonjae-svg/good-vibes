@@ -39,6 +39,8 @@ export default function LoginScreen() {
   const [showPw, setShowPw] = useState(false);
   const [verifyModalVisible, setVerifyModalVisible] = useState(false);
   const [resendingEmail, setResendingEmail] = useState(false);
+  const [loginErrorModalVisible, setLoginErrorModalVisible] = useState(false);
+  const [loginErrorMessage, setLoginErrorMessage] = useState('');
 
   const { response, promptAsync } = useGoogleAuth();
 
@@ -103,7 +105,9 @@ export default function LoginScreen() {
         router.replace('/(tabs)');
       }
     } catch (e: any) {
-      Alert.alert(t('login.loginFailed'), e.message);
+      const msg = e?.message || t('login.invalidCredentials');
+      setLoginErrorMessage(msg);
+      setLoginErrorModalVisible(true);
     } finally {
       setLoading(false);
     }
@@ -173,6 +177,8 @@ export default function LoginScreen() {
   const handleVerifyModalClose = () => {
     setVerifyModalVisible(false);
     setMode('login');
+    setEmail('');
+    setDisplayName('');
     setPassword('');
     setConfirmPassword('');
   };
@@ -188,6 +194,25 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient colors={[colors.background, colors.surfaceAlt]} style={s.container}>
+      {/* Login Error Modal */}
+      <Modal transparent visible={loginErrorModalVisible} animationType="fade" onRequestClose={() => setLoginErrorModalVisible(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={s.modalIconWrapper}>
+              <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+            </View>
+            <Text style={[s.modalTitle, { color: colors.textPrimary }]}>{t('login.loginFailed')}</Text>
+            <Text style={[s.modalDesc, { color: colors.textSecondary }]}>{loginErrorMessage}</Text>
+            <Pressable
+              style={[s.modalConfirmBtn, { backgroundColor: colors.primary }]}
+              onPress={() => setLoginErrorModalVisible(false)}
+            >
+              <Text style={s.modalConfirmText}>{t('common.ok')}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {/* Email Verification Modal */}
       <Modal transparent visible={verifyModalVisible} animationType="fade" onRequestClose={handleVerifyModalClose}>
         <View style={s.modalOverlay}>

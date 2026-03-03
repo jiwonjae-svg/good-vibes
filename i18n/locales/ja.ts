@@ -50,6 +50,7 @@ export default {
     passwordMismatch: 'パスワードが一致しません。',
     passwordTooShort: 'パスワードは6文字以上必要です。',
     loginFailed: 'ログイン失敗',
+    invalidCredentials: '入力されたメールアドレスまたはパスワードが正しくありません。確認して再度お試しください。',
     signupFailed: '登録失敗',
     emailSent: 'メール送信完了',
     resetInstructions: 'パスワードリセットの案内をメールで送信しました。',

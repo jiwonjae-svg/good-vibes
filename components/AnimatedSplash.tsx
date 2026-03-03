@@ -6,6 +6,10 @@ import { LightColors } from '../constants/theme';
 const { width, height } = Dimensions.get('window');
 const SPLASH_IMG = require('../assets/splash-scene.png');
 
+const BASE_BG = LightColors.background;
+const BRIGHTER_BG = '#FFFBF5';
+const WARMER_BG = '#FFF5EB';
+
 interface AnimatedSplashProps {
   onAnimationComplete: () => void;
 }
@@ -15,20 +19,29 @@ export default function AnimatedSplash({ onAnimationComplete }: AnimatedSplashPr
 
   useEffect(() => {
     const timer1 = setTimeout(() => setPhase(1), 300);
-    const timer2 = setTimeout(() => setPhase(2), 1200);
-    const timer3 = setTimeout(() => setPhase(3), 2000);
-    const timer4 = setTimeout(() => onAnimationComplete(), 2800);
+    const timer2 = setTimeout(() => setPhase(2), 2000);
+    const timer3 = setTimeout(() => onAnimationComplete(), 2800);
 
     return () => {
       clearTimeout(timer1);
       clearTimeout(timer2);
       clearTimeout(timer3);
-      clearTimeout(timer4);
     };
   }, [onAnimationComplete]);
 
   return (
-    <View style={styles.container}>
+    <MotiView
+      style={styles.container}
+      from={{ backgroundColor: BASE_BG }}
+      animate={{
+        backgroundColor: phase >= 1 ? [BASE_BG, BRIGHTER_BG, WARMER_BG, BASE_BG] : BASE_BG,
+      }}
+      transition={{
+        type: 'timing',
+        duration: 2500,
+        loop: false,
+      }}
+    >
       <MotiView
         from={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -41,7 +54,7 @@ export default function AnimatedSplash({ onAnimationComplete }: AnimatedSplashPr
             from={{ scale: 0.8, opacity: 0 }}
             animate={{
               scale: phase >= 1 ? [1, 1.2, 1] : 0.8,
-              opacity: phase >= 1 ? [0.3, 0.5, 0.3] : 0,
+              opacity: phase >= 1 ? [0.2, 0.35, 0.2] : 0,
             }}
             transition={{
               type: 'timing',
@@ -71,7 +84,7 @@ export default function AnimatedSplash({ onAnimationComplete }: AnimatedSplashPr
         }}
         animate={{
           opacity: phase >= 1 ? 1 : 0,
-          scale: phase >= 3 ? 1.5 : phase >= 1 ? 1 : 0.3,
+          scale: phase >= 1 ? 1 : 0.3,
           rotate: phase >= 1 ? '0deg' : '-15deg',
         }}
         transition={{
@@ -82,34 +95,6 @@ export default function AnimatedSplash({ onAnimationComplete }: AnimatedSplashPr
         style={styles.logo}
         resizeMode="contain"
       />
-
-      <MotiView
-        from={{ opacity: 0, translateY: 30 }}
-        animate={{
-          opacity: phase >= 2 ? 1 : 0,
-          translateY: phase >= 2 ? 0 : 30,
-        }}
-        transition={{ type: 'timing', duration: 600 }}
-        style={styles.titleContainer}
-      >
-        <MotiView
-          from={{ width: 0 }}
-          animate={{ width: phase >= 2 ? 120 : 0 }}
-          transition={{ type: 'timing', duration: 800, delay: 200 }}
-          style={styles.titleLine}
-        />
-      </MotiView>
-
-      {phase >= 3 && (
-        <MotiView
-          from={{ opacity: 1, scale: 1 }}
-          animate={{ opacity: 0, scale: 1.5 }}
-          transition={{ type: 'timing', duration: 600 }}
-          style={StyleSheet.absoluteFill}
-        >
-          <View style={[styles.fadeOut, { backgroundColor: LightColors.background }]} />
-        </MotiView>
-      )}
 
       <View style={styles.particleContainer}>
         {[...Array(8)].map((_, i) => (
@@ -131,7 +116,7 @@ export default function AnimatedSplash({ onAnimationComplete }: AnimatedSplashPr
               type: 'timing',
               duration: 1500 + Math.random() * 1000,
               delay: i * 150,
-              loop: phase < 3,
+              loop: phase < 2,
             }}
             style={[
               styles.particle,
@@ -144,14 +129,14 @@ export default function AnimatedSplash({ onAnimationComplete }: AnimatedSplashPr
           />
         ))}
       </View>
-    </View>
+
+    </MotiView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: LightColors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -168,18 +153,6 @@ const styles = StyleSheet.create({
     width: width * 0.5,
     height: width * 0.5,
     zIndex: 10,
-  },
-  titleContainer: {
-    marginTop: 24,
-    alignItems: 'center',
-  },
-  titleLine: {
-    height: 3,
-    backgroundColor: LightColors.primary,
-    borderRadius: 2,
-  },
-  fadeOut: {
-    flex: 1,
   },
   particleContainer: {
     position: 'absolute',

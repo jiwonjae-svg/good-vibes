@@ -1,4 +1,5 @@
 import { GROK_API_URL, GROK_MODEL, GROK_API_KEY } from '../constants/config';
+import { getRandomSubTag } from '../constants/subTags';
 import i18n from '../i18n';
 import { useUserStore } from '../stores/useUserStore';
 
@@ -55,10 +56,12 @@ export async function generateQuotes(
   const avoidPart = recentQuotes.length > 0 
     ? `\nAvoid similar to: ${recentQuotes.slice(0, 5).map(q => q.slice(0, 30)).join('; ')}`
     : '';
+  const subTag = getRandomSubTag();
 
   const systemPrompt = `Create ${count} original inspirational quotes.
 STRICT: Write ONLY in ${langInfo.name}. No other language.
 Topics: ${cats}
+Pattern (use this structure/style): ${subTag}
 Author: "${langInfo.author}"
 Format: JSON array only [{"text":"...","author":"${langInfo.author}","category":"..."}]${avoidPart}`;
 

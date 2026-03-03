@@ -147,6 +147,7 @@ export default {
     passwordMismatch: '비밀번호가 일치하지 않습니다.',
     passwordTooShort: '비밀번호는 6자 이상이어야 합니다.',
     loginFailed: '로그인 실패',
+    invalidCredentials: '입력하신 이메일 또는 비밀번호가 올바르지 않습니다. 확인 후 다시 시도해주세요.',
     signupFailed: '회원가입 실패',
     emailSent: '이메일 전송 완료',
     resetInstructions: '비밀번호 재설정 안내가 이메일로 전송되었습니다.',

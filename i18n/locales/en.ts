@@ -147,6 +147,7 @@ export default {
     passwordMismatch: 'Passwords do not match.',
     passwordTooShort: 'Password must be at least 6 characters.',
     loginFailed: 'Login Failed',
+    invalidCredentials: 'The email or password you entered is incorrect. Please check and try again.',
     signupFailed: 'Sign Up Failed',
     emailSent: 'Email Sent',
     resetInstructions: 'Password reset instructions have been sent to your email.',

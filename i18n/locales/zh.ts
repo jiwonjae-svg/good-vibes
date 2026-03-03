@@ -50,6 +50,7 @@ export default {
     passwordMismatch: '两次输入的密码不一致。',
     passwordTooShort: '密码至少需要6个字符。',
     loginFailed: '登录失败',
+    invalidCredentials: '您输入的邮箱或密码不正确，请核对后重试。',
     signupFailed: '注册失败',
     emailSent: '邮件已发送',
     resetInstructions: '密码重置说明已发送到您的邮箱。',

@@ -42,8 +42,10 @@ yarn-error.*
 .env.*.local
 !.env.example
 
-# Firebase / Google native config files
-# NOTE: These files are now committed for development builds
+# Firebase / Google native config files (contain API keys)
+google-services.json
+GoogleService-Info.plist
+app/google-services.json
 
 # TypeScript
 *.tsbuildinfo

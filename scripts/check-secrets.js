@@ -54,11 +54,21 @@ function getStagedFiles() {
   }
 }
 
+function getStagedDeletions() {
+  try {
+    const output = execSync('git diff --cached --name-status', { encoding: 'utf8' });
+    return output.trim().split('\n').filter((line) => line.startsWith('D\t')).map((line) => line.slice(2));
+  } catch {
+    return [];
+  }
+}
+
 const staged = getStagedFiles();
+const stagedDeletions = getStagedDeletions();
 
 for (const file of staged) {
   const basename = path.basename(file);
-  if (BLOCKED_FILES.includes(basename)) {
+  if (BLOCKED_FILES.includes(basename) && !stagedDeletions.includes(file)) {
     error(`Blocked file staged for commit: "${file}"\n  Remove it with: git reset HEAD "${file}"`);
   }
 }
@@ -84,14 +94,14 @@ const SECRET_PATTERNS = [
 ];
 
 for (const file of staged) {
-  // Skip binary-ish or irrelevant files
+  if (stagedDeletions.includes(file)) continue;
+
   const ext = path.extname(file).toLowerCase();
   const basename = path.basename(file);
   const skip = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.ttf', '.otf', '.woff', '.woff2'];
   if (skip.includes(ext)) continue;
 
-  // Skip .env.example — it's meant to have placeholder patterns
-  if (basename === '.env.example') continue;
+  if (basename === '.env.example' || basename.endsWith('.example') || file.endsWith('.example')) continue;
 
   const absPath = path.join(process.cwd(), file);
   if (!fs.existsSync(absPath)) continue;

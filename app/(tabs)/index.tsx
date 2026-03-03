@@ -50,6 +50,8 @@ export default function HomeScreen() {
   const loginPromptShown = useRef(false);
   const lastAutoReadIndex = useRef(-1);
   const autoPlayChainRef = useRef(false);
+  const quotesRef = useRef(quotes);
+  quotesRef.current = quotes;
 
   const isInitialMount = useRef(true);
   const uid = useUserStore((s) => s.uid);
@@ -150,20 +152,23 @@ export default function HomeScreen() {
         }
         lastViewedIndex.current = idx;
         setActiveQuoteIndex(idx);
-        const q = quotes[idx];
+        const qs = quotesRef.current;
+        const q = qs[idx];
         if (q) {
           if (isPremium) {
             saveQuoteForWidget(q.text, q.author, q.category);
           }
-          addViewedQuote(q.id, q.text, todayString());
-          
+          if (viewableItems.length === 1) {
+            addViewedQuote(q.id, q.text, todayString());
+          }
+
           if (autoReadEnabled && idx !== lastAutoReadIndex.current) {
             lastAutoReadIndex.current = idx;
             setTimeout(() => speak(q.text), 300);
           }
         }
-        if (quotes.length - idx <= QUOTE_CONFIG.prefetchThreshold) prefetchMore();
-        
+        if (qs.length - idx <= QUOTE_CONFIG.prefetchThreshold) prefetchMore();
+
         if (isGuest && idx >= 7 && !loginPromptShown.current) {
           loginPromptShown.current = true;
           setTimeout(() => setLoginPromptVisible(true), 300);
@@ -171,6 +176,18 @@ export default function HomeScreen() {
       }
     },
     [quotes.length, prefetchMore, addViewedQuote, isGuest, autoReadEnabled, speak, isPremium],
+  );
+
+  const onMomentumScrollEnd = useCallback(
+    (e: { nativeEvent: { contentOffset: { y: number } } }) => {
+      const idx = Math.round(e.nativeEvent.contentOffset.y / CARD_HEIGHT);
+      const qs = quotesRef.current;
+      const q = qs[idx];
+      if (q) {
+        addViewedQuote(q.id, q.text, todayString());
+      }
+    },
+    [addViewedQuote],
   );
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
@@ -235,6 +252,7 @@ export default function HomeScreen() {
         snapToInterval={CARD_HEIGHT}
         decelerationRate="fast"
         onViewableItemsChanged={onViewableItemsChanged}
+        onMomentumScrollEnd={onMomentumScrollEnd}
         viewabilityConfig={viewabilityConfig}
         getItemLayout={(_, index) => ({ length: CARD_HEIGHT, offset: CARD_HEIGHT * index, index })}
         ListFooterComponent={isGenerating ? <View style={styles.footer}><ActivityIndicator size="small" color={colors.primary} /></View> : null}

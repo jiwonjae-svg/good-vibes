@@ -41,6 +41,8 @@ export default function LoginScreen() {
   const [resendingEmail, setResendingEmail] = useState(false);
   const [loginErrorModalVisible, setLoginErrorModalVisible] = useState(false);
   const [loginErrorMessage, setLoginErrorMessage] = useState('');
+  const [signupErrorModalVisible, setSignupErrorModalVisible] = useState(false);
+  const [signupErrorMessage, setSignupErrorMessage] = useState('');
 
   const { response, promptAsync } = useGoogleAuth();
 
@@ -124,7 +126,8 @@ export default function LoginScreen() {
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert(t('login.error'), t('login.passwordMismatch'));
+      setSignupErrorMessage(t('login.passwordMismatch'));
+      setSignupErrorModalVisible(true);
       return;
     }
     if (password.length < 6) {
@@ -137,7 +140,10 @@ export default function LoginScreen() {
       await signUpWithEmail(email.trim(), password, displayName.trim());
       setVerifyModalVisible(true);
     } catch (e: any) {
-      Alert.alert(t('login.signupFailed'), e.message);
+      const raw = e?.message || '';
+      const msg = raw.includes('already') || raw.includes('registered') ? t('login.emailAlreadyInUse') : raw || t('login.signupFailed');
+      setSignupErrorMessage(msg);
+      setSignupErrorModalVisible(true);
     } finally {
       setLoading(false);
     }
@@ -194,6 +200,25 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient colors={[colors.background, colors.surfaceAlt]} style={s.container}>
+      {/* Signup Error Modal */}
+      <Modal transparent visible={signupErrorModalVisible} animationType="fade" onRequestClose={() => setSignupErrorModalVisible(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={s.modalIconWrapper}>
+              <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+            </View>
+            <Text style={[s.modalTitle, { color: colors.textPrimary }]}>{t('login.signupFailed')}</Text>
+            <Text style={[s.modalDesc, { color: colors.textSecondary }]}>{signupErrorMessage}</Text>
+            <Pressable
+              style={[s.modalConfirmBtn, { backgroundColor: colors.primary }]}
+              onPress={() => setSignupErrorModalVisible(false)}
+            >
+              <Text style={s.modalConfirmText}>{t('common.ok')}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {/* Login Error Modal */}
       <Modal transparent visible={loginErrorModalVisible} animationType="fade" onRequestClose={() => setLoginErrorModalVisible(false)}>
         <View style={s.modalOverlay}>

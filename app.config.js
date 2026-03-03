@@ -67,6 +67,7 @@ export default {
         },
       ],
       "expo-web-browser",
+      ["expo-navigation-bar", { visibility: "hidden" }],
       "@react-native-firebase/app",
       [
         "react-native-google-mobile-ads",

@@ -2,7 +2,8 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Platform } from 'react-native';
+import * as NavigationBar from 'expo-navigation-bar';
 import '../i18n';
 import { initFirebase } from '../services/firebaseConfig';
 import { initSentry } from '../services/sentryService';
@@ -34,6 +35,9 @@ export default function RootLayout() {
     initNotificationHandler();
     loadGrass();
     loadUser();
+    if (Platform.OS === 'android') {
+      NavigationBar.setVisibilityAsync('hidden').catch(() => {});
+    }
   }, []);
 
   useEffect(() => {

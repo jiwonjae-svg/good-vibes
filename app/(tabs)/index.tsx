@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react';
 import {
-  View, FlatList, StyleSheet, ActivityIndicator, Text, ViewToken, AppState,
+  View, FlatList, StyleSheet, ActivityIndicator, Text, ViewToken,
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { useTranslation } from 'react-i18next';
@@ -49,7 +49,7 @@ export default function HomeScreen() {
   const lastViewedIndex = useRef(0);
   const loginPromptShown = useRef(false);
   const lastAutoReadIndex = useRef(-1);
-  const autoPlayTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoPlayChainRef = useRef(false);
 
   const isInitialMount = useRef(true);
   const uid = useUserStore((s) => s.uid);
@@ -73,43 +73,39 @@ export default function HomeScreen() {
     updateStreak(todayString());
   }, []);
 
-  useEffect(() => {
-    if (isAutoPlaying && quotes.length > 0) {
-      const currentQuote = quotes[activeQuoteIndex];
-      if (currentQuote) {
-        speak(currentQuote.text);
+  const autoPlayIndexRef = useRef(0);
+
+  const advanceAndSpeakNext = useCallback(() => {
+    if (!autoPlayChainRef.current || !useAutoPlayStore.getState().isAutoPlaying) return;
+    const qs = useQuoteStore.getState().quotes;
+    const nextIdx = autoPlayIndexRef.current + 1;
+    autoPlayIndexRef.current = nextIdx;
+    if (nextIdx < qs.length) {
+      setActiveQuoteIndex(nextIdx);
+      flatListRef.current?.scrollToIndex({ index: nextIdx, animated: true });
+      const nextQuote = qs[nextIdx];
+      if (nextQuote) {
+        speak(nextQuote.text, { onDone: advanceAndSpeakNext });
       }
-      
-      autoPlayTimerRef.current = setInterval(() => {
-        const nextIndex = activeQuoteIndex + 1;
-        if (nextIndex < quotes.length) {
-          flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
-        } else {
-          prefetchMore();
-        }
-      }, intervalSeconds * 1000);
     } else {
-      if (autoPlayTimerRef.current) {
-        clearInterval(autoPlayTimerRef.current);
-        autoPlayTimerRef.current = null;
-      }
+      prefetchMore();
     }
-    
-    return () => {
-      if (autoPlayTimerRef.current) {
-        clearInterval(autoPlayTimerRef.current);
-      }
-    };
-  }, [isAutoPlaying, activeQuoteIndex, intervalSeconds, quotes.length]);
+  }, [speak, prefetchMore]);
 
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextAppState) => {
-      if (nextAppState === 'background' && !isAutoPlaying) {
-        stop();
+    if (isAutoPlaying && quotes.length > 0) {
+      autoPlayChainRef.current = true;
+      autoPlayIndexRef.current = activeQuoteIndex;
+      const q = quotes[activeQuoteIndex];
+      if (q) {
+        speak(q.text, { onDone: advanceAndSpeakNext });
       }
-    });
-    return () => subscription?.remove();
-  }, [isAutoPlaying, stop]);
+    } else {
+      autoPlayChainRef.current = false;
+      stop();
+    }
+  }, [isAutoPlaying]);
+
 
   const handleToggleAutoPlay = useCallback(() => {
     if (isAutoPlaying) {

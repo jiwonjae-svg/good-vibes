@@ -14,6 +14,10 @@ interface TTSOptions {
   pitch?: number;
 }
 
+interface SpeakOptions {
+  onDone?: () => void;
+}
+
 export function useTTS(options: TTSOptions = {}) {
   const { rate = 0.9, pitch = 1.0 } = options;
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -25,13 +29,14 @@ export function useTTS(options: TTSOptions = {}) {
   }, [userLanguage]);
 
   const speak = useCallback(
-    async (text: string) => {
+    async (text: string, speakOptions?: SpeakOptions) => {
       if (speakingRef.current) {
         await Speech.stop();
       }
 
       speakingRef.current = true;
       setIsSpeaking(true);
+      const customOnDone = speakOptions?.onDone;
 
       const langCode = getLanguageCode();
 
@@ -42,6 +47,7 @@ export function useTTS(options: TTSOptions = {}) {
         onDone: () => {
           speakingRef.current = false;
           setIsSpeaking(false);
+          customOnDone?.();
         },
         onStopped: () => {
           speakingRef.current = false;

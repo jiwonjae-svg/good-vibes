@@ -1,0 +1,8 @@
+# Quotable API: requests only (no BeautifulSoup/Scrapy)
+requests>=2.28.0
+
+# Wikiquote: mwclient
+mwclient>=0.10.0
+
+# Project Gutenberg: Gutendex API via requests
+# (no BeautifulSoup - we use API + plain text parsing)

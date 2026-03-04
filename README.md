@@ -228,7 +228,9 @@ dailyglow/
 │   └── config.ts                  # API keys & app settings
 │
 ├── 📁 data/                       # Seed data
-│   ├── seedQuotes.ts              # 100+ offline Korean quotes
+│   ├── quotes.ts                  # Client quotes (from crawl)
+│   ├── quotesClient.json          # 800 crawled quotes (Quotable, Wikiquote, Gutenberg)
+│   ├── quotes_merged.json         # Full merged crawl output
 │   ├── seedPraises.ts             # 20 offline praise messages
 │   └── categories.ts              # 150+ hierarchical categories
 │

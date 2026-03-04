@@ -1,7 +1,5 @@
 import { GROK_API_URL, GROK_MODEL, GROK_API_KEY } from '../constants/config';
-import { getRandomSubTag } from '../constants/subTags';
 import i18n from '../i18n';
-import { useUserStore } from '../stores/useUserStore';
 
 interface GrokMessage {
   role: 'system' | 'user' | 'assistant';
@@ -37,49 +35,6 @@ export async function callGrok(messages: GrokMessage[], maxTokens = 500): Promis
   if (!response.ok) throw new Error(`Grok API error: ${response.status}`);
   const data: GrokResponse = await response.json();
   return data.choices[0]?.message?.content ?? '';
-}
-
-function getRecentQuoteTexts(): string[] {
-  const viewed = useUserStore.getState().todayViewedQuoteIds;
-  return viewed.slice(-10).map((q) => q.split('|')[1] || '').filter(Boolean);
-}
-
-export async function generateQuotes(
-  count: number,
-  selectedCategories: string[] = [],
-): Promise<{ text: string; author: string; category?: string }[]> {
-  const lang = i18n.language;
-  const langInfo = LANG_MAP[lang] ?? LANG_MAP.ko;
-  const cats = selectedCategories.length > 0 ? selectedCategories.join(',') : 'life,love,courage,happiness,growth,wisdom';
-  
-  const recentQuotes = getRecentQuoteTexts();
-  const avoidPart = recentQuotes.length > 0 
-    ? `\nAvoid similar to: ${recentQuotes.slice(0, 5).map(q => q.slice(0, 30)).join('; ')}`
-    : '';
-  const subTag = getRandomSubTag();
-
-  const systemPrompt = `Create ${count} original inspirational quotes.
-STRICT: Write ONLY in ${langInfo.name}. No other language.
-Topics: ${cats}
-Pattern (use this structure/style): ${subTag}
-Author: "${langInfo.author}"
-Format: JSON array only [{"text":"...","author":"${langInfo.author}","category":"..."}]${avoidPart}`;
-
-  const raw = await callGrok(
-    [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: 'Generate now.' },
-    ],
-    400,
-  );
-
-  try {
-    const jsonMatch = raw.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) throw new Error('No JSON array found');
-    return JSON.parse(jsonMatch[0]);
-  } catch {
-    throw new Error('Failed to parse quotes from Grok response');
-  }
 }
 
 export async function generatePraise(

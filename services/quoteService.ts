@@ -1,68 +1,41 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { generateQuotes } from './grokApi';
-import { getQuotesByLanguage, seedQuotes } from '../data/seedQuotes';
 import { LightColors } from '../constants/theme';
-import { useUserStore } from '../stores/useUserStore';
+import { clientQuotes } from '../data/quotes';
 import type { Quote } from '../stores/useQuoteStore';
-import i18n from '../i18n';
 
 const CACHE_KEY = '@dailyglow_quotes_cache';
 const BATCH_SIZE = 5;
-let usedSeedIndices = new Map<string, Set<number>>();
+let usedIndices = new Set<number>();
 
-function makeQuote(text: string, author: string, category?: string): Quote {
+function makeQuote(text: string, author: string, source?: string): Quote {
   return {
     id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     text,
     author,
-    category,
+    category: source,
     createdAt: Date.now(),
     gradientIndex: Math.floor(Math.random() * LightColors.cardGradients.length),
   };
 }
 
-function getSelectedCategories(): string[] {
-  return useUserStore.getState().selectedCategories ?? [];
+function getOfflineQuotes(count: number): Quote[] {
+  const quotes: Quote[] = [];
+  for (let i = 0; i < count; i++) {
+    if (usedIndices.size >= clientQuotes.length) usedIndices.clear();
+    let idx: number;
+    do {
+      idx = Math.floor(Math.random() * clientQuotes.length);
+    } while (usedIndices.has(idx));
+    usedIndices.add(idx);
+    const item = clientQuotes[idx];
+    quotes.push(makeQuote(item.quote, item.author, item.source));
+  }
+  return quotes;
 }
 
 export async function fetchQuoteBatch(): Promise<Quote[]> {
-  try {
-    const rawQuotes = await generateQuotes(BATCH_SIZE, getSelectedCategories());
-    const quotes = rawQuotes.map((q) => makeQuote(q.text, q.author, q.category));
-    await cacheQuotes(quotes);
-    return quotes;
-  } catch {
-    return getOfflineQuotes(BATCH_SIZE);
-  }
-}
-
-function getOfflineQuotes(count: number): Quote[] {
-  const lang = i18n.language;
-  let langQuotes = getQuotesByLanguage(lang);
-
-  if (langQuotes.length === 0) {
-    langQuotes = getQuotesByLanguage('en');
-  }
-  if (langQuotes.length === 0) {
-    langQuotes = seedQuotes;
-  }
-
-  if (!usedSeedIndices.has(lang)) {
-    usedSeedIndices.set(lang, new Set());
-  }
-  const usedSet = usedSeedIndices.get(lang)!;
-
-  const quotes: Quote[] = [];
-  for (let i = 0; i < count; i++) {
-    if (usedSet.size >= langQuotes.length) usedSet.clear();
-    let idx: number;
-    do {
-      idx = Math.floor(Math.random() * langQuotes.length);
-    } while (usedSet.has(idx));
-    usedSet.add(idx);
-    const seed = langQuotes[idx];
-    quotes.push(makeQuote(seed.text, seed.author, seed.category));
-  }
+  const quotes = getOfflineQuotes(BATCH_SIZE);
+  await cacheQuotes(quotes);
   return quotes;
 }
 
@@ -87,7 +60,7 @@ export async function getCachedQuotes(): Promise<Quote[]> {
 }
 
 export async function clearQuoteCache(): Promise<void> {
-  usedSeedIndices.clear();
+  usedIndices.clear();
   try {
     await AsyncStorage.removeItem(CACHE_KEY);
   } catch {
@@ -100,9 +73,5 @@ export async function getInitialQuotes(): Promise<Quote[]> {
   if (cached.length >= BATCH_SIZE) {
     return cached.slice(-BATCH_SIZE);
   }
-  try {
-    return await fetchQuoteBatch();
-  } catch {
-    return getOfflineQuotes(BATCH_SIZE);
-  }
+  return getOfflineQuotes(BATCH_SIZE);
 }

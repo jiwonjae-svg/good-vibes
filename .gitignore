@@ -42,6 +42,10 @@ yarn-error.*
 .env.*.local
 !.env.example
 
+# EAS local build
+eas.json.bak
+eas.local.json
+
 # Firebase / Google native config files (contain API keys)
 google-services.json
 GoogleService-Info.plist
@@ -53,11 +57,13 @@ app/google-services.json
 # Sentry
 .sentryclirc
 
-# EAS
-.easignore
-
 # Internal deployment docs
 Deployment.md
+
+# Crawl raw outputs (regeneratable)
+data/quotable_raw.json
+data/wikiquote_raw.json
+data/gutenberg_raw.json
 
 # Testing
 coverage/

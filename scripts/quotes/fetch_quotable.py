@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Quotable API에서 모든 명언을 가져와 JSON으로 저장.
-- 중복 제거
-- quote, author, source만 출력
-- 출처: https://github.com/lukePeavey/quotable (MIT)
+Fetch all quotes from Quotable API and save as JSON.
+- Deduplicate by (quote, author)
+- Output: quote, author, source only
+- Source: https://github.com/lukePeavey/quotable (MIT)
 """
 import json
 import os
@@ -13,7 +13,7 @@ import urllib3
 
 import requests
 
-# SSL 인증서 만료 등 환경 이슈 시 재시도용
+# Retry without verify on SSL cert issues (e.g. expired cert)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 BASE_URL = "https://api.quotable.io"

@@ -1,0 +1,42 @@
+# Same as .gitignore but INCLUDE Firebase config for EAS build (prebuild needs them)
+# See: https://docs.expo.dev/build-reference/easignore/
+
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+ios/
+android/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+*.pem
+.vscode/
+.idea/
+*.swp
+*.swo
+.env
+.env.*
+.env.local
+.env.*.local
+!.env.example
+*.tsbuildinfo
+.sentryclirc
+Deployment.md
+coverage/
+__tests__/
+Thumbs.db
+repomix-output.xml
+
+# Include Firebase config (must be in archive for prebuild)
+!google-services.json
+!GoogleService-Info.plist

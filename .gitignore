@@ -57,7 +57,8 @@ app/google-services.json
 # Sentry
 .sentryclirc
 
-# Internal deployment docs
+# Docs (internal)
+docs/
 Deployment.md
 
 # Crawl raw outputs (regeneratable)

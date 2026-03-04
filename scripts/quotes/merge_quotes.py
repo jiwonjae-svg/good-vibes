@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-raw JSON들을 병합, 중복 제거 후 최종 JSON 출력.
-형식: [{quote, author, source}, ...]
+Merge raw JSON files, deduplicate, output final JSON.
+Format: [{quote, author, source}, ...]
 """
 import json
 import os

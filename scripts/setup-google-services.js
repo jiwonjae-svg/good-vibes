@@ -33,19 +33,22 @@ const plistB64 = process.env.GOOGLE_SERVICE_INFO_PLIST_B64;
 const isEasBuild = process.env.EAS_BUILD === 'true';
 
 if (isEasBuild) {
-  if (!jsonB64 || !plistB64) {
+  if (!jsonB64) {
     console.error(
-      '[setup-google-services] EAS Build requires GOOGLE_SERVICES_JSON_B64 and GOOGLE_SERVICE_INFO_PLIST_B64 secrets.\n' +
-      '  Run: eas secret:create --name GOOGLE_SERVICES_JSON_B64 --value "$(base64 -w0 google-services.json)" --scope project\n' +
-      '  Run: eas secret:create --name GOOGLE_SERVICE_INFO_PLIST_B64 --value "$(base64 -w0 GoogleService-Info.plist)" --scope project'
+      '[setup-google-services] EAS Build requires GOOGLE_SERVICES_JSON_B64 (required for Android).\n' +
+      '  Run: eas secret:create --name GOOGLE_SERVICES_JSON_B64 --value "$(base64 -w0 google-services.json)" --scope project'
     );
     process.exit(1);
   }
 
   try {
     fs.writeFileSync(googleServicesPath, Buffer.from(jsonB64, 'base64').toString('utf8'));
-    fs.writeFileSync(plistPath, Buffer.from(plistB64, 'base64').toString('utf8'));
-    console.log('[setup-google-services] Injected config files from EAS secrets.');
+    if (plistB64) {
+      fs.writeFileSync(plistPath, Buffer.from(plistB64, 'base64').toString('utf8'));
+      console.log('[setup-google-services] Injected both config files from EAS secrets.');
+    } else {
+      console.log('[setup-google-services] Injected google-services.json (Android). Add GOOGLE_SERVICE_INFO_PLIST_B64 for iOS.');
+    }
   } catch (e) {
     console.error('[setup-google-services] Failed to write files:', e.message);
     process.exit(1);

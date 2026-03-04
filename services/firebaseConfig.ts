@@ -19,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FIREBASE_CONFIG } from '../constants/config';
+import { appLog } from './logger';
 import type { Quote } from '../stores/useQuoteStore';
 import type { GrassDay } from '../stores/useGrassStore';
 
@@ -36,10 +37,13 @@ function isConfigured(): boolean {
 }
 
 export function initFirebase(): { app: FirebaseApp; auth: Auth; db: Firestore } | null {
+  const LOG = '[firebaseConfig.initFirebase]';
+
   if (!isConfigured()) {
-    console.warn('[firebaseConfig] Firebase not configured. Check .env file.');
+    appLog.warn(`${LOG} Firebase not configured. apiKey=${FIREBASE_CONFIG.apiKey ? '***' : '(empty)'}, projectId=${FIREBASE_CONFIG.projectId || '(empty)'}`);
     return null;
   }
+  appLog.log(`${LOG} Config OK: projectId=${FIREBASE_CONFIG.projectId}, authDomain=${FIREBASE_CONFIG.authDomain}`);
 
   try {
     if (getApps().length === 0) {
@@ -72,9 +76,10 @@ export function initFirebase(): { app: FirebaseApp; auth: Auth; db: Firestore } 
       }
     }
 
+    appLog.log(`${LOG} Initialized successfully`);
     return { app, auth, db };
   } catch (e) {
-    console.error('[firebaseConfig] Failed to initialize Firebase:', e);
+    appLog.error(`${LOG} Failed to initialize`, e);
     return null;
   }
 }
@@ -82,7 +87,9 @@ export function initFirebase(): { app: FirebaseApp; auth: Auth; db: Firestore } 
 export function getFirebaseAuth(): Auth | null {
   if (auth) return auth;
   const result = initFirebase();
-  return result?.auth ?? null;
+  const a = result?.auth ?? null;
+  if (!a) appLog.warn('[firebaseConfig.getFirebaseAuth] Returning null');
+  return a;
 }
 
 export function getDb(): Firestore | null {

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Wikiquote에서 Motivational quotes, Positive thinking, Gratitude 관련 페이지 크롤링.
-- mwclient 사용 (BeautifulSoup/Scrapy 미사용)
-- CC-BY-SA 준수: source에 출처 URL 포함
-- 출력: {quote, author, source}
+Crawl Wikiquote pages: Motivational quotes, Positive thinking, Gratitude, etc.
+- Uses mwclient (no BeautifulSoup/Scrapy)
+- CC-BY-SA compliant: source field includes attribution URL
+- Output: {quote, author, source}
 """
 import json
 import os
@@ -17,7 +17,7 @@ SITE_URL = "en.wikiquote.org"
 USER_AGENT = "DailyGlow/1.0 (quote collection; mail@example.com)"
 OUTPUT = os.path.join(os.path.dirname(__file__), "..", "..", "data", "wikiquote_raw.json")
 
-# 크롤링할 페이지/카테고리 (CC-BY-SA)
+# Pages and categories to crawl (CC-BY-SA)
 PAGES = [
     "Motivation",
     "Positive thinking",
@@ -32,7 +32,7 @@ CATEGORIES = [
 
 
 def parse_quotes_from_text(text: str, page_title: str) -> list[dict]:
-    """Wikitext에서 명언과 저자 추출."""
+    """Extract quotes and authors from wikitext."""
     results = []
     source = f"https://en.wikiquote.org/wiki/{page_title.replace(' ', '_')}"
     lines = text.split("\n")
@@ -44,7 +44,7 @@ def parse_quotes_from_text(text: str, page_title: str) -> list[dict]:
         line = re.sub(r"^[\*:]+", "", line).strip()
         if not line or len(line) < 15:
             continue
-        # "quote" — Author 또는 "quote" - Author
+        # "quote" — Author or "quote" - Author
         m = re.search(r'"([^"]+)"\s*[—\-]\s*(.+)$', line)
         if m:
             quote = m.group(1).strip()
@@ -59,7 +59,7 @@ def parse_quotes_from_text(text: str, page_title: str) -> list[dict]:
                     continue
                 quote = line
                 author = "Unknown"
-        # 위키 마크업 제거
+        # Strip wiki markup
         quote = re.sub(r"\[\[([^\]|]+)\|([^\]]+)\]\]", r"\2", quote)
         quote = re.sub(r"\[\[([^\]]+)\]\]", r"\1", quote)
         quote = re.sub(r"'''?", "", quote)
@@ -73,7 +73,7 @@ def parse_quotes_from_text(text: str, page_title: str) -> list[dict]:
 
 
 def fetch_page_quotes(site: mwclient.Site, title: str) -> list[dict]:
-    """단일 페이지에서 명언 추출."""
+    """Extract quotes from a single page."""
     try:
         page = site.pages[title]
         if not page.exists:
@@ -86,7 +86,7 @@ def fetch_page_quotes(site: mwclient.Site, title: str) -> list[dict]:
 
 
 def fetch_category_pages(site: mwclient.Site, cat_name: str, limit: int = 30) -> list[dict]:
-    """카테고리 내 페이지들에서 명언 추출."""
+    """Extract quotes from pages in a category."""
     results = []
     try:
         cat = site.pages[f"Category:{cat_name}"]

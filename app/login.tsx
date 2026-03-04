@@ -16,6 +16,7 @@ import {
   useGoogleAuth, signInWithGoogle, isEmailVerified, sendEmailVerification,
   reloadUser, getCurrentUser,
 } from '../services/authService';
+import { appLog } from '../services/logger';
 
 type Mode = 'login' | 'signup' | 'forgot';
 
@@ -169,11 +170,14 @@ export default function LoginScreen() {
     setResendingEmail(true);
     try {
       const user = getCurrentUser();
-      if (user) {
-        await sendEmailVerification(user);
-        Alert.alert(t('login.emailSent'), t('login.verificationResent'));
+      if (!user) {
+        appLog.warn('[login.handleResendVerification] getCurrentUser() returned null');
+        return;
       }
+      await sendEmailVerification(user);
+      Alert.alert(t('login.emailSent'), t('login.verificationResent'));
     } catch (e: any) {
+      appLog.error('[login.handleResendVerification] Error', e);
       Alert.alert(t('login.error'), e.message);
     } finally {
       setResendingEmail(false);

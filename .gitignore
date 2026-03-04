@@ -62,6 +62,7 @@ docs/
 Deployment.md
 
 # Crawl raw outputs (regeneratable)
+*_raw.json
 data/quotable_raw.json
 data/wikiquote_raw.json
 data/gutenberg_raw.json

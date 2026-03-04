@@ -19,6 +19,7 @@ import {
   logSignupActivity,
   logActivity,
 } from './firestoreUserService';
+import { appLog } from './logger';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -118,6 +119,7 @@ export async function signUpWithEmail(
     await syncUserToFirestore(user, 'email');
     await logSignupActivity(user.uid, 'email');
 
+    appLog.log('[authService.signUpWithEmail] Sending verification email to new user');
     await sendEmailVerification(user);
 
     return user;
@@ -131,21 +133,37 @@ export async function signUpWithEmail(
 // =============================================================================
 
 export async function sendEmailVerification(user?: User): Promise<void> {
+  const LOG = '[authService.sendEmailVerification]';
+  appLog.log(`${LOG} Called, user=${user?.uid ?? 'current'}`);
+
   try {
     const auth = getFirebaseAuth();
-    if (!auth) return;
+    if (!auth) {
+      appLog.warn(`${LOG} Firebase Auth not available (initFirebase returned null)`);
+      return;
+    }
+    appLog.log(`${LOG} Firebase Auth OK`);
 
     const targetUser = user ?? auth.currentUser;
-    if (!targetUser) return;
+    if (!targetUser) {
+      appLog.warn(`${LOG} No target user (user not passed, currentUser is null)`);
+      return;
+    }
+    appLog.log(`${LOG} Target user: uid=${targetUser.uid}, email=${targetUser.email ?? '(none)'}`);
 
     if (targetUser.emailVerified) {
+      appLog.log(`${LOG} User already verified, skipping`);
       return;
     }
 
+    appLog.log(`${LOG} Calling firebaseSendEmailVerification...`);
     await firebaseSendEmailVerification(targetUser);
+    appLog.log(`${LOG} firebaseSendEmailVerification succeeded`);
     await logActivity(targetUser.uid, 'email_verification_sent');
+    appLog.log(`${LOG} Done`);
   } catch (e: any) {
-    console.warn('[authService] Failed to send email verification:', e);
+    appLog.error(`${LOG} Failed`, e?.code ?? e?.message ?? e);
+    appLog.error(`${LOG} Full error`, e);
     throw new Error(mapFirebaseError(e?.code));
   }
 }
@@ -176,13 +194,25 @@ export async function reloadUser(): Promise<User | null> {
 // =============================================================================
 
 export async function sendPasswordResetEmail(email: string): Promise<void> {
+  const LOG = '[authService.sendPasswordResetEmail]';
+  appLog.log(`${LOG} Called, email=${email}`);
+
   try {
     const auth = getFirebaseAuth();
-    if (!auth) return;
+    if (!auth) {
+      appLog.warn(`${LOG} Firebase Auth not available (initFirebase returned null)`);
+      return;
+    }
+    appLog.log(`${LOG} Firebase Auth OK`);
 
+    appLog.log(`${LOG} Calling firebaseSendPasswordReset...`);
     await firebaseSendPasswordReset(auth, email);
+    appLog.log(`${LOG} firebaseSendPasswordReset succeeded`);
     await logActivity('anonymous', 'password_reset_requested', { email });
+    appLog.log(`${LOG} Done`);
   } catch (e: any) {
+    appLog.error(`${LOG} Failed`, e?.code ?? e?.message ?? e);
+    appLog.error(`${LOG} Full error`, e);
     throw new Error(mapFirebaseError(e?.code));
   }
 }

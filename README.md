@@ -2,7 +2,7 @@
 
 # ✨ DailyGlow
 
-**Your AI-Powered Daily Quote Companion**
+**Your Daily Quote Companion**
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/jiwonjae-svg/dailyglow)
 [![Expo SDK](https://img.shields.io/badge/Expo-SDK%2054-blue.svg?logo=expo)](https://expo.dev)
@@ -10,7 +10,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg?logo=typescript)](https://www.typescriptlang.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-*AI-generated quotes every day — speak, write, or type along to grow.*
+*Curated quotes every day — speak, write, or type along to grow.*
 
 [Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Architecture](#-architecture) • [Contributing](#-contributing)
 
@@ -20,7 +20,7 @@
 
 ## 🎯 What is DailyGlow?
 
-DailyGlow is a **mobile app for daily positive habits** powered by AI-generated quotes. Each day, the app delivers fresh, inspirational quotes in your language, and challenges you to engage with them — by speaking, handwriting, or typing — turning passive reading into active learning.
+DailyGlow is a **mobile app for daily positive habits** built around a curated library of 2,500+ quotes. Each day the app delivers fresh, inspirational quotes in your language, and challenges you to engage with them — by speaking, handwriting, or typing — turning passive reading into active learning.
 
 Perfect for:
 - 📖 **Learners** building a daily reading or writing habit
@@ -30,18 +30,19 @@ Perfect for:
 
 ## ✨ Features
 
-### 🤖 AI-Powered Quotes
-- **Daily Generation**: Grok 4.1 Fast (xAI) generates fresh, warm quotes
+### 📝 Curated Quotes
+- **2,500+ Quotes**: Sourced from Quotable, Wikiquote, and Project Gutenberg, cleaned and deduplicated
 - **150+ Categories**: Organized into 5 themes (Life/Growth, Emotion/Relationship, Work/Business, Nature/Philosophy, Special)
 - **Multi-Select**: Choose up to 10 categories to personalize your feed
-- **Multi-language**: Quotes generated in your selected language (Korean, English, Japanese, Chinese)
-- **Offline Fallback**: 100+ seed quotes when no internet connection
+- **Multi-language**: Quotes available in Korean, English, Japanese, and Chinese
+- **Offline-First**: 800 quotes bundled with the app; 1,704 more streamed from Firestore when online
+- **Smart Selection**: Category weight scoring picks the most relevant quote from each candidate batch
 
 ### 📱 Engaging Activities
 - **Speak Along** 🎤: Read quotes aloud with speech recognition & similarity matching
 - **Write Along** ✍️: Handwrite quotes, capture with camera, verify via OCR
 - **Type Along** ⌨️: Real-time character-by-character typing with visual highlights
-- **AI Praise**: Personalized encouragement after every completed activity
+- **Praise**: Warm encouragement after every completed activity (from a curated library of 80+ phrases per language)
 
 ### 📊 Progress & Gamification
 - **Grass Field**: GitHub-style 365-day activity contribution graph with touch-to-view details
@@ -109,9 +110,6 @@ cp .env.example .env
 
 2. Fill in your API keys in `.env`:
 ```env
-# xAI Grok API
-EXPO_PUBLIC_GROK_API_KEY=xai-...
-
 # Firebase
 EXPO_PUBLIC_FIREBASE_API_KEY=...
 EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=...
@@ -125,7 +123,7 @@ EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=...apps.googleusercontent.com
 
 See `.env.example` for detailed instructions on obtaining each key.
 
-> The app runs fully offline without any API keys — seed quotes and local storage handle everything.
+> The app runs fully offline without any API keys — 800 bundled quotes and local storage handle everything.
 
 ## 🚀 Usage
 
@@ -192,12 +190,11 @@ dailyglow/
 │   ├── CategoryPickerModal.tsx    # Hierarchical category selection (150+ categories)
 │   └── AdInterstitial.tsx         # AdMob interstitial manager
 │
-├── 📁 services/                   # Business logic & API
-│   ├── grokApi.ts                 # xAI Grok API (multi-lang + category)
+├── 📁 services/                   # Business logic & external services
 │   ├── authService.ts             # Firebase Auth: Google, Email, Password Reset
-│   ├── firebaseConfig.ts          # Firestore + offline persistence
-│   ├── quoteService.ts            # Quote generation, caching, offline
-│   ├── praiseService.ts           # AI praise generation
+│   ├── firebaseConfig.ts          # Firestore init, server quotes loader, persistence
+│   ├── quoteService.ts            # Quote selection, caching, offline/online strategy
+│   ├── praiseService.ts           # Praise selection (seed library)
 │   ├── notificationService.ts     # Push notifications (Expo Go safe)
 │   ├── shareService.ts            # SNS sharing
 │   ├── sentryService.ts           # Error monitoring (production only)
@@ -227,11 +224,11 @@ dailyglow/
 │   ├── theme.ts                   # LightColors + DarkColors
 │   └── config.ts                  # API keys & app settings
 │
-├── 📁 data/                       # Seed data
-│   ├── quotes.ts                  # Client quotes (from crawl)
-│   ├── quotesClient.json          # 800 crawled quotes (Quotable, Wikiquote, Gutenberg)
-│   ├── quotes_merged.json         # Full merged crawl output
-│   ├── seedPraises.ts             # 20 offline praise messages
+├── 📁 data/                       # Quote library & seed data
+│   ├── quotes.ts                  # Client-side quote loader
+│   ├── quotesClient.json          # 800 bundled quotes (offline-available)
+│   ├── quotesServer.json          # 1,704 server quotes (uploaded to Firestore)
+│   ├── seedPraises.ts             # 80+ praise messages per language (ko/en/ja/zh)
 │   └── categories.ts              # 150+ hierarchical categories
 │
 └── 📁 utils/                      # Utilities
@@ -252,7 +249,7 @@ DailyGlow follows a **layered architecture** with clean separation of concerns:
 │   (quotes, grass, user prefs, auth, streak)   │
 ├──────────────────────────────────────────────┤
 │           Service Layer                       │  ← services/
-│   (Grok API, Firebase, Notifications, Ads)    │
+│   (Firebase, Notifications, Ads, Praise)      │
 ├──────────────────────────────────────────────┤
 │           Data Layer                          │  ← AsyncStorage + Firestore
 │   (offline-first: local cache → cloud sync)   │
@@ -262,8 +259,9 @@ DailyGlow follows a **layered architecture** with clean separation of concerns:
 ### Offline-First Strategy
 
 ```
-Online:  Grok API → Firestore → AsyncStorage cache → Display
-Offline: AsyncStorage cache → Seed quotes (100+)   → Display
+Online:  Firestore server quotes (1,704) + bundled client quotes (800) = 2,504 pool
+Offline: AsyncStorage 7-day cache of server quotes + bundled client quotes (800)
+         └→ If no cache: bundled client quotes only (800)
 ```
 
 ### Expo Go Compatibility
@@ -284,9 +282,8 @@ Modules incompatible with Expo Go are conditionally loaded:
 | **Framework** | Expo SDK 54 + React Native 0.81 | Mobile app (iOS + Android) |
 | **Language** | TypeScript 5.9 | Type-safe development |
 | **Navigation** | expo-router 6 | File-based routing |
-| **AI** | xAI Grok 4.1 Fast | Quote & praise generation |
 | **Auth** | Firebase Auth + expo-auth-session | Google OAuth + Email |
-| **Database** | Firebase Firestore + AsyncStorage | Cloud + offline storage |
+| **Database** | Firebase Firestore + AsyncStorage | Cloud quotes + offline cache |
 | **State** | Zustand 5 | Lightweight state management |
 | **TTS** | expo-speech | Text-to-speech output |
 | **Speech** | expo-speech-recognition | Voice recognition input |

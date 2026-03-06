@@ -1,18 +1,13 @@
-import { generatePraise } from './grokApi';
 import { getPraisesByLanguage, seedPraises } from '../data/seedPraises';
 import i18n from '../i18n';
 
 const praiseIndexByLang = new Map<string, number>();
 
 export async function getPraise(
-  activityType: 'speak' | 'write' | 'type',
-  quoteText: string
+  _activityType: 'speak' | 'write' | 'type',
+  _quoteText: string
 ): Promise<string> {
-  try {
-    return await generatePraise(activityType, quoteText);
-  } catch {
-    return getOfflinePraise();
-  }
+  return getOfflinePraise();
 }
 
 function getOfflinePraise(): string {

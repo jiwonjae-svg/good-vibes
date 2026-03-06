@@ -61,11 +61,12 @@ app/google-services.json
 docs/
 Deployment.md
 
-# Crawl raw outputs (regeneratable)
+# Crawl raw/outputs (regeneratable)
 *_raw.json
 data/quotable_raw.json
 data/wikiquote_raw.json
 data/gutenberg_raw.json
+data/quotes_tagged.json
 
 # Testing
 coverage/
@@ -75,3 +76,11 @@ __tests__/
 Thumbs.db
 
 repomix-output.xml
+
+# Firebase service account key (DO NOT COMMIT)
+scripts/serviceAccount.json
+
+# Data pipeline backup files (regeneratable)
+data/*.bak*
+data/*.bak
+scripts/serviceAccount.json

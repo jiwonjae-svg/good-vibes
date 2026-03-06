@@ -1,40 +1,165 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LightColors } from '../constants/theme';
 import { clientQuotes } from '../data/quotes';
+import type { CrawledQuote } from '../data/quotes';
+import { useUserStore } from '../stores/useUserStore';
 import type { Quote } from '../stores/useQuoteStore';
+import { fetchServerQuotesFromFirestore } from './firebaseConfig';
+import i18n from '../i18n';
 
 const CACHE_KEY = '@dailyglow_quotes_cache';
+const RECENT_IDS_KEY = '@dailyglow_recent_quote_ids';
+const SERVER_QUOTES_CACHE_KEY = '@dailyglow_server_quotes_cache';
+const SERVER_QUOTES_UPDATED_KEY = '@dailyglow_server_quotes_updated';
+/** Cache TTL for server quotes: 7 days */
+const SERVER_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 const BATCH_SIZE = 5;
-let usedIndices = new Set<number>();
+const CANDIDATE_COUNT = 10;
+const RECENT_EXCLUDE = 20;
 
-function makeQuote(text: string, author: string, source?: string): Quote {
+/**
+ * Returns the server quote pool.
+ * - Online: loads from Firestore and caches in AsyncStorage (TTL: 7 days)
+ * - Offline / failure: returns stale cache, or empty array if none exists
+ */
+async function getServerQuotes(): Promise<CrawledQuote[]> {
+  try {
+    const updatedRaw = await AsyncStorage.getItem(SERVER_QUOTES_UPDATED_KEY);
+    const updatedAt = updatedRaw ? parseInt(updatedRaw, 10) : 0;
+    const cacheIsValid = Date.now() - updatedAt < SERVER_CACHE_TTL;
+
+    if (cacheIsValid) {
+      const cachedRaw = await AsyncStorage.getItem(SERVER_QUOTES_CACHE_KEY);
+      if (cachedRaw) {
+        const parsed: CrawledQuote[] = JSON.parse(cachedRaw);
+        if (parsed.length > 0) return parsed;
+      }
+    }
+
+    // Attempt to load from Firestore
+    const fresh = await fetchServerQuotesFromFirestore();
+    if (fresh.length > 0) {
+      await AsyncStorage.setItem(SERVER_QUOTES_CACHE_KEY, JSON.stringify(fresh));
+      await AsyncStorage.setItem(SERVER_QUOTES_UPDATED_KEY, String(Date.now()));
+      return fresh;
+    }
+
+    // Offline or empty response — fall back to stale cache if available
+    const staleCached = await AsyncStorage.getItem(SERVER_QUOTES_CACHE_KEY);
+    if (staleCached) return JSON.parse(staleCached) as CrawledQuote[];
+  } catch {
+    /* silent */
+  }
+  return [];
+}
+
+function makeQuote(
+  item: { id: string; quote: string; author: string; source: string },
+  lang: string,
+): Quote {
+  const text = (item as { translations?: Record<string, string> }).translations?.[lang]
+    ?? (item as { quote: string }).quote;
   return {
-    id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    id: item.id,
     text,
-    author,
-    category: source,
+    author: item.author,
+    category: item.source,
     createdAt: Date.now(),
     gradientIndex: Math.floor(Math.random() * LightColors.cardGradients.length),
   };
 }
 
-function getOfflineQuotes(count: number): Quote[] {
-  const quotes: Quote[] = [];
-  for (let i = 0; i < count; i++) {
-    if (usedIndices.size >= clientQuotes.length) usedIndices.clear();
-    let idx: number;
-    do {
-      idx = Math.floor(Math.random() * clientQuotes.length);
-    } while (usedIndices.has(idx));
-    usedIndices.add(idx);
-    const item = clientQuotes[idx];
-    quotes.push(makeQuote(item.quote, item.author, item.source));
+async function getRecentIds(): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(RECENT_IDS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
   }
-  return quotes;
+}
+
+async function saveRecentIds(ids: string[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(RECENT_IDS_KEY, JSON.stringify(ids));
+  } catch {
+    /* silent */
+  }
+}
+
+function scoreQuote(categories: Record<string, number>, selectedCats: string[]): number {
+  if (selectedCats.length === 0) return 0;
+  return selectedCats.reduce((sum, cat) => sum + (categories[cat] ?? 0), 0);
+}
+
+function pickOneByWeight(
+  candidates: typeof clientQuotes,
+  selectedCats: string[],
+): typeof clientQuotes[0] {
+  const scores = candidates.map((c) => scoreQuote(c.categories, selectedCats));
+  const maxScore = Math.max(...scores);
+  const maxIndices = scores
+    .map((s, i) => (s === maxScore ? i : -1))
+    .filter((i) => i >= 0);
+  const idx = maxIndices[Math.floor(Math.random() * maxIndices.length)];
+  return candidates[idx];
+}
+
+async function selectQuotes(count: number): Promise<Quote[]> {
+  const lang = i18n.language;
+  const selectedCats = useUserStore.getState().selectedCategories ?? [];
+
+  // Load server quotes (Firestore when online, cache or empty array when offline)
+  const serverQuotes = await getServerQuotes();
+  const allQuotes: CrawledQuote[] = [...clientQuotes, ...serverQuotes];
+
+  let recentIds = await getRecentIds();
+  const recentSet = new Set(recentIds);
+  let pool = allQuotes.filter((q) => !recentSet.has(q.id));
+  if (pool.length < CANDIDATE_COUNT) {
+    recentIds = [];
+    pool = allQuotes;
+  }
+  const available = pool;
+
+  const result: Quote[] = [];
+  const usedRecent: string[] = [...recentIds];
+
+  for (let i = 0; i < count; i++) {
+    let candidates: typeof clientQuotes = [];
+    let attempts = 0;
+    const excludeSet = new Set(usedRecent);
+
+    while (candidates.length < CANDIDATE_COUNT && attempts < 50) {
+      const shuffled = [...available].sort(() => Math.random() - 0.5);
+      candidates = shuffled
+        .filter((q) => !excludeSet.has(q.id))
+        .slice(0, CANDIDATE_COUNT);
+      attempts++;
+      if (candidates.length >= CANDIDATE_COUNT) break;
+      excludeSet.clear();
+    }
+
+    if (candidates.length === 0) {
+      candidates = available.slice(0, Math.min(CANDIDATE_COUNT, available.length));
+    }
+
+    const chosen = pickOneByWeight(candidates, selectedCats);
+    result.push(makeQuote(chosen, lang));
+
+    usedRecent.push(chosen.id);
+    if (usedRecent.length > RECENT_EXCLUDE) {
+      usedRecent.shift();
+    }
+  }
+
+  await saveRecentIds(usedRecent);
+  return result;
 }
 
 export async function fetchQuoteBatch(): Promise<Quote[]> {
-  const quotes = getOfflineQuotes(BATCH_SIZE);
+  const quotes = await selectQuotes(BATCH_SIZE);
   await cacheQuotes(quotes);
   return quotes;
 }
@@ -60,9 +185,19 @@ export async function getCachedQuotes(): Promise<Quote[]> {
 }
 
 export async function clearQuoteCache(): Promise<void> {
-  usedIndices.clear();
   try {
     await AsyncStorage.removeItem(CACHE_KEY);
+    await AsyncStorage.removeItem(RECENT_IDS_KEY);
+  } catch {
+    /* silent */
+  }
+}
+
+/** Clears the server quotes cache, forcing a fresh Firestore load on next call. */
+export async function clearServerQuotesCache(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(SERVER_QUOTES_CACHE_KEY);
+    await AsyncStorage.removeItem(SERVER_QUOTES_UPDATED_KEY);
   } catch {
     /* silent */
   }
@@ -73,5 +208,5 @@ export async function getInitialQuotes(): Promise<Quote[]> {
   if (cached.length >= BATCH_SIZE) {
     return cached.slice(-BATCH_SIZE);
   }
-  return getOfflineQuotes(BATCH_SIZE);
+  return selectQuotes(BATCH_SIZE);
 }

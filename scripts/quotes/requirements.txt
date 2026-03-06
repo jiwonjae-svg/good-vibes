@@ -6,3 +6,6 @@ mwclient>=0.10.0
 
 # Project Gutenberg: Gutendex API via requests
 # (no BeautifulSoup - we use API + plain text parsing)
+
+# Translation (for translate_quotes.py)
+deep-translator>=1.11.0

@@ -5,7 +5,7 @@ export interface SeedPraise {
 
 export const seedPraises: SeedPraise[] = [
   // ============================================
-  // Korean Praises (한국어)
+  // Korean Praises
   // ============================================
   { text: '정말 대단해요! 당신의 노력이 빛나고 있어요.', lang: 'ko' },
   { text: '멋져요! 한 걸음 더 성장했네요.', lang: 'ko' },
@@ -53,7 +53,7 @@ export const seedPraises: SeedPraise[] = [
   { text: "A round of applause for you today!", lang: 'en' },
 
   // ============================================
-  // Japanese Praises (日本語)
+  // Japanese Praises
   // ============================================
   { text: '本当に素晴らしい！あなたの努力が輝いています。', lang: 'ja' },
   { text: '素敵です！また一歩成長しましたね。', lang: 'ja' },
@@ -77,7 +77,7 @@ export const seedPraises: SeedPraise[] = [
   { text: '今日のあなたに拍手を送ります！', lang: 'ja' },
 
   // ============================================
-  // Chinese Praises (中文)
+  // Chinese Praises
   // ============================================
   { text: '真的很棒！你的努力正在发光。', lang: 'zh' },
   { text: '太好了！你又前进了一步。', lang: 'zh' },

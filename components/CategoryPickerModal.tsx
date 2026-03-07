@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, Modal, Pressable, StyleSheet, ScrollView, Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
@@ -22,6 +23,7 @@ export default function CategoryPickerModal({
 }: CategoryPickerModalProps) {
   const { t } = useTranslation();
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
   const [localSelected, setLocalSelected] = useState<string[]>(selected);
   const [expandedThemes, setExpandedThemes] = useState<Set<string>>(new Set());
 
@@ -161,7 +163,7 @@ export default function CategoryPickerModal({
             <View style={{ height: 100 }} />
           </ScrollView>
 
-          <View style={[styles.footer, { borderTopColor: colors.grass0 }]}>
+          <View style={[styles.footer, { borderTopColor: colors.grass0, paddingBottom: Math.max(Spacing.lg, insets.bottom + Spacing.sm) }]}>
             <Pressable
               style={[styles.confirmBtn, { backgroundColor: colors.primary }]}
               onPress={handleConfirm}

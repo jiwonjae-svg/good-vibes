@@ -99,10 +99,15 @@ export default function HomeScreen() {
   }, [speak, prefetchMore]);
 
   useEffect(() => {
-    if (isAutoPlaying && quotes.length > 0) {
+    if (isAutoPlaying) {
+      // Always read from refs so we get the freshest quotes + index,
+      // regardless of which render's closure was captured.
+      const qs = quotesRef.current;
+      if (qs.length === 0) return;
       autoPlayChainRef.current = true;
-      autoPlayIndexRef.current = activeQuoteIndexRef.current;
-      const q = quotes[activeQuoteIndexRef.current];
+      const startIdx = activeQuoteIndexRef.current;
+      autoPlayIndexRef.current = startIdx;
+      const q = qs[startIdx];
       if (q) {
         speak(q.text, { onDone: advanceAndSpeakNext });
       }

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Dimensions, Pressable, Image } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { FontSize, Spacing, BorderRadius, Shadows, Fonts } from '../constants/theme';
 import { useThemeColors } from '../hooks/useThemeColors';
@@ -45,6 +46,11 @@ interface QuoteCardPropsExtended extends QuoteCardProps {
 export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlong, onToggleAutoPlay }: QuoteCardPropsExtended) {
   const { t } = useTranslation();
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
+  // Position follow-along buttons above the tab bar.
+  // Tab bar height = 65 + max(20, insets.bottom); add 16px gap on top.
+  const tabBarHeight = 65 + Math.max(20, insets.bottom);
+  const floatingActionsBottom = tabBarHeight + 16;
   const { speak, stop, isSpeaking } = useTTS();
   const toggleBookmark = useUserStore((s) => s.toggleBookmark);
   const isBookmarked = useUserStore((s) => s.isBookmarked);
@@ -159,7 +165,7 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
           </View>
         </View>
 
-        <View style={styles.floatingActions}>
+        <View style={[styles.floatingActions, { bottom: floatingActionsBottom }]}>
           <Pressable style={[styles.actionButton, { backgroundColor: actionBg }]} onPress={() => handleActivity(onSpeakAlong)}>
             <Ionicons name="mic-outline" size={22} color={colors.textPrimary} />
             <Text style={[styles.actionLabel, { color: colors.textPrimary }]}>{t('home.speakAlong')}</Text>
@@ -260,7 +266,6 @@ const styles = StyleSheet.create({
   },
   floatingActions: {
     position: 'absolute',
-    bottom: 100,
     flexDirection: 'row',
     gap: Spacing.md,
   },

@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import i18n from '../i18n';
 import type { LanguageCode } from '../i18n';
 import { clearQuoteCache } from '../services/quoteService';
-import { updatePremiumStatus, fetchPremiumStatus, logActivity, saveBookmarkedQuotes, fetchBookmarkedQuotes, logQuoteBookmarked, saveTodayViewedQuotes, saveAllViewedQuoteIds, fetchAllViewedQuoteIds } from '../services/firestoreUserService';
+import { updatePremiumStatus, fetchPremiumStatus, logActivity, saveBookmarkedQuotes, fetchBookmarkedQuotes, logQuoteBookmarked, saveTodayViewedQuotes, saveAllViewedQuoteIds, fetchAllViewedQuoteIds, saveUserSettings, fetchUserSettings } from '../services/firestoreUserService';
 
 interface UserState {
   isPremium: boolean;
@@ -54,7 +54,7 @@ interface UserState {
   isBookmarked: (quoteId: string) => boolean;
   setAuth: (user: { uid: string; displayName: string | null; email: string | null; photoURL: string | null } | null) => Promise<void>;
   updateStreak: (todayStr: string) => Promise<void>;
-  addViewedQuote: (quoteId: string, quoteText: string, todayStr: string) => Promise<void>;
+  addViewedQuote: (quoteId: string, quoteText: string, author: string, source: string, todayStr: string) => Promise<void>;
   getTodayViewedQuotes: () => string[];
   incrementGuestTrial: () => number;
   setShowOnboardingFlag: (show: boolean) => void;
@@ -186,14 +186,18 @@ export const useUserStore = create<UserState>((set, get) => ({
   },
 
   setDarkMode: async (dark) => {
+    const uid = get().uid;
     set({ isDarkMode: dark });
     await get().persistUser();
+    if (uid) saveUserSettings(uid, { isDarkMode: dark }).catch(() => {});
   },
 
   setLanguage: async (lang) => {
+    const uid = get().uid;
     i18n.changeLanguage(lang);
     set({ language: lang });
     await get().persistUser();
+    if (uid) saveUserSettings(uid, { language: lang }).catch(() => {});
     // Clear quote cache so next fetch uses the new language
     await clearQuoteCache();
     // Reset the quote store so the home screen reloads fresh quotes
@@ -204,8 +208,10 @@ export const useUserStore = create<UserState>((set, get) => ({
   },
 
   setCategories: async (cats) => {
+    const uid = get().uid;
     set({ selectedCategories: cats });
     await get().persistUser();
+    if (uid) saveUserSettings(uid, { selectedCategories: cats }).catch(() => {});
     await clearQuoteCache();
     try {
       const { useQuoteStore } = require('./useQuoteStore');
@@ -214,13 +220,17 @@ export const useUserStore = create<UserState>((set, get) => ({
   },
 
   setAutoRead: async (enabled) => {
+    const uid = get().uid;
     set({ autoReadEnabled: enabled });
     await get().persistUser();
+    if (uid) saveUserSettings(uid, { autoReadEnabled: enabled }).catch(() => {});
   },
 
   setDailyReminder: async (enabled) => {
+    const uid = get().uid;
     set({ dailyReminderEnabled: enabled });
     await get().persistUser();
+    if (uid) saveUserSettings(uid, { dailyReminderEnabled: enabled }).catch(() => {});
   },
 
   setOnboardingSeen: async () => {
@@ -255,10 +265,11 @@ export const useUserStore = create<UserState>((set, get) => ({
     if (user) {
       set({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
       
-      const [premiumStatus, cloudBookmarks, cloudAllViewed] = await Promise.all([
+      const [premiumStatus, cloudBookmarks, cloudAllViewed, cloudSettings] = await Promise.all([
         fetchPremiumStatus(user.uid),
         fetchBookmarkedQuotes(user.uid),
         fetchAllViewedQuoteIds(user.uid),
+        fetchUserSettings(user.uid),
       ]);
       
       if (premiumStatus) {
@@ -280,8 +291,33 @@ export const useUserStore = create<UserState>((set, get) => ({
           AsyncStorage.setItem(ALL_VIEWED_KEY, JSON.stringify(merged)).catch(() => {});
         }
       }
+
+      // Restore saved preference settings from the cloud
+      if (cloudSettings) {
+        if (cloudSettings.language != null && cloudSettings.language !== get().language) {
+          i18n.changeLanguage(cloudSettings.language as import('../i18n').LanguageCode);
+        }
+        set({
+          ...(cloudSettings.isDarkMode != null && { isDarkMode: cloudSettings.isDarkMode }),
+          ...(cloudSettings.language != null && { language: cloudSettings.language as import('../i18n').LanguageCode }),
+          ...(cloudSettings.selectedCategories != null && { selectedCategories: cloudSettings.selectedCategories }),
+          ...(cloudSettings.autoReadEnabled != null && { autoReadEnabled: cloudSettings.autoReadEnabled }),
+          ...(cloudSettings.dailyReminderEnabled != null && { dailyReminderEnabled: cloudSettings.dailyReminderEnabled }),
+        });
+      }
     } else {
-      set({ uid: null, displayName: null, email: null, photoURL: null, isPremium: false });
+      // Logout: clear all user-specific data so the next user starts clean
+      set({
+        uid: null, displayName: null, email: null, photoURL: null,
+        isPremium: false,
+        bookmarkedQuoteIds: [],
+        todayViewedQuoteIds: [],
+        todayViewedDate: null,
+        allViewedQuoteIds: [],
+      });
+      // Clear local viewed-quotes caches
+      AsyncStorage.removeItem(VIEWED_QUOTES_KEY).catch(() => {});
+      AsyncStorage.removeItem(ALL_VIEWED_KEY).catch(() => {});
     }
     await get().persistUser();
   },
@@ -299,15 +335,17 @@ export const useUserStore = create<UserState>((set, get) => ({
     await get().persistUser();
   },
 
-  addViewedQuote: async (quoteId, quoteText, todayStr) => {
+  addViewedQuote: async (quoteId, quoteText, author, source, todayStr) => {
     const { todayViewedDate, todayViewedQuoteIds, allViewedQuoteIds, uid } = get();
     let newIds: string[];
+    // Format: "quoteId|author|source|quoteText" (quoteText is last, may contain |)
+    const entry = `${quoteId}|${author ?? ''}|${source ?? ''}|${quoteText}`;
 
     if (todayViewedDate !== todayStr) {
-      newIds = [`${quoteId}|${quoteText}`];
+      newIds = [entry];
     } else {
       if (todayViewedQuoteIds.some((q) => q.startsWith(quoteId))) return;
-      newIds = [...todayViewedQuoteIds, `${quoteId}|${quoteText}`];
+      newIds = [...todayViewedQuoteIds, entry];
     }
 
     // Accumulate all-time viewed IDs (q_id only)

@@ -164,7 +164,7 @@ export default function HomeScreen() {
             saveQuoteForWidget(q.text, q.author, q.category);
           }
           if (viewableItems.length === 1) {
-            addViewedQuote(q.id, q.text, todayString());
+            addViewedQuote(q.id, q.text, q.author, q.source ?? '', todayString());
           }
 
           if (autoPlayChainRef.current) {
@@ -178,8 +178,13 @@ export default function HomeScreen() {
               speak(q.text, { onDone: advanceAndSpeakNext });
             }
           } else if (autoReadEnabled && idx !== lastAutoReadIndex.current) {
+            // Capture idx in closure so we cancel the speak if the user
+            // scrolls to a different quote before the 300ms delay fires.
+            const speakIdx = idx;
             lastAutoReadIndex.current = idx;
-            setTimeout(() => speak(q.text), 300);
+            setTimeout(() => {
+              if (lastAutoReadIndex.current === speakIdx) speak(q.text);
+            }, 300);
           }
         }
         if (qs.length - idx <= QUOTE_CONFIG.prefetchThreshold) prefetchMore();
@@ -199,7 +204,7 @@ export default function HomeScreen() {
       const qs = quotesRef.current;
       const q = qs[idx];
       if (q) {
-        addViewedQuote(q.id, q.text, todayString());
+        addViewedQuote(q.id, q.text, q.author, q.source ?? '', todayString());
       }
     },
     [addViewedQuote],

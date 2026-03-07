@@ -327,3 +327,45 @@ export async function fetchAllViewedQuoteIds(uid: string): Promise<string[]> {
     return [];
   }
 }
+
+// =============================================================================
+// User Settings (preferences synced per uid)
+// =============================================================================
+
+export interface UserSettings {
+  isDarkMode: boolean;
+  language: string;
+  selectedCategories: string[];
+  autoReadEnabled: boolean;
+  dailyReminderEnabled: boolean;
+}
+
+/**
+ * Saves app preference settings to users/{uid}.settings in Firestore.
+ * Call fire-and-forget; failures are silenced.
+ */
+export async function saveUserSettings(
+  uid: string,
+  settings: Partial<UserSettings>,
+): Promise<void> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return;
+    const userRef = doc(db, 'users', uid);
+    await setDoc(userRef, { settings }, { merge: true });
+  } catch { /* silent */ }
+}
+
+/**
+ * Fetches saved preference settings for a user from Firestore.
+ * Returns null when no settings have been saved yet.
+ */
+export async function fetchUserSettings(uid: string): Promise<Partial<UserSettings> | null> {
+  try {
+    const user = await getUserFromFirestore(uid);
+    return (user as any)?.settings ?? null;
+  } catch {
+    return null;
+  }
+}

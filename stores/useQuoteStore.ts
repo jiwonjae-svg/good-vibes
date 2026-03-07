@@ -4,6 +4,7 @@ export interface Quote {
   id: string;
   text: string;
   author: string;
+  source?: string;   // 'quotable' | 'wikiquote' | 'gutenberg'
   category?: string;
   createdAt: number;
   gradientIndex: number;

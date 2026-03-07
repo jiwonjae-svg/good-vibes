@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import i18n from '../i18n';
 import type { LanguageCode } from '../i18n';
 import { clearQuoteCache } from '../services/quoteService';
-import { updatePremiumStatus, fetchPremiumStatus, logActivity, saveBookmarkedQuotes, fetchBookmarkedQuotes, logQuoteBookmarked } from '../services/firestoreUserService';
+import { updatePremiumStatus, fetchPremiumStatus, logActivity, saveBookmarkedQuotes, fetchBookmarkedQuotes, logQuoteBookmarked, saveTodayViewedQuotes, saveAllViewedQuoteIds, fetchAllViewedQuoteIds } from '../services/firestoreUserService';
 
 interface UserState {
   isPremium: boolean;
@@ -20,6 +20,8 @@ interface UserState {
   bookmarkedQuoteIds: string[];
   todayViewedQuoteIds: string[];
   todayViewedDate: string | null;
+  /** All-time list of q_ids the user has ever scrolled past. Synced to Firestore. */
+  allViewedQuoteIds: string[];
   showOnboardingFlag: boolean;
 
   // Auth
@@ -60,6 +62,7 @@ interface UserState {
 
 const USER_KEY = '@dailyglow_user_v1';
 const VIEWED_QUOTES_KEY = '@dailyglow_viewed_quotes';
+const ALL_VIEWED_KEY = '@dailyglow_all_viewed_quotes';
 
 export const useUserStore = create<UserState>((set, get) => ({
   isPremium: false,
@@ -76,6 +79,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   bookmarkedQuoteIds: [],
   todayViewedQuoteIds: [],
   todayViewedDate: null,
+  allViewedQuoteIds: [],
   showOnboardingFlag: false,
   uid: null,
   displayName: null,
@@ -89,8 +93,10 @@ export const useUserStore = create<UserState>((set, get) => ({
     try {
       const raw = await AsyncStorage.getItem(USER_KEY);
       const viewedRaw = await AsyncStorage.getItem(VIEWED_QUOTES_KEY);
+      const allViewedRaw = await AsyncStorage.getItem(ALL_VIEWED_KEY);
       let viewedData = { ids: [], date: null };
       if (viewedRaw) viewedData = JSON.parse(viewedRaw);
+      const allViewed: string[] = allViewedRaw ? JSON.parse(allViewedRaw) : [];
 
       if (raw) {
         const d = JSON.parse(raw);
@@ -110,6 +116,7 @@ export const useUserStore = create<UserState>((set, get) => ({
           bookmarkedQuoteIds: d.bookmarkedQuoteIds ?? [],
           todayViewedQuoteIds: viewedData.ids ?? [],
           todayViewedDate: viewedData.date ?? null,
+          allViewedQuoteIds: allViewed,
           uid: d.uid ?? null,
           displayName: d.displayName ?? null,
           email: d.email ?? null,
@@ -248,9 +255,10 @@ export const useUserStore = create<UserState>((set, get) => ({
     if (user) {
       set({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
       
-      const [premiumStatus, cloudBookmarks] = await Promise.all([
+      const [premiumStatus, cloudBookmarks, cloudAllViewed] = await Promise.all([
         fetchPremiumStatus(user.uid),
         fetchBookmarkedQuotes(user.uid),
+        fetchAllViewedQuoteIds(user.uid),
       ]);
       
       if (premiumStatus) {
@@ -261,6 +269,16 @@ export const useUserStore = create<UserState>((set, get) => ({
         const localBookmarks = get().bookmarkedQuoteIds;
         const merged = [...new Set([...localBookmarks, ...cloudBookmarks])];
         set({ bookmarkedQuoteIds: merged });
+      }
+
+      // Merge all-time viewed quote IDs (cloud is source of truth when larger)
+      if (cloudAllViewed.length > 0) {
+        const localAll = get().allViewedQuoteIds;
+        const merged = [...new Set([...localAll, ...cloudAllViewed])];
+        if (merged.length > localAll.length) {
+          set({ allViewedQuoteIds: merged });
+          AsyncStorage.setItem(ALL_VIEWED_KEY, JSON.stringify(merged)).catch(() => {});
+        }
       }
     } else {
       set({ uid: null, displayName: null, email: null, photoURL: null, isPremium: false });
@@ -282,7 +300,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   },
 
   addViewedQuote: async (quoteId, quoteText, todayStr) => {
-    const { todayViewedDate, todayViewedQuoteIds } = get();
+    const { todayViewedDate, todayViewedQuoteIds, allViewedQuoteIds, uid } = get();
     let newIds: string[];
 
     if (todayViewedDate !== todayStr) {
@@ -292,10 +310,25 @@ export const useUserStore = create<UserState>((set, get) => ({
       newIds = [...todayViewedQuoteIds, `${quoteId}|${quoteText}`];
     }
 
-    set({ todayViewedQuoteIds: newIds, todayViewedDate: todayStr });
+    // Accumulate all-time viewed IDs (q_id only)
+    const needsAllViewedUpdate = !allViewedQuoteIds.includes(quoteId);
+    const newAllViewed = needsAllViewedUpdate ? [...allViewedQuoteIds, quoteId] : allViewedQuoteIds;
+
+    set({ todayViewedQuoteIds: newIds, todayViewedDate: todayStr, allViewedQuoteIds: newAllViewed });
     try {
       await AsyncStorage.setItem(VIEWED_QUOTES_KEY, JSON.stringify({ ids: newIds, date: todayStr }));
     } catch { /* silent */ }
+    if (needsAllViewedUpdate) {
+      AsyncStorage.setItem(ALL_VIEWED_KEY, JSON.stringify(newAllViewed)).catch(() => {});
+    }
+    // Persist to Firebase (fire-and-forget)
+    if (uid) {
+      const todayIdsOnly = newIds.map((q) => q.split('|')[0]);
+      saveTodayViewedQuotes(uid, todayIdsOnly, todayStr).catch(() => {});
+      if (needsAllViewedUpdate) {
+        saveAllViewedQuoteIds(uid, newAllViewed).catch(() => {});
+      }
+    }
   },
 
   getTodayViewedQuotes: () => {

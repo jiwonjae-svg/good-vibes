@@ -8,6 +8,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
+        "EXPO_PUBLIC_APP_ENV": "development",
         "EXPO_PUBLIC_GROK_MODEL": "grok-4-1-fast-non-reasoning",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "good-vibes-3d443.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "good-vibes-3d443",
@@ -26,6 +27,7 @@
         "buildType": "apk"
       },
       "env": {
+        "EXPO_PUBLIC_APP_ENV": "preview",
         "EXPO_PUBLIC_GROK_MODEL": "grok-4-1-fast-non-reasoning",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "good-vibes-3d443.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "good-vibes-3d443",
@@ -41,6 +43,7 @@
     "production": {
       "autoIncrement": true,
       "env": {
+        "EXPO_PUBLIC_APP_ENV": "production",
         "EXPO_PUBLIC_GROK_MODEL": "grok-4-1-fast-non-reasoning",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "good-vibes-3d443.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "good-vibes-3d443",

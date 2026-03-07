@@ -63,6 +63,7 @@ function makeQuote(
     id: item.id,
     text,
     author: item.author,
+    source: item.source,
     category: item.source,
     createdAt: Date.now(),
     gradientIndex: Math.floor(Math.random() * LightColors.cardGradients.length),

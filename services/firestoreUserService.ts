@@ -276,3 +276,54 @@ export async function logQuoteBookmarked(
 ): Promise<void> {
   await logActivity(uid, 'quote_bookmarked', { quoteId, isBookmarked });
 }
+
+// =============================================================================
+// Viewed Quotes (today + all-time)
+// =============================================================================
+
+/**
+ * Saves today's viewed quote IDs and the date to the user's Firestore document.
+ * Stored as users/{uid}.todayViewedQuoteIds and users/{uid}.todayViewedDate
+ */
+export async function saveTodayViewedQuotes(
+  uid: string,
+  quoteIds: string[],
+  date: string,
+): Promise<void> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return;
+    const userRef = doc(db, 'users', uid);
+    await setDoc(userRef, { todayViewedQuoteIds: quoteIds, todayViewedDate: date }, { merge: true });
+  } catch { /* silent */ }
+}
+
+/**
+ * Saves the full list of all-time viewed quote IDs to the user's Firestore document.
+ * Stored as users/{uid}.allViewedQuoteIds
+ */
+export async function saveAllViewedQuoteIds(
+  uid: string,
+  quoteIds: string[],
+): Promise<void> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return;
+    const userRef = doc(db, 'users', uid);
+    await setDoc(userRef, { allViewedQuoteIds: quoteIds }, { merge: true });
+  } catch { /* silent */ }
+}
+
+/**
+ * Fetches the all-time viewed quote IDs from Firestore.
+ */
+export async function fetchAllViewedQuoteIds(uid: string): Promise<string[]> {
+  try {
+    const user = await getUserFromFirestore(uid);
+    return (user as any)?.allViewedQuoteIds ?? [];
+  } catch {
+    return [];
+  }
+}

@@ -52,6 +52,9 @@ export default function HomeScreen() {
   const autoPlayChainRef = useRef(false);
   const quotesRef = useRef(quotes);
   quotesRef.current = quotes;
+  const activeQuoteIndexRef = useRef(0);
+  activeQuoteIndexRef.current = activeQuoteIndex;
+  const isProgrammaticScrollRef = useRef(false);
 
   const isInitialMount = useRef(true);
   const uid = useUserStore((s) => s.uid);
@@ -84,6 +87,7 @@ export default function HomeScreen() {
     autoPlayIndexRef.current = nextIdx;
     if (nextIdx < qs.length) {
       setActiveQuoteIndex(nextIdx);
+      isProgrammaticScrollRef.current = true;
       flatListRef.current?.scrollToIndex({ index: nextIdx, animated: true });
       const nextQuote = qs[nextIdx];
       if (nextQuote) {
@@ -97,8 +101,8 @@ export default function HomeScreen() {
   useEffect(() => {
     if (isAutoPlaying && quotes.length > 0) {
       autoPlayChainRef.current = true;
-      autoPlayIndexRef.current = activeQuoteIndex;
-      const q = quotes[activeQuoteIndex];
+      autoPlayIndexRef.current = activeQuoteIndexRef.current;
+      const q = quotes[activeQuoteIndexRef.current];
       if (q) {
         speak(q.text, { onDone: advanceAndSpeakNext });
       }
@@ -152,6 +156,7 @@ export default function HomeScreen() {
         }
         lastViewedIndex.current = idx;
         setActiveQuoteIndex(idx);
+        activeQuoteIndexRef.current = idx;
         const qs = quotesRef.current;
         const q = qs[idx];
         if (q) {
@@ -162,7 +167,17 @@ export default function HomeScreen() {
             addViewedQuote(q.id, q.text, todayString());
           }
 
-          if (autoReadEnabled && idx !== lastAutoReadIndex.current) {
+          if (autoPlayChainRef.current) {
+            if (isProgrammaticScrollRef.current) {
+              // programmatic scroll from advanceAndSpeakNext — TTS already started, just clear flag
+              isProgrammaticScrollRef.current = false;
+            } else {
+              // user manually scrolled during auto-play → jump to new quote immediately
+              stop();
+              autoPlayIndexRef.current = idx;
+              speak(q.text, { onDone: advanceAndSpeakNext });
+            }
+          } else if (autoReadEnabled && idx !== lastAutoReadIndex.current) {
             lastAutoReadIndex.current = idx;
             setTimeout(() => speak(q.text), 300);
           }
@@ -175,7 +190,7 @@ export default function HomeScreen() {
         }
       }
     },
-    [quotes.length, prefetchMore, addViewedQuote, isGuest, autoReadEnabled, speak, isPremium],
+    [quotes.length, prefetchMore, addViewedQuote, isGuest, autoReadEnabled, speak, stop, advanceAndSpeakNext, isPremium],
   );
 
   const onMomentumScrollEnd = useCallback(

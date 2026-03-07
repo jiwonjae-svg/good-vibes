@@ -14,7 +14,6 @@ import { useGoogleAuth, signInWithGoogle, logOut, onAuthChange } from '../../ser
 import { scheduleDailyReminder, cancelDailyReminder } from '../../services/notificationService';
 import LanguagePickerModal from '../../components/LanguagePickerModal';
 import CategoryPickerModal from '../../components/CategoryPickerModal';
-import LogStatusModal from '../../components/LogStatusModal';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
@@ -37,7 +36,6 @@ export default function SettingsScreen() {
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [catModalVisible, setCatModalVisible] = useState(false);
   const [premiumModalVisible, setPremiumModalVisible] = useState(false);
-  const [logStatusModalVisible, setLogStatusModalVisible] = useState(false);
 
   useEffect(() => {
     if (response?.type === 'success') {
@@ -107,9 +105,8 @@ export default function SettingsScreen() {
         onSelect={setCategories}
         onClose={() => setCatModalVisible(false)}
       />
-      <LogStatusModal visible={logStatusModalVisible} onClose={() => setLogStatusModalVisible(false)} />
 
-      {/* Premium Modal */}
+      {/* Premium Modal */}}
       <Modal
         transparent
         visible={premiumModalVisible}
@@ -344,17 +341,6 @@ export default function SettingsScreen() {
                 <View>
                   <Text style={s.rowTitle}>{t('settings.replayOnboarding')}</Text>
                   <Text style={s.rowSubtitle}>{t('settings.replayOnboardingDesc')}</Text>
-                </View>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-            </Pressable>
-            <View style={s.divider} />
-            <Pressable style={s.row} onPress={() => setLogStatusModalVisible(true)}>
-              <View style={s.rowLeft}>
-                <Ionicons name="document-text-outline" size={22} color={colors.textSecondary} />
-                <View>
-                  <Text style={s.rowTitle}>{t('settings.logStatus')}</Text>
-                  <Text style={s.rowSubtitle}>{t('settings.logStatusDesc')}</Text>
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />

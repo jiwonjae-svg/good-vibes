@@ -2,12 +2,19 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { Fonts, FontSize } from '../../constants/theme';
 
 export default function TabLayout() {
   const { t } = useTranslation();
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
+
+  // Keep a minimum 20px bottom padding; expand when the Android navigation
+  // bar is visible so the tab bar content always sits above it.
+  const tabBarPaddingBottom = Math.max(20, insets.bottom);
+  const tabBarHeight = 65 + tabBarPaddingBottom;
 
   return (
     <Tabs
@@ -23,8 +30,8 @@ export default function TabLayout() {
           shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.08,
           shadowRadius: 12,
-          height: 85,
-          paddingBottom: 20,
+          height: tabBarHeight,
+          paddingBottom: tabBarPaddingBottom,
           paddingTop: 8,
         },
         tabBarLabelStyle: { ...Fonts.body, fontSize: FontSize.xs },

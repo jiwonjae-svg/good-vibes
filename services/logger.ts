@@ -3,16 +3,24 @@
  * File path: app's documentDirectory/dailyglow_log.txt
  * On Android: /data/user/0/com.jiwonjae.dailyglow/files/dailyglow_log.txt
  * On iOS: .../Documents/dailyglow_log.txt
+ *
+ * Logging is enabled in development (npm start) and preview (APK) builds.
+ * It is completely silenced in production store releases (iOS App Store / Google Play)
+ * by checking the EXPO_PUBLIC_APP_ENV build-time variable.
  */
 import { Platform } from 'react-native';
 
 const LOG_FILENAME = 'dailyglow_log.txt';
+
+/** True only when built with the 'production' EAS profile (store release). */
+const IS_PRODUCTION_RELEASE = process.env.EXPO_PUBLIC_APP_ENV === 'production';
 
 function timestamp(): string {
   return new Date().toISOString();
 }
 
 async function writeToFile(level: string, message: string, data?: unknown): Promise<void> {
+  if (IS_PRODUCTION_RELEASE) return;
   if (Platform.OS === 'web') return;
 
   try {
@@ -31,6 +39,7 @@ async function writeToFile(level: string, message: string, data?: unknown): Prom
 }
 
 function log(level: 'log' | 'warn' | 'error', message: string, data?: unknown): void {
+  if (IS_PRODUCTION_RELEASE) return;
   const fn = level === 'log' ? console.log : level === 'warn' ? console.warn : console.error;
   if (data != null) {
     fn(message, data);

@@ -17,6 +17,7 @@ import {
   reloadUser, getCurrentUser,
 } from '../services/authService';
 import { appLog } from '../services/logger';
+import SparkleAnimation from '../components/SparkleAnimation';
 
 type Mode = 'login' | 'signup' | 'forgot';
 
@@ -282,7 +283,9 @@ export default function LoginScreen() {
 
           {/* Header */}
           <View style={s.header}>
-            <Text style={s.appIcon}>✨</Text>
+            <View style={s.sparkleWrapper}>
+              <SparkleAnimation />
+            </View>
             <Text style={s.appName}>DailyGlow</Text>
             <Text style={s.appTagline}>
               {mode === 'login' ? t('login.welcomeBack') : mode === 'signup' ? t('login.createAccount') : t('login.resetPassword')}
@@ -450,7 +453,7 @@ function makeStyles(colors: any) {
     kav: { flex: 1 },
     scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.xxl },
     header: { alignItems: 'center', marginBottom: Spacing.xl },
-    appIcon: { fontSize: 56, marginBottom: Spacing.sm },
+    sparkleWrapper: { marginBottom: Spacing.sm },
     appName: { ...Fonts.heading, fontSize: FontSize.hero, color: colors.primary },
     appTagline: { ...Fonts.body, fontSize: FontSize.md, color: colors.textSecondary, marginTop: Spacing.xs, textAlign: 'center' },
     card: { borderRadius: BorderRadius.xl, padding: Spacing.lg, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 6 },

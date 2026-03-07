@@ -16,6 +16,15 @@ import PremiumPromptModal from './PremiumPromptModal';
 const ACTION_BG_LIGHT = 'rgba(255,255,255,0.92)';
 const ACTION_BG_DARK = 'rgba(30,30,30,0.85)';
 
+function sourceLabel(source: string): string {
+  switch (source) {
+    case 'quotable': return 'Quotable';
+    case 'wikiquote': return 'Wikiquote';
+    case 'gutenberg': return 'Project Gutenberg';
+    default: return source;
+  }
+}
+
 const QUOTE_OPEN_IMG = require('../assets/double quotes-front.png');
 const QUOTE_CLOSE_IMG = require('../assets/double quotes-back.png');
 
@@ -114,7 +123,21 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
               style={[styles.quoteMarkClose, { tintColor: quoteMarkColor }]}
               resizeMode="contain"
             />
+
+            {/* Author displayed below the closing quote mark */}
+            {quote.author ? (
+              <Text style={[styles.authorText, { color: quoteTextColor }]}>
+                — {quote.author}
+              </Text>
+            ) : null}
           </View>
+
+          {/* Source shown as a tiny label in the bottom-left corner of the card */}
+          {quote.source ? (
+            <Text style={[styles.sourceText, { color: quoteTextColor }]}>
+              {sourceLabel(quote.source)}
+            </Text>
+          ) : null}
           
           <View style={styles.topActions}>
             <Pressable onPress={handleTTS} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
@@ -203,6 +226,22 @@ const styles = StyleSheet.create({
     height: QUOTE_MARK_SIZE,
     alignSelf: 'flex-end',
     marginTop: Spacing.sm,
+  },
+  authorText: {
+    ...Fonts.body,
+    fontSize: FontSize.sm,
+    alignSelf: 'flex-end',
+    marginTop: Spacing.sm,
+    opacity: 0.75,
+    fontStyle: 'italic',
+  },
+  sourceText: {
+    position: 'absolute',
+    bottom: 6,
+    left: Spacing.sm,
+    fontSize: 9,
+    opacity: 0.35,
+    letterSpacing: 0.3,
   },
   topActions: {
     position: 'absolute',

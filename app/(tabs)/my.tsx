@@ -23,11 +23,20 @@ const QUOTE_CLOSE_IMG = require('../../assets/double quotes-back.png');
 const QUOTE_MARK_SIZE = FontSize.lg * 2;
 
 interface QuoteModalProps {
-  quote: { id: string; text: string; author?: string; gradientIndex: number } | null;
+  quote: { id: string; text: string; author?: string; source?: string; gradientIndex: number } | null;
   onClose: () => void;
   onSpeak: () => void;
   onWrite: () => void;
   onType: () => void;
+}
+
+function sourceLabel(source: string): string {
+  switch (source) {
+    case 'quotable': return 'Quotable';
+    case 'wikiquote': return 'Wikiquote';
+    case 'gutenberg': return 'Project Gutenberg';
+    default: return source;
+  }
 }
 
 function QuoteModal({ quote, onClose, onSpeak, onWrite, onType }: QuoteModalProps) {
@@ -74,10 +83,17 @@ function QuoteModal({ quote, onClose, onSpeak, onWrite, onType }: QuoteModalProp
                 />
                 {quote.author && (
                   <Text style={[styles.author, { color: isDarkMode ? 'rgba(255,255,255,0.85)' : 'rgba(50,50,50,0.7)' }]}>
-                    - {quote.author}
+                    — {quote.author}
                   </Text>
                 )}
               </View>
+
+              {/* Source badge */}
+              {quote.source ? (
+                <Text style={[styles.sourceLabel, { color: isDarkMode ? 'rgba(255,255,255,0.3)' : 'rgba(50,50,50,0.3)' }]}>
+                  {sourceLabel(quote.source)}
+                </Text>
+              ) : null}
 
               <View style={styles.cardActions}>
                 <Pressable onPress={handleTTS} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
@@ -127,17 +143,24 @@ export default function MyScreen() {
   const quotes = useQuoteStore((s) => s.quotes);
   const isGuest = !uid;
 
-  const [selectedQuote, setSelectedQuote] = useState<{ id: string; text: string; author?: string; gradientIndex: number } | null>(null);
+  const [selectedQuote, setSelectedQuote] = useState<{ id: string; text: string; author?: string; source?: string; gradientIndex: number } | null>(null);
   const [activeTab, setActiveTab] = useState<'bookmarked' | 'today'>('bookmarked');
 
   const bookmarkedQuotes = quotes.filter((q) => bookmarkedQuoteIds.includes(q.id));
 
-  const todayQuotes = todayViewedQuoteIds.map((q, idx) => {
-    const [id, ...textParts] = q.split('|');
-    return { id, text: textParts.join('|'), gradientIndex: idx % colors.cardGradients.length };
+  const todayQuotes = todayViewedQuoteIds.map((entry, idx) => {
+    const parts = entry.split('|');
+    if (parts.length >= 4) {
+      // new format: quoteId|author|source|quoteText
+      const [id, author, source, ...restParts] = parts;
+      return { id, author: author || undefined, source: source || undefined, text: restParts.join('|'), gradientIndex: idx % colors.cardGradients.length };
+    }
+    // legacy format: quoteId|quoteText
+    const [id, ...textParts] = parts;
+    return { id, author: undefined as string | undefined, source: undefined as string | undefined, text: textParts.join('|'), gradientIndex: idx % colors.cardGradients.length };
   });
 
-  const handleQuotePress = (quote: { id: string; text: string; author?: string; gradientIndex: number }) => {
+  const handleQuotePress = (quote: { id: string; text: string; author?: string; source?: string; gradientIndex: number }) => {
     setSelectedQuote(quote);
   };
 
@@ -165,7 +188,7 @@ export default function MyScreen() {
     </Pressable>
   ), [colors, toggleBookmark]);
 
-  const renderTodayItem = useCallback(({ item, index }: { item: { id: string; text: string; gradientIndex: number }; index: number }) => (
+  const renderTodayItem = useCallback(({ item, index }: { item: { id: string; text: string; author?: string; source?: string; gradientIndex: number }; index: number }) => (
     <Pressable
       style={[styles.quoteItem, { backgroundColor: colors.surface }]}
       onPress={() => handleQuotePress(item)}
@@ -174,6 +197,9 @@ export default function MyScreen() {
         <Text style={[styles.quoteItemText, { color: colors.textPrimary }]} numberOfLines={2}>
           {item.text}
         </Text>
+        {item.author && (
+          <Text style={[styles.quoteItemAuthor, { color: colors.textSecondary }]}>— {item.author}</Text>
+        )}
       </View>
       <Ionicons name="eye-outline" size={20} color={colors.textMuted} />
     </Pressable>
@@ -355,6 +381,14 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     marginTop: Spacing.md,
     fontStyle: 'italic',
+    alignSelf: 'flex-end',
+  },
+  sourceLabel: {
+    position: 'absolute',
+    bottom: 6,
+    left: Spacing.sm,
+    fontSize: 9,
+    letterSpacing: 0.3,
   },
   cardActions: {
     position: 'absolute',

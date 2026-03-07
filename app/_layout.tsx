@@ -35,8 +35,10 @@ export default function RootLayout() {
     initNotificationHandler();
     loadGrass();
     loadUser();
+    // Ensure the Android navigation bar stays visible (already set in app.config.js);
+    // remove previous 'hidden' override so the safe-area insets drive tab bar height.
     if (Platform.OS === 'android') {
-      NavigationBar.setVisibilityAsync('hidden').catch(() => {});
+      NavigationBar.setVisibilityAsync('visible').catch(() => {});
     }
   }, []);
 

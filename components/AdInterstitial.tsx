@@ -13,14 +13,22 @@ const isExpoGo =
 let showAdFunction: (() => void) | null = null;
 let isAdLoaded = false;
 let ttsButtonCount = 0;
+/** Callback invoked when the interstitial closes (or when no ad is shown). */
+let onAdClosedCallback: (() => void) | null = null;
 
 /**
  * Shows an interstitial ad after a follow-along activity is completed.
+ * Calls `onClosed` once the ad finishes (or immediately if the ad won't be shown).
  * Only fires in production builds (not Expo Go, not __DEV__).
  * Premium users are exempt.
  */
-export function showAdForActivity(isPremium: boolean): void {
-  if (isPremium || isExpoGo || __DEV__) return;
+export function showAdForActivity(isPremium: boolean, onClosed?: () => void): void {
+  if (isPremium || isExpoGo || __DEV__ || !isAdLoaded) {
+    // Ad won't be shown — invoke callback immediately so the caller can proceed.
+    onClosed?.();
+    return;
+  }
+  onAdClosedCallback = onClosed ?? null;
   showAdFunction?.();
 }
 
@@ -65,6 +73,10 @@ async function initAds() {
 
     interstitial.addAdEventListener(AdEventType.CLOSED, () => {
       isAdLoaded = false;
+      // Fire the post-ad callback (e.g., show praise) then reload.
+      const cb = onAdClosedCallback;
+      onAdClosedCallback = null;
+      cb?.();
       interstitial.load();
     });
 
@@ -85,7 +97,6 @@ async function initAds() {
 
 export function useAdInterstitial() {
   const initialized = useRef(false);
-  const { isPremium, scrollCount } = useUserStore();
 
   useEffect(() => {
     if (!initialized.current) {
@@ -94,12 +105,17 @@ export function useAdInterstitial() {
     }
   }, []);
 
-  const tryShowAd = useCallback(() => {
-    if (isPremium || isExpoGo) return;
-    if (scrollCount > 0 && scrollCount % AD_CONFIG.scrollsBeforeAd === 0) {
+  /**
+   * Show a scroll-based ad when the fresh scroll count hits the threshold.
+   * Reads premium status directly from the store to avoid stale-closure bugs.
+   */
+  const tryShowAd = useCallback((count: number) => {
+    const { isPremium: fresh } = useUserStore.getState();
+    if (fresh || isExpoGo || __DEV__) return;
+    if (count > 0 && count % AD_CONFIG.scrollsBeforeAd === 0) {
       showAdFunction?.();
     }
-  }, [isPremium, scrollCount]);
+  }, []);
 
   return { tryShowAd };
 }

@@ -84,11 +84,13 @@ function SingleSparkle({ isLarge, smallIndex = 0, initDelay, tintColor }: Sparkl
     animRef.current = a;
     a.start(({ finished }) => {
       if (finished && mounted.current) {
-        // Fully invisible now — pick a fresh random spawn
+        // Reset the Y offset synchronously BEFORE the React state update so the
+        // particle doesn't briefly flash at an unexpected vertical position.
+        translateY.setValue(0);
         const sz = getSize(isLarge, smallIndex);
         setSpawn({ ...randomPos(sz), size: sz });
-        // Brief pause before the next cycle
-        timerRef.current = setTimeout(run, ri(80, 350));
+        // Short pause before repeating — small enough to feel continuous.
+        timerRef.current = setTimeout(run, ri(60, 200));
       }
     });
   }, [isLarge, smallIndex]);

@@ -28,6 +28,7 @@ export default {
     },
     android: {
       package: "com.jiwonjae.dailyglow",
+      allowBackup: false,
       googleServicesFile: "./google-services.json",
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",

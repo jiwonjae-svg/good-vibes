@@ -3,10 +3,7 @@ import i18n from '../i18n';
 
 const praiseIndexByLang = new Map<string, number>();
 
-export async function getPraise(
-  _activityType: 'speak' | 'write' | 'type',
-  _quoteText: string
-): Promise<string> {
+export async function getPraise(): Promise<string> {
   return getOfflinePraise();
 }
 

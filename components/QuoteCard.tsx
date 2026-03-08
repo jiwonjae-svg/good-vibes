@@ -122,7 +122,7 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
               resizeMode="contain"
             />
             
-            <Text style={[styles.quoteText, { color: quoteTextColor }]}>{quote.text}</Text>
+            <Text style={[styles.quoteText, { color: quoteTextColor, fontSize: getQuoteFontSize(quote.text), lineHeight: getQuoteFontSize(quote.text) * 1.45 }]}>{quote.text}</Text>
             
             <Image
               source={QUOTE_CLOSE_IMG}
@@ -196,6 +196,18 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
 
 const QUOTE_MARK_SIZE = FontSize.xl * 2;
 
+/**
+ * Returns an appropriate font size for the quote text based on its length.
+ * Korean/CJK text is naturally compact; English longer quotes need smaller font.
+ */
+function getQuoteFontSize(text: string): number {
+  const len = text.length;
+  if (len < 80)  return FontSize.xl;       // 24 – short quote
+  if (len < 150) return FontSize.lg;       // 20 – medium
+  if (len < 260) return FontSize.md + 2;  // 18 – long
+  return FontSize.md;                      // 16 – very long
+}
+
 const styles = StyleSheet.create({
   container: { height: CARD_HEIGHT, width: SCREEN_WIDTH },
   gradient: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.lg },
@@ -221,7 +233,7 @@ const styles = StyleSheet.create({
   },
   quoteText: {
     ...Fonts.quote,
-    fontSize: FontSize.xl,
+    fontSize: FontSize.xl, // overridden inline by getQuoteFontSize()
     textAlign: 'center',
     lineHeight: 34,
     letterSpacing: 0.3,

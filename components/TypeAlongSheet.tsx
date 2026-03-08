@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TextInput, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Modal, TextInput, Pressable, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { FontSize, Spacing, BorderRadius, Fonts } from '../constants/theme';
@@ -21,9 +21,17 @@ export default function TypeAlongSheet({ visible, quoteText, onClose, onSuccess 
 
   return (
     <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <View style={[styles.sheet, { backgroundColor: colors.surface }]}>
           <View style={[styles.handle, { backgroundColor: colors.textMuted }]} />
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.sheetScroll}
+          >
           <Text style={[styles.title, { color: colors.textPrimary }]}>{t('type.title')}</Text>
           <Text style={[styles.instruction, { color: colors.textSecondary }]}>{t('type.instruction')}</Text>
 
@@ -57,15 +65,18 @@ export default function TypeAlongSheet({ visible, quoteText, onClose, onSuccess 
           <Pressable style={styles.closeButton} onPress={onClose}>
             <Text style={[styles.closeText, { color: colors.textMuted }]}>{t('type.close')}</Text>
           </Pressable>
+
+          </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' },
-  sheet: { borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, padding: Spacing.lg, paddingBottom: Spacing.xxl, alignItems: 'center' },
+  sheet: { borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, paddingTop: Spacing.lg, paddingHorizontal: Spacing.lg },
+  sheetScroll: { alignItems: 'center', paddingBottom: Spacing.xxl },
   handle: { width: 40, height: 4, borderRadius: 2, marginBottom: Spacing.md },
   title: { ...Fonts.heading, fontSize: FontSize.xl, marginBottom: Spacing.xs },
   instruction: { ...Fonts.body, fontSize: FontSize.sm, marginBottom: Spacing.lg },

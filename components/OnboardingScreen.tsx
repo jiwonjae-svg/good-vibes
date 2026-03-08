@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { FontSize, Spacing, BorderRadius, Fonts } from '../constants/theme';
 
@@ -29,6 +30,7 @@ interface OnboardingScreenProps {
 export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const { t } = useTranslation();
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
@@ -74,7 +76,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
         keyExtractor={(item) => item.key}
       />
 
-      <View style={styles.bottom}>
+      <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom + 8, Spacing.lg) }]}>
         <View style={styles.dots}>
           {SLIDES_DATA.map((_, i) => (
             <View

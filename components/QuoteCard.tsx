@@ -57,7 +57,6 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
   const isBookmarked = useUserStore((s) => s.isBookmarked);
   const uid = useUserStore((s) => s.uid);
   const isPremium = useUserStore((s) => s.isPremium);
-  const incrementGuestTrial = useUserStore((s) => s.incrementGuestTrial);
   const bookmarked = isBookmarked(quote.id);
   const isDark = useUserStore((s) => s.isDarkMode);
   const isAutoPlaying = useAutoPlayStore((s) => s.isAutoPlaying);
@@ -110,11 +109,8 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
   
   const handleActivity = (action: () => void) => {
     if (isGuest) {
-      const count = incrementGuestTrial();
-      if (count > 3) {
-        setLoginPromptVisible(true);
-        return;
-      }
+      setLoginPromptVisible(true);
+      return;
     }
     action();
   };

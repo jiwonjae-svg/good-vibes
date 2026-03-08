@@ -263,6 +263,12 @@ export default function MyScreen() {
             showsVerticalScrollIndicator={false}
           />
         )
+      ) : isGuest ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="lock-closed-outline" size={48} color={colors.textMuted} />
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{t('guest.loginPromptTitle')}</Text>
+          <Text style={[styles.emptyHint, { color: colors.textMuted }]}>{t('my.guestNotice')}</Text>
+        </View>
       ) : (
         todayQuotes.length === 0 ? (
           <View style={styles.emptyContainer}>

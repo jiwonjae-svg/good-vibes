@@ -197,7 +197,7 @@ export const useUserStore = create<UserState>((set, get) => ({
     i18n.changeLanguage(lang);
     set({ language: lang });
     await get().persistUser();
-    if (uid) saveUserSettings(uid, { language: lang }).catch(() => {});
+    // Language is a local-only setting — intentionally NOT synced to Firestore.
     // Clear quote cache so next fetch uses the new language
     await clearQuoteCache();
     // Reset the quote store so the home screen reloads fresh quotes
@@ -307,14 +307,10 @@ export const useUserStore = create<UserState>((set, get) => ({
         }
       }
 
-      // Restore saved preference settings from the cloud
+      // Restore saved preference settings from the cloud (language is local-only)
       if (cloudSettings) {
-        if (cloudSettings.language != null && cloudSettings.language !== get().language) {
-          i18n.changeLanguage(cloudSettings.language as import('../i18n').LanguageCode);
-        }
         set({
           ...(cloudSettings.isDarkMode != null && { isDarkMode: cloudSettings.isDarkMode }),
-          ...(cloudSettings.language != null && { language: cloudSettings.language as import('../i18n').LanguageCode }),
           ...(cloudSettings.selectedCategories != null && { selectedCategories: cloudSettings.selectedCategories }),
           ...(cloudSettings.autoReadEnabled != null && { autoReadEnabled: cloudSettings.autoReadEnabled }),
           ...(cloudSettings.dailyReminderEnabled != null && { dailyReminderEnabled: cloudSettings.dailyReminderEnabled }),
@@ -356,6 +352,8 @@ export const useUserStore = create<UserState>((set, get) => ({
 
   addViewedQuote: async (quoteId, quoteText, author, source, todayStr) => {
     const { todayViewedDate, todayViewedQuoteIds, allViewedQuoteIds, uid } = get();
+    // Guest mode: viewed quotes are not persisted (no uid, no sync).
+    if (!uid) return;
     let newIds: string[];
     // Format: "quoteId|author|source|quoteText" (quoteText is last, may contain |)
     const entry = `${quoteId}|${author ?? ''}|${source ?? ''}|${quoteText}`;

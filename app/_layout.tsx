@@ -71,9 +71,14 @@ export default function RootLayout() {
   const handleOnboardingComplete = async () => {
     await setOnboardingSeen();
     setShowOnboarding(false);
+    // Capture the flag before clearing it — true means replay was triggered from Settings.
+    const wasFromSettings = useUserStore.getState().showOnboardingFlag;
     setShowOnboardingFlag(false);
-    
-    if (!hasCompletedAuth) {
+
+    if (wasFromSettings) {
+      // Return to Settings instead of navigating to home/login.
+      router.replace('/(tabs)/settings');
+    } else if (!hasCompletedAuth) {
       router.replace('/login');
     } else {
       router.replace('/(tabs)');

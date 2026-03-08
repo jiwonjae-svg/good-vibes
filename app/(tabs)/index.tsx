@@ -156,7 +156,7 @@ export default function HomeScreen() {
       if (viewableItems.length > 0) {
         const idx = viewableItems[0].index ?? 0;
         if (idx > lastViewedIndex.current) {
-          incrementScroll().then((count) => { if (count % 5 === 0) tryShowAd(); });
+          incrementScroll().then((count) => tryShowAd(count));
         }
         lastViewedIndex.current = idx;
         setActiveQuoteIndex(idx);
@@ -218,29 +218,31 @@ export default function HomeScreen() {
 
   const handleActivitySuccess = async (type: 'speak' | 'write' | 'type') => {
     setActiveSheet(null);
-    
+
     const currentQuote = quotes[activeQuoteIndex];
-    const quoteText = currentQuote?.text ?? '';
-    
+
     if (!isGuest && currentQuote && uid) {
       await recordActivity(type, currentQuote.id, currentQuote.text);
       await updateStreak(todayString());
       const activityType = type === 'speak' ? 'speak_along' : type === 'write' ? 'write_along' : 'type_along';
       logActivityCompletion(uid, activityType);
     }
-    // Show interstitial ad on activity completion (non-premium only, release builds)
-    showAdForActivity(isPremium);
-    
-    let praise: string;
-    try { praise = await getPraise(); }
-    catch { praise = t('praise.fallback'); }
-    setPraiseText(praise);
-    setPraiseVisible(true);
-    
-    if (isGuest && !loginPromptShown.current) {
-      loginPromptShown.current = true;
-      setTimeout(() => setLoginPromptVisible(true), 2000);
-    }
+
+    // Show praise AFTER the ad closes (or immediately if no ad plays).
+    const showPraise = async () => {
+      let praise: string;
+      try { praise = await getPraise(); }
+      catch { praise = t('praise.fallback'); }
+      setPraiseText(praise);
+      setPraiseVisible(true);
+
+      if (isGuest && !loginPromptShown.current) {
+        loginPromptShown.current = true;
+        setTimeout(() => setLoginPromptVisible(true), 2000);
+      }
+    };
+
+    showAdForActivity(isPremium, () => { showPraise(); });
   };
 
   const activeQuote = quotes[activeQuoteIndex];

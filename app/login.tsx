@@ -1,57 +1,30 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, Pressable, StyleSheet,
-  KeyboardAvoidingView, Platform, ScrollView,
-  ActivityIndicator, Modal,
+  View, Text, Pressable, StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { FontSize, Spacing, BorderRadius, Fonts } from '../constants/theme';
 import { useUserStore } from '../stores/useUserStore';
-import {
-  signInWithEmail, signUpWithEmail, sendPasswordResetEmail,
-  useGoogleAuth, signInWithGoogle, isEmailVerified, sendEmailVerification,
-  reloadUser, getCurrentUser,
-} from '../services/authService';
-import { appLog } from '../services/logger';
+import { useGoogleAuth, signInWithGoogle } from '../services/authService';
 import SparkleAnimation from '../components/SparkleAnimation';
-
-type Mode = 'login' | 'signup' | 'forgot';
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginScreen() {
   const { t } = useTranslation();
   const colors = useThemeColors();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const setAuth = useUserStore((s) => s.setAuth);
   const setAuthCompleted = useUserStore((s) => s.setAuthCompleted);
   const hasSeenOnboarding = useUserStore((s) => s.hasSeenOnboarding);
   const isDarkMode = useUserStore((s) => s.isDarkMode);
 
-  const [mode, setMode] = useState<Mode>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showPw, setShowPw] = useState(false);
-  const [verifyModalVisible, setVerifyModalVisible] = useState(false);
-  const [resendingEmail, setResendingEmail] = useState(false);
-  const [loginErrorModalVisible, setLoginErrorModalVisible] = useState(false);
-  const [loginErrorMessage, setLoginErrorMessage] = useState('');
-  const [signupErrorModalVisible, setSignupErrorModalVisible] = useState(false);
-  const [signupErrorMessage, setSignupErrorMessage] = useState('');
-  const [alertModal, setAlertModal] = useState<{
-    visible: boolean; title: string; message: string; onClose?: () => void;
-  }>({ visible: false, title: '', message: '' });
-
-  const showAlert = useCallback((title: string, message: string, onClose?: () => void) => {
-    setAlertModal({ visible: true, title, message, onClose });
-  }, []);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const { response, promptAsync } = useGoogleAuth();
 
@@ -61,142 +34,34 @@ export default function LoginScreen() {
       if (idToken) {
         handleGoogleSignIn(idToken);
       }
+    } else if (response?.type === 'error') {
+      setErrorMsg(t('login.signInFailed'));
+      setLoading(false);
     }
   }, [response]);
 
   const handleGoogleSignIn = async (idToken: string) => {
     setLoading(true);
+    setErrorMsg(null);
     try {
       const user = await signInWithGoogle(idToken);
       if (user) {
-        await setAuth({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
+        await setAuth({
+          uid: user.uid,
+          displayName: user.displayName,
+          email: user.email,
+          photoURL: user.photoURL,
+        });
         await setAuthCompleted();
         if (hasSeenOnboarding) {
           router.replace('/(tabs)');
         }
+      } else {
+        setErrorMsg(t('login.signInFailed'));
       }
     } finally {
       setLoading(false);
     }
-  };
-
-  const validateEmail = (emailToCheck: string): boolean => {
-    if (!emailToCheck.trim()) {
-      showAlert(t('login.error'), t('login.enterEmail'));
-      return false;
-    }
-    if (!EMAIL_REGEX.test(emailToCheck.trim())) {
-      showAlert(t('login.error'), t('login.invalidEmail'));
-      return false;
-    }
-    return true;
-  };
-
-  const handleEmailLogin = async () => {
-    if (!validateEmail(email)) return;
-    if (!password.trim()) {
-      showAlert(t('login.error'), t('login.enterPassword'));
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const user = await signInWithEmail(email.trim(), password);
-      if (!user) return;
-
-      await reloadUser();
-      if (!isEmailVerified()) {
-        setVerifyModalVisible(true);
-        return;
-      }
-
-      await setAuth({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
-      await setAuthCompleted();
-      if (hasSeenOnboarding) {
-        router.replace('/(tabs)');
-      }
-    } catch (e: any) {
-      // Map all Firebase auth errors to a single localized message
-      setLoginErrorMessage(t('login.invalidCredentials'));
-      setLoginErrorModalVisible(true);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSignUp = async () => {
-    if (!displayName.trim()) {
-      showAlert(t('login.error'), t('login.enterName'));
-      return;
-    }
-    if (!validateEmail(email)) return;
-    if (!password) {
-      showAlert(t('login.error'), t('login.enterPassword'));
-      return;
-    }
-    if (password !== confirmPassword) {
-      setSignupErrorMessage(t('login.passwordMismatch'));
-      setSignupErrorModalVisible(true);
-      return;
-    }
-    if (password.length < 6) {
-      showAlert(t('login.error'), t('login.passwordTooShort'));
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await signUpWithEmail(email.trim(), password, displayName.trim());
-      setVerifyModalVisible(true);
-    } catch (e: any) {
-      const raw = e?.message || '';
-      const msg = raw.includes('already') || raw.includes('registered') ? t('login.emailAlreadyInUse') : raw || t('login.signupFailed');
-      setSignupErrorMessage(msg);
-      setSignupErrorModalVisible(true);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleForgotPassword = async () => {
-    if (!validateEmail(email)) return;
-
-    setLoading(true);
-    try {
-      await sendPasswordResetEmail(email.trim());
-      showAlert(t('login.emailSent'), t('login.resetInstructions'), () => setMode('login'));
-    } catch (e: any) {
-      showAlert(t('login.error'), e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResendVerification = async () => {
-    setResendingEmail(true);
-    try {
-      const user = getCurrentUser();
-      if (!user) {
-        appLog.warn('[login.handleResendVerification] getCurrentUser() returned null');
-        return;
-      }
-      await sendEmailVerification(user);
-      showAlert(t('login.emailSent'), t('login.verificationResent'));
-    } catch (e: any) {
-      appLog.error('[login.handleResendVerification] Error', e);
-      showAlert(t('login.error'), e.message);
-    } finally {
-      setResendingEmail(false);
-    }
-  };
-
-  const handleVerifyModalClose = () => {
-    setVerifyModalVisible(false);
-    setMode('login');
-    setEmail('');
-    setDisplayName('');
-    setPassword('');
-    setConfirmPassword('');
   };
 
   const handleSkip = async () => {
@@ -210,308 +75,97 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient colors={[colors.background, colors.surfaceAlt]} style={s.container}>
-      {/* Generic Alert Modal (replaces all Alert.alert calls) */}
-      <Modal transparent visible={alertModal.visible} animationType="fade" onRequestClose={() => setAlertModal(m => ({ ...m, visible: false }))}>
-        <View style={s.modalOverlay}>
-          <View style={[s.modalContent, { backgroundColor: colors.surface }]}>
-            <View style={s.modalIconWrapper}>
-              <Ionicons name="information-circle-outline" size={48} color={colors.primary} />
-            </View>
-            <Text style={[s.modalTitle, { color: colors.textPrimary }]}>{alertModal.title}</Text>
-            <Text style={[s.modalDesc, { color: colors.textSecondary }]}>{alertModal.message}</Text>
-            <Pressable
-              style={[s.modalConfirmBtn, { backgroundColor: colors.primary }]}
-              onPress={() => {
-                setAlertModal(m => ({ ...m, visible: false }));
-                alertModal.onClose?.();
-              }}
-            >
-              <Text style={s.modalConfirmText}>{t('common.ok')}</Text>
-            </Pressable>
-          </View>
+      {/* Header: logo + sparkle */}
+      <View style={[s.header, { paddingTop: insets.top + Spacing.xxl }]}>
+        <View style={s.sparkleWrapper}>
+          <SparkleAnimation />
         </View>
-      </Modal>
+        <Text style={s.appName}>DailyGlow</Text>
+        <Text style={s.tagline}>{t('login.tagline')}</Text>
+      </View>
 
-      {/* Signup Error Modal */}
-      <Modal transparent visible={signupErrorModalVisible} animationType="fade" onRequestClose={() => setSignupErrorModalVisible(false)}>
-        <View style={s.modalOverlay}>
-          <View style={[s.modalContent, { backgroundColor: colors.surface }]}>
-            <View style={s.modalIconWrapper}>
-              <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-            </View>
-            <Text style={[s.modalTitle, { color: colors.textPrimary }]}>{t('login.signupFailed')}</Text>
-            <Text style={[s.modalDesc, { color: colors.textSecondary }]}>{signupErrorMessage}</Text>
-            <Pressable
-              style={[s.modalConfirmBtn, { backgroundColor: colors.primary }]}
-              onPress={() => setSignupErrorModalVisible(false)}
-            >
-              <Text style={s.modalConfirmText}>{t('common.ok')}</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      {/* Auth actions */}
+      <View style={[s.actions, { paddingBottom: insets.bottom + Spacing.xxl }]}>
+        {errorMsg && (
+          <Text style={[s.errorText, { color: colors.error }]}>{errorMsg}</Text>
+        )}
 
-      {/* Login Error Modal */}
-      <Modal transparent visible={loginErrorModalVisible} animationType="fade" onRequestClose={() => setLoginErrorModalVisible(false)}>
-        <View style={s.modalOverlay}>
-          <View style={[s.modalContent, { backgroundColor: colors.surface }]}>
-            <View style={s.modalIconWrapper}>
-              <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-            </View>
-            <Text style={[s.modalTitle, { color: colors.textPrimary }]}>{t('login.loginFailed')}</Text>
-            <Text style={[s.modalDesc, { color: colors.textSecondary }]}>{loginErrorMessage}</Text>
-            <Pressable
-              style={[s.modalConfirmBtn, { backgroundColor: colors.primary }]}
-              onPress={() => setLoginErrorModalVisible(false)}
-            >
-              <Text style={s.modalConfirmText}>{t('common.ok')}</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+        <Pressable
+          style={[
+            s.googleBtn,
+            {
+              backgroundColor: isDarkMode ? colors.surfaceAlt : '#fff',
+              borderColor: isDarkMode ? colors.grass0 : '#dadce0',
+            },
+          ]}
+          onPress={() => {
+            setLoading(true);
+            setErrorMsg(null);
+            promptAsync();
+          }}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#EA4335" />
+          ) : (
+            <>
+              <Ionicons name="logo-google" size={22} color="#EA4335" />
+              <Text style={[s.googleBtnText, { color: colors.textPrimary }]}>
+                {t('login.signInWithGoogle')}
+              </Text>
+            </>
+          )}
+        </Pressable>
 
-      {/* Email Verification Modal */}
-      <Modal transparent visible={verifyModalVisible} animationType="fade" onRequestClose={handleVerifyModalClose}>
-        <View style={s.modalOverlay}>
-          <View style={[s.modalContent, { backgroundColor: colors.surface }]}>
-            <View style={s.modalIconWrapper}>
-              <Ionicons name="mail-outline" size={48} color={colors.primary} />
-            </View>
-            <Text style={[s.modalTitle, { color: colors.textPrimary }]}>{t('login.verifyEmail')}</Text>
-            <Text style={[s.modalDesc, { color: colors.textSecondary }]}>
-              {t('login.verifyEmailDesc')}
-            </Text>
-            <Text style={[s.modalEmail, { color: colors.primary }]}>{email}</Text>
-
-            <Pressable
-              style={[s.modalResendBtn, { borderColor: colors.primary }]}
-              onPress={handleResendVerification}
-              disabled={resendingEmail}
-            >
-              {resendingEmail ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Text style={[s.modalResendText, { color: colors.primary }]}>{t('login.resendEmail')}</Text>
-              )}
-            </Pressable>
-
-            <Pressable
-              style={[s.modalConfirmBtn, { backgroundColor: colors.primary }]}
-              onPress={handleVerifyModalClose}
-            >
-              <Text style={s.modalConfirmText}>{t('login.understood')}</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
-        <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-
-          {/* Header */}
-          <View style={s.header}>
-            <View style={s.sparkleWrapper}>
-              <SparkleAnimation />
-            </View>
-            <Text style={s.appName}>DailyGlow</Text>
-            <Text style={s.appTagline}>
-              {mode === 'login' ? t('login.welcomeBack') : mode === 'signup' ? t('login.createAccount') : t('login.resetPassword')}
-            </Text>
-          </View>
-
-          {/* Card */}
-          <View style={[s.card, { backgroundColor: colors.surface }]}>
-
-            {/* Google Sign In */}
-            {mode !== 'forgot' && (
-              <>
-                <Pressable
-                  style={[
-                    s.googleBtn,
-                    {
-                      backgroundColor: isDarkMode ? colors.surfaceAlt : '#fff',
-                      borderColor: isDarkMode ? colors.grass0 : '#dadce0',
-                    },
-                  ]}
-                  onPress={() => promptAsync()}
-                  disabled={loading}
-                >
-                  <Ionicons name="logo-google" size={20} color="#EA4335" />
-                  <Text style={[s.googleBtnText, { color: colors.textPrimary }]}>{t('login.continueWithGoogle')}</Text>
-                </Pressable>
-
-                <View style={s.dividerRow}>
-                  <View style={[s.dividerLine, { backgroundColor: colors.grass0 }]} />
-                  <Text style={[s.dividerText, { color: colors.textMuted }]}>{t('login.or')}</Text>
-                  <View style={[s.dividerLine, { backgroundColor: colors.grass0 }]} />
-                </View>
-              </>
-            )}
-
-            {/* Display Name (sign up only) */}
-            {mode === 'signup' && (
-              <View style={s.inputGroup}>
-                <Text style={[s.label, { color: colors.textSecondary }]}>{t('login.name')}</Text>
-                <View style={[s.inputRow, { borderColor: colors.grass0, backgroundColor: colors.surfaceAlt }]}>
-                  <Ionicons name="person-outline" size={18} color={colors.textMuted} />
-                  <TextInput
-                    style={[s.input, { color: colors.textPrimary }]}
-                    value={displayName}
-                    onChangeText={setDisplayName}
-                    placeholder={t('login.namePlaceholder')}
-                    placeholderTextColor={colors.textMuted}
-                    autoCapitalize="words"
-                  />
-                </View>
-              </View>
-            )}
-
-            {/* Email */}
-            <View style={s.inputGroup}>
-              <Text style={[s.label, { color: colors.textSecondary }]}>{t('login.email')}</Text>
-              <View style={[s.inputRow, { borderColor: colors.grass0, backgroundColor: colors.surfaceAlt }]}>
-                <Ionicons name="mail-outline" size={18} color={colors.textMuted} />
-                <TextInput
-                  style={[s.input, { color: colors.textPrimary }]}
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder={t('login.emailPlaceholder')}
-                  placeholderTextColor={colors.textMuted}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoComplete="email"
-                />
-              </View>
-            </View>
-
-            {/* Password */}
-            {mode !== 'forgot' && (
-              <View style={s.inputGroup}>
-                <Text style={[s.label, { color: colors.textSecondary }]}>{t('login.password')}</Text>
-                <View style={[s.inputRow, { borderColor: colors.grass0, backgroundColor: colors.surfaceAlt }]}>
-                  <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} />
-                  <TextInput
-                    style={[s.input, { color: colors.textPrimary }]}
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder="••••••••"
-                    placeholderTextColor={colors.textMuted}
-                    secureTextEntry={!showPw}
-                    autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                  />
-                  <Pressable onPress={() => setShowPw(!showPw)}>
-                    <Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.textMuted} />
-                  </Pressable>
-                </View>
-              </View>
-            )}
-
-            {/* Confirm Password (sign up only) */}
-            {mode === 'signup' && (
-              <View style={s.inputGroup}>
-                <Text style={[s.label, { color: colors.textSecondary }]}>{t('login.confirmPassword')}</Text>
-                <View style={[s.inputRow, { borderColor: colors.grass0, backgroundColor: colors.surfaceAlt }]}>
-                  <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} />
-                  <TextInput
-                    style={[s.input, { color: colors.textPrimary }]}
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    placeholder="••••••••"
-                    placeholderTextColor={colors.textMuted}
-                    secureTextEntry={!showPw}
-                    autoComplete="new-password"
-                  />
-                </View>
-              </View>
-            )}
-
-            {/* Forgot password link (login mode only) */}
-            {mode === 'login' && (
-              <Pressable style={s.forgotBtn} onPress={() => setMode('forgot')}>
-                <Text style={[s.forgotText, { color: colors.primary }]}>{t('login.forgotPassword')}</Text>
-              </Pressable>
-            )}
-
-            {/* Primary Action Button */}
-            <Pressable
-              style={[s.primaryBtn, { backgroundColor: colors.primary }, loading && s.disabledBtn]}
-              onPress={mode === 'login' ? handleEmailLogin : mode === 'signup' ? handleSignUp : handleForgotPassword}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={s.primaryBtnText}>
-                  {mode === 'login' ? t('login.signIn') : mode === 'signup' ? t('login.createAccountBtn') : t('login.sendResetEmail')}
-                </Text>
-              )}
-            </Pressable>
-
-            {/* Mode Switch */}
-            <View style={s.switchRow}>
-              {mode === 'login' ? (
-                <>
-                  <Text style={[s.switchText, { color: colors.textSecondary }]}>{t('login.noAccount')} </Text>
-                  <Pressable onPress={() => setMode('signup')}>
-                    <Text style={[s.switchLink, { color: colors.primary }]}>{t('login.signUp')}</Text>
-                  </Pressable>
-                </>
-              ) : (
-                <Pressable onPress={() => setMode('login')}>
-                  <Text style={[s.switchLink, { color: colors.primary }]}>← {t('login.backToSignIn')}</Text>
-                </Pressable>
-              )}
-            </View>
-          </View>
-
-          {/* Skip Button */}
-          <Pressable style={s.skipBtn} onPress={handleSkip}>
-            <Text style={[s.skipText, { color: colors.textMuted }]}>{t('login.continueWithoutAccount')}</Text>
-          </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        <Pressable style={s.skipBtn} onPress={handleSkip} disabled={loading}>
+          <Text style={[s.skipText, { color: colors.textMuted }]}>
+            {t('login.continueWithoutAccount')}
+          </Text>
+        </Pressable>
+      </View>
     </LinearGradient>
   );
 }
 
 function makeStyles(colors: any) {
   return StyleSheet.create({
-    container: { flex: 1 },
-    kav: { flex: 1 },
-    scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.xxl },
-    header: { alignItems: 'center', marginBottom: Spacing.xl },
-    sparkleWrapper: { marginBottom: Spacing.sm },
-    appName: { ...Fonts.heading, fontSize: FontSize.hero, color: colors.primary },
-    appTagline: { ...Fonts.body, fontSize: FontSize.md, color: colors.textSecondary, marginTop: Spacing.xs, textAlign: 'center' },
-    card: { borderRadius: BorderRadius.xl, padding: Spacing.lg, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 6 },
-    googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1.5, marginBottom: Spacing.md },
+    container: { flex: 1, justifyContent: 'space-between' },
+    header: { alignItems: 'center', paddingHorizontal: Spacing.lg },
+    sparkleWrapper: { marginBottom: Spacing.md },
+    appName: {
+      ...Fonts.heading,
+      fontSize: FontSize.hero,
+      color: colors.primary,
+      marginBottom: Spacing.sm,
+    },
+    tagline: {
+      ...Fonts.body,
+      fontSize: FontSize.md,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      lineHeight: 22,
+    },
+    actions: { paddingHorizontal: Spacing.lg, alignItems: 'center' },
+    errorText: {
+      ...Fonts.body,
+      fontSize: FontSize.sm,
+      marginBottom: Spacing.md,
+      textAlign: 'center',
+    },
+    googleBtn: {
+      width: '100%',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: Spacing.sm,
+      paddingVertical: Spacing.md + 2,
+      borderRadius: BorderRadius.md,
+      borderWidth: 1.5,
+      marginBottom: Spacing.sm,
+    },
     googleBtnText: { ...Fonts.body, fontSize: FontSize.md },
-    dividerRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.md },
-    dividerLine: { flex: 1, height: StyleSheet.hairlineWidth },
-    dividerText: { ...Fonts.body, fontSize: FontSize.sm },
-    inputGroup: { marginBottom: Spacing.md },
-    label: { ...Fonts.body, fontSize: FontSize.sm, marginBottom: Spacing.xs },
-    inputRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, gap: Spacing.sm },
-    input: { flex: 1, ...Fonts.body, fontSize: FontSize.md, paddingVertical: Spacing.md },
-    forgotBtn: { alignSelf: 'flex-end', marginBottom: Spacing.md },
-    forgotText: { ...Fonts.body, fontSize: FontSize.sm },
-    primaryBtn: { padding: Spacing.md + 2, borderRadius: BorderRadius.md, alignItems: 'center', marginBottom: Spacing.md },
-    disabledBtn: { opacity: 0.6 },
-    primaryBtnText: { ...Fonts.heading, fontSize: FontSize.md, color: '#fff' },
-    switchRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-    switchText: { ...Fonts.body, fontSize: FontSize.sm },
-    switchLink: { ...Fonts.heading, fontSize: FontSize.sm },
-    skipBtn: { alignItems: 'center', marginTop: Spacing.lg, padding: Spacing.md },
+    skipBtn: { padding: Spacing.md, marginTop: Spacing.xs },
     skipText: { ...Fonts.body, fontSize: FontSize.sm },
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: Spacing.lg },
-    modalContent: { width: '100%', borderRadius: BorderRadius.xl, padding: Spacing.xl, alignItems: 'center' },
-    modalIconWrapper: { marginBottom: Spacing.md },
-    modalTitle: { ...Fonts.heading, fontSize: FontSize.xl, marginBottom: Spacing.sm, textAlign: 'center' },
-    modalDesc: { ...Fonts.body, fontSize: FontSize.md, textAlign: 'center', marginBottom: Spacing.sm, lineHeight: 22 },
-    modalEmail: { ...Fonts.heading, fontSize: FontSize.md, marginBottom: Spacing.lg },
-    modalResendBtn: { borderWidth: 1.5, borderRadius: BorderRadius.md, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.lg, marginBottom: Spacing.md },
-    modalResendText: { ...Fonts.body, fontSize: FontSize.sm },
-    modalConfirmBtn: { width: '100%', padding: Spacing.md, borderRadius: BorderRadius.md, alignItems: 'center' },
-    modalConfirmText: { ...Fonts.heading, fontSize: FontSize.md, color: '#fff' },
   });
 }
+

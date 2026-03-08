@@ -5,12 +5,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { useRouter } from 'expo-router';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { Fonts, FontSize, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { useUserStore } from '../../stores/useUserStore';
 import { LANGUAGES, type LanguageCode } from '../../i18n';
 import { useGoogleAuth, signInWithGoogle, logOut, onAuthChange } from '../../services/authService';
+import { logActivity } from '../../services/firestoreUserService';
 import { scheduleDailyReminder, cancelDailyReminder } from '../../services/notificationService';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const clientQuotes: Array<{ quote: string }> = require('../../data/quotesClient.json');
@@ -81,12 +81,9 @@ export default function SettingsScreen() {
   };
 
   const handleLogout = async () => {
+    if (uid) await logActivity(uid, 'logout');
     await logOut();
     setAuth(null);
-  };
-
-  const handleLoginNavigation = () => {
-    router.push('/login');
   };
 
   const handleReplayOnboarding = () => {
@@ -173,10 +170,10 @@ export default function SettingsScreen() {
               <>
                 <View style={s.row}>
                   <View style={s.rowLeft}>
-                    <Ionicons name="person-circle" size={22} color={colors.primary} />
+                    <Ionicons name="logo-google" size={22} color="#EA4335" />
                     <View>
-                      <Text style={s.rowTitle}>{displayName ?? email ?? 'User'}</Text>
-                      <Text style={s.rowSubtitle}>{t('settings.loggedInAs')} {email}</Text>
+                      <Text style={s.rowTitle}>{displayName ?? email ?? t('settings.googleUser')}</Text>
+                      <Text style={s.rowSubtitle}>{t('settings.loggedInWith')} Google</Text>
                     </View>
                   </View>
                 </View>
@@ -196,7 +193,7 @@ export default function SettingsScreen() {
                     <Text style={[s.guestDesc, { color: colors.textSecondary }]}>{t('settings.guestModeDesc')}</Text>
                   </View>
                 </View>
-                
+
                 <Pressable
                   style={[
                     s.loginBtn,
@@ -209,11 +206,6 @@ export default function SettingsScreen() {
                 >
                   <Ionicons name="logo-google" size={20} color="#EA4335" />
                   <Text style={[s.loginBtnText, { color: colors.textPrimary }]}>{t('settings.loginWithGoogle')}</Text>
-                </Pressable>
-                
-                <Pressable style={[s.loginBtn, { backgroundColor: colors.primary }]} onPress={handleLoginNavigation}>
-                  <Ionicons name="mail-outline" size={20} color="#fff" />
-                  <Text style={[s.loginBtnText, { color: '#fff' }]}>{t('settings.loginWithEmail')}</Text>
                 </Pressable>
               </>
             )}

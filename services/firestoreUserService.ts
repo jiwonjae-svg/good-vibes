@@ -22,7 +22,6 @@ export interface FirestoreUser {
   photoURL: string | null;
   lastLogin: Timestamp;
   createdAt?: Timestamp;
-  emailVerified?: boolean;
   provider?: string;
   isPremium?: boolean;
   premiumPurchasedAt?: Timestamp;
@@ -30,7 +29,6 @@ export interface FirestoreUser {
 
 export type ActivityType =
   | 'login'
-  | 'signup'
   | 'logout'
   | 'quote_generated'
   | 'quote_shared'
@@ -38,8 +36,6 @@ export type ActivityType =
   | 'speak_along_completed'
   | 'write_along_completed'
   | 'type_along_completed'
-  | 'password_reset_requested'
-  | 'email_verification_sent'
   | 'premium_purchased'
   | 'premium_cancelled';
 
@@ -76,7 +72,6 @@ export async function syncUserToFirestore(
       displayName: user.displayName,
       photoURL: user.photoURL,
       lastLogin: serverTimestamp() as Timestamp,
-      emailVerified: user.emailVerified,
       provider,
     };
 
@@ -192,16 +187,6 @@ export async function logLoginActivity(
   provider: string,
 ): Promise<void> {
   await logActivity(uid, 'login', { provider });
-}
-
-/**
- * Convenience function to log signup activity
- */
-export async function logSignupActivity(
-  uid: string,
-  provider: string,
-): Promise<void> {
-  await logActivity(uid, 'signup', { provider });
 }
 
 /**

@@ -195,7 +195,7 @@ export async function reloadUser(): Promise<User | null> {
 
 export async function sendPasswordResetEmail(email: string): Promise<void> {
   const LOG = '[authService.sendPasswordResetEmail]';
-  appLog.log(`${LOG} Called, email=${email}`);
+  appLog.log(`${LOG} Called`);
 
   try {
     const auth = getFirebaseAuth();
@@ -208,7 +208,7 @@ export async function sendPasswordResetEmail(email: string): Promise<void> {
     appLog.log(`${LOG} Calling firebaseSendPasswordReset...`);
     await firebaseSendPasswordReset(auth, email);
     appLog.log(`${LOG} firebaseSendPasswordReset succeeded`);
-    await logActivity('anonymous', 'password_reset_requested', { email });
+    await logActivity('anonymous', 'password_reset_requested');
     appLog.log(`${LOG} Done`);
   } catch (e: any) {
     appLog.error(`${LOG} Failed`, e?.code ?? e?.message ?? e);

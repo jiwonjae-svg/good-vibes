@@ -9,21 +9,14 @@ import {
   initializeFirestore,
   getFirestore,
   collection,
-  addDoc,
-  getDocs,
   doc,
   getDoc,
-  query,
-  orderBy,
-  limit,
   Firestore,
   memoryLocalCache,
 } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FIREBASE_CONFIG } from '../constants/config';
 import { appLog } from './logger';
-import type { Quote } from '../stores/useQuoteStore';
-import type { GrassDay } from '../stores/useGrassStore';
 import type { CrawledQuote } from '../data/quotes';
 
 let app: FirebaseApp | null = null;
@@ -122,56 +115,6 @@ export function getDb(): Firestore | null {
   if (db) return db;
   const result = initFirebase();
   return result?.db ?? null;
-}
-
-export async function saveQuotesToFirestore(quotes: Quote[]): Promise<void> {
-  const firestore = getDb();
-  if (!firestore) return;
-  try {
-    const col = collection(firestore, 'quotes');
-    for (const q of quotes) {
-      await addDoc(col, {
-        text: q.text,
-        author: q.author,
-        gradientIndex: q.gradientIndex,
-        createdAt: q.createdAt,
-      });
-    }
-  } catch {
-    // offline or unconfigured — silent
-  }
-}
-
-export async function loadQuotesFromFirestore(
-  count: number
-): Promise<Quote[]> {
-  const firestore = getDb();
-  if (!firestore) return [];
-  try {
-    const col = collection(firestore, 'quotes');
-    const q = query(col, orderBy('createdAt', 'desc'), limit(count));
-    const snap = await getDocs(q);
-    return snap.docs.map((doc) => ({
-      id: doc.id,
-      text: doc.data().text,
-      author: doc.data().author,
-      gradientIndex: doc.data().gradientIndex ?? 0,
-      createdAt: doc.data().createdAt ?? Date.now(),
-    }));
-  } catch {
-    return [];
-  }
-}
-
-export async function saveGrassDayToFirestore(day: GrassDay): Promise<void> {
-  const firestore = getDb();
-  if (!firestore) return;
-  try {
-    const col = collection(firestore, 'grass');
-    await addDoc(col, day);
-  } catch {
-    // silent
-  }
 }
 
 /**

@@ -11,6 +11,8 @@
 import { Platform } from 'react-native';
 
 const LOG_FILENAME = 'dailyglow_log.txt';
+/** Maximum log file size in bytes. When exceeded the oldest half is discarded. */
+const MAX_LOG_BYTES = 200 * 1024; // 200 KB
 
 /** True only when built with the 'production' EAS profile (store release). */
 const IS_PRODUCTION_RELEASE = process.env.EXPO_PUBLIC_APP_ENV === 'production';
@@ -31,7 +33,13 @@ async function writeToFile(level: string, message: string, data?: unknown): Prom
     const path = `${dir}${LOG_FILENAME}`;
     const line = `[${timestamp()}] [${level}] ${message}${data != null ? ' ' + JSON.stringify(data) : ''}\n`;
 
-    const current = await fs.readAsStringAsync(path).catch(() => '');
+    let current = await fs.readAsStringAsync(path).catch(() => '');
+    // Trim oldest half when the file exceeds the cap to prevent unbounded growth.
+    if (current.length + line.length > MAX_LOG_BYTES) {
+      const mid = Math.floor(current.length / 2);
+      const cutPoint = current.indexOf('\n', mid);
+      current = cutPoint >= 0 ? current.slice(cutPoint + 1) : '';
+    }
     await fs.writeAsStringAsync(path, current + line);
   } catch {
     // Silent - don't break app if file write fails

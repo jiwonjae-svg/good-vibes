@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { saveGrassDay, fetchGrassData } from '../services/firestoreUserService';
 
 export interface ActivityQuote {
   id: string;
@@ -57,12 +58,12 @@ export const useGrassStore = create<GrassState>((set, get) => ({
   loadGrassData: async () => {
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      let localData: Record<string, GrassDay> = {};
       if (raw) {
         const parsed = JSON.parse(raw);
-        const migrated: Record<string, GrassDay> = {};
         for (const key of Object.keys(parsed)) {
           const day = parsed[key];
-          migrated[key] = {
+          localData[key] = {
             ...emptyDay(day.date),
             ...day,
             speakQuotes: day.speakQuotes || [],
@@ -70,10 +71,22 @@ export const useGrassStore = create<GrassState>((set, get) => ({
             typeQuotes: day.typeQuotes || [],
           };
         }
-        set({ grassData: migrated, isLoaded: true });
-      } else {
-        set({ isLoaded: true });
       }
+      set({ grassData: localData, isLoaded: true });
+
+      // Merge with Firestore data (cloud wins on conflict)
+      try {
+        const { useUserStore } = require('./useUserStore');
+        const uid: string | null = useUserStore.getState().uid;
+        if (uid) {
+          const cloudData = await fetchGrassData(uid);
+          if (Object.keys(cloudData).length > 0) {
+            const merged = { ...localData, ...cloudData };
+            set({ grassData: merged });
+            AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(merged)).catch(() => {});
+          }
+        }
+      } catch { /* silent */ }
     } catch {
       set({ isLoaded: true });
     }
@@ -115,6 +128,13 @@ export const useGrassStore = create<GrassState>((set, get) => ({
     } catch {
       // silent fail
     }
+
+    // Sync to Firestore (fire-and-forget)
+    try {
+      const { useUserStore } = require('./useUserStore');
+      const uid: string | null = useUserStore.getState().uid;
+      if (uid) saveGrassDay(uid, date, updated).catch(() => {});
+    } catch { /* silent */ }
   },
 
   getGrassDay: (date) => get().grassData[date] ?? emptyDay(date),

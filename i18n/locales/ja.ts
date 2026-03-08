@@ -38,14 +38,13 @@ export default {
     description: 'プレミアムにアップグレードして、より豊かな一日を始めましょう',
     benefit1: '広告なしでクリーンに利用',
     benefit2: 'ホーム画面ウィジェットで名言確認',
-    benefit3: 'カスタム時間通知で毎日モチベーション',
     benefit4: '名言の自動再生',
     purchase: 'プレミアムを購入',
     later: '後で',
     active: 'プレミアム有効',
     activeDesc: 'すべてのプレミアム機能をご利用いただけます',
     upgrade: 'プレミアムにアップグレード',
-    upgradeDesc: '広告削除、ウィジェット、カスタム通知など'
+    upgradeDesc: '広告削除、ウィジェットなど'
   },
   login: {
     welcomeBack: 'あなたのためのポジティブなエネルギーが待っています',

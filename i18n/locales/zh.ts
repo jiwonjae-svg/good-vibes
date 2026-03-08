@@ -38,14 +38,13 @@ export default {
     description: '升级到高级版，开启更丰富的一天',
     benefit1: '无广告清爽体验',
     benefit2: '主屏幕小部件查看名言',
-    benefit3: '自定义时间通知每日激励',
     benefit4: '名言自动播放',
     purchase: '购买高级版',
     later: '稍后',
     active: '高级版已激活',
     activeDesc: '您可使用所有高级功能',
     upgrade: '升级到高级版',
-    upgradeDesc: '移除广告、小部件、自定义通知等'
+    upgradeDesc: '移除广告、小部件等更多功能'
   },
   login: {
     welcomeBack: '正能量正在等待你',

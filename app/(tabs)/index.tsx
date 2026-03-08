@@ -75,7 +75,6 @@ export default function HomeScreen() {
     };
     setupAudio();
     loadQuotes();
-    updateStreak(todayString());
   }, []);
 
   const autoPlayIndexRef = useRef(0);

@@ -17,6 +17,7 @@ import { saveQuoteForWidget } from '../../services/widgetService';
 import { logActivityCompletion } from '../../services/firestoreUserService';
 import { QUOTE_CONFIG } from '../../constants/config';
 import { useAdInterstitial } from '../../components/AdInterstitial';
+import { showAdForActivity } from '../../components/AdInterstitial';
 import { todayString } from '../../utils/dateUtils';
 import QuoteCard, { CARD_HEIGHT } from '../../components/QuoteCard';
 import SpeakAlongSheet from '../../components/SpeakAlongSheet';
@@ -228,6 +229,8 @@ export default function HomeScreen() {
       const activityType = type === 'speak' ? 'speak_along' : type === 'write' ? 'write_along' : 'type_along';
       logActivityCompletion(uid, activityType);
     }
+    // Show interstitial ad on activity completion (non-premium only, release builds)
+    showAdForActivity(isPremium);
     
     let praise: string;
     try { praise = await getPraise(type, quoteText); }

@@ -235,8 +235,18 @@ export async function logActivityCompletion(
   await logActivity(uid, type, { score });
 }
 
+// =============================================================================
+// Quote History sub-collection  (`quoteHistory`)
+// Structure:
+//   users/{uid}/quoteHistory/bookmarked  → { quoteIds: string[], lastUpdated }
+//   users/{uid}/quoteHistory/allViewed   → { quoteIds: string[], lastUpdated }
+//   users/{uid}/quoteHistory/todayViewed → { quoteIds: string[], date: string, lastUpdated }
+// =============================================================================
+
+const QUOTE_HISTORY = 'quoteHistory';
+
 /**
- * Save bookmarked quotes to Firestore
+ * Save bookmarked quotes to users/{uid}/quoteHistory/bookmarked
  */
 export async function saveBookmarkedQuotes(
   uid: string,
@@ -246,21 +256,25 @@ export async function saveBookmarkedQuotes(
     initFirebase();
     const db = getDb();
     if (!db) return;
-
-    const userRef = doc(db, 'users', uid);
-    await setDoc(userRef, { bookmarkedQuoteIds }, { merge: true });
+    const ref = doc(db, 'users', uid, QUOTE_HISTORY, 'bookmarked');
+    await setDoc(ref, { quoteIds: bookmarkedQuoteIds, lastUpdated: serverTimestamp() });
   } catch (error) {
     console.warn('[firestoreUserService] Failed to save bookmarks:', error);
   }
 }
 
 /**
- * Fetch bookmarked quotes from Firestore
+ * Fetch bookmarked quotes from users/{uid}/quoteHistory/bookmarked
  */
 export async function fetchBookmarkedQuotes(uid: string): Promise<string[]> {
   try {
-    const user = await getUserFromFirestore(uid);
-    return (user as any)?.bookmarkedQuoteIds ?? [];
+    initFirebase();
+    const db = getDb();
+    if (!db) return [];
+    const ref = doc(db, 'users', uid, QUOTE_HISTORY, 'bookmarked');
+    const snap = await getDoc(ref);
+    if (snap.exists()) return (snap.data()?.quoteIds as string[]) ?? [];
+    return [];
   } catch {
     return [];
   }
@@ -278,12 +292,11 @@ export async function logQuoteBookmarked(
 }
 
 // =============================================================================
-// Viewed Quotes (today + all-time)
+// Viewed Quotes (today + all-time)  —  see quoteHistory constant above
 // =============================================================================
 
 /**
- * Saves today's viewed quote IDs and the date to the user's Firestore document.
- * Stored as users/{uid}.todayViewedQuoteIds and users/{uid}.todayViewedDate
+ * Saves today's viewed quote IDs to users/{uid}/quoteHistory/todayViewed
  */
 export async function saveTodayViewedQuotes(
   uid: string,
@@ -294,14 +307,13 @@ export async function saveTodayViewedQuotes(
     initFirebase();
     const db = getDb();
     if (!db) return;
-    const userRef = doc(db, 'users', uid);
-    await setDoc(userRef, { todayViewedQuoteIds: quoteIds, todayViewedDate: date }, { merge: true });
+    const ref = doc(db, 'users', uid, QUOTE_HISTORY, 'todayViewed');
+    await setDoc(ref, { quoteIds, date, lastUpdated: serverTimestamp() });
   } catch { /* silent */ }
 }
 
 /**
- * Saves the full list of all-time viewed quote IDs to the user's Firestore document.
- * Stored as users/{uid}.allViewedQuoteIds
+ * Saves the full list of all-time viewed quote IDs to users/{uid}/quoteHistory/allViewed
  */
 export async function saveAllViewedQuoteIds(
   uid: string,
@@ -311,18 +323,23 @@ export async function saveAllViewedQuoteIds(
     initFirebase();
     const db = getDb();
     if (!db) return;
-    const userRef = doc(db, 'users', uid);
-    await setDoc(userRef, { allViewedQuoteIds: quoteIds }, { merge: true });
+    const ref = doc(db, 'users', uid, QUOTE_HISTORY, 'allViewed');
+    await setDoc(ref, { quoteIds, lastUpdated: serverTimestamp() });
   } catch { /* silent */ }
 }
 
 /**
- * Fetches the all-time viewed quote IDs from Firestore.
+ * Fetches the all-time viewed quote IDs from users/{uid}/quoteHistory/allViewed
  */
 export async function fetchAllViewedQuoteIds(uid: string): Promise<string[]> {
   try {
-    const user = await getUserFromFirestore(uid);
-    return (user as any)?.allViewedQuoteIds ?? [];
+    initFirebase();
+    const db = getDb();
+    if (!db) return [];
+    const ref = doc(db, 'users', uid, QUOTE_HISTORY, 'allViewed');
+    const snap = await getDoc(ref);
+    if (snap.exists()) return (snap.data()?.quoteIds as string[]) ?? [];
+    return [];
   } catch {
     return [];
   }

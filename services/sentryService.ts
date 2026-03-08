@@ -9,8 +9,10 @@ export function initSentry(): void {
 
   try {
     const Sentry = require('@sentry/react-native');
+    const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN ?? '';
+    if (!dsn) return;
     Sentry.init({
-      dsn: 'YOUR_SENTRY_DSN',
+      dsn,
       enableAutoSessionTracking: true,
       tracesSampleRate: 0.2,
     });

@@ -16,8 +16,7 @@ import { getPraise } from '../../services/praiseService';
 import { saveQuoteForWidget } from '../../services/widgetService';
 import { logActivityCompletion } from '../../services/firestoreUserService';
 import { QUOTE_CONFIG } from '../../constants/config';
-import { useAdInterstitial } from '../../components/AdInterstitial';
-import { showAdForActivity } from '../../components/AdInterstitial';
+import { useAdInterstitial, showAdForActivity } from '../../components/AdInterstitial';
 import { todayString } from '../../utils/dateUtils';
 import QuoteCard, { CARD_HEIGHT } from '../../components/QuoteCard';
 import SpeakAlongSheet from '../../components/SpeakAlongSheet';
@@ -233,7 +232,7 @@ export default function HomeScreen() {
     showAdForActivity(isPremium);
     
     let praise: string;
-    try { praise = await getPraise(type, quoteText); }
+    try { praise = await getPraise(); }
     catch { praise = t('praise.fallback'); }
     setPraiseText(praise);
     setPraiseVisible(true);

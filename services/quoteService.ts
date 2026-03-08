@@ -89,6 +89,16 @@ async function saveRecentIds(ids: string[]): Promise<void> {
   }
 }
 
+/** O(n) Fisher-Yates shuffle — avoids the bias and O(n log n) cost of sort-based shuffles. */
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 function scoreQuote(categories: Record<string, number>, selectedCats: string[]): number {
   if (selectedCats.length === 0) return 0;
   return selectedCats.reduce((sum, cat) => sum + (categories[cat] ?? 0), 0);
@@ -98,11 +108,14 @@ function pickOneByWeight(
   candidates: typeof clientQuotes,
   selectedCats: string[],
 ): typeof clientQuotes[0] {
-  const scores = candidates.map((c) => scoreQuote(c.categories, selectedCats));
-  const maxScore = Math.max(...scores);
-  const maxIndices = scores
-    .map((s, i) => (s === maxScore ? i : -1))
-    .filter((i) => i >= 0);
+  // Single pass — no intermediate array allocations.
+  let maxScore = -Infinity;
+  let maxIndices: number[] = [];
+  for (let i = 0; i < candidates.length; i++) {
+    const s = scoreQuote(candidates[i].categories, selectedCats);
+    if (s > maxScore) { maxScore = s; maxIndices = [i]; }
+    else if (s === maxScore) { maxIndices.push(i); }
+  }
   const idx = maxIndices[Math.floor(Math.random() * maxIndices.length)];
   return candidates[idx];
 }
@@ -126,24 +139,15 @@ async function selectQuotes(count: number): Promise<Quote[]> {
 
   const result: Quote[] = [];
   const usedRecent: string[] = [...recentIds];
+  // Shuffle once — O(n) Fisher-Yates — reused across all picks in this batch.
+  const shuffled = shuffle(available);
 
   for (let i = 0; i < count; i++) {
-    let candidates: typeof clientQuotes = [];
-    let attempts = 0;
     const excludeSet = new Set(usedRecent);
-
-    while (candidates.length < CANDIDATE_COUNT && attempts < 50) {
-      const shuffled = [...available].sort(() => Math.random() - 0.5);
-      candidates = shuffled
-        .filter((q) => !excludeSet.has(q.id))
-        .slice(0, CANDIDATE_COUNT);
-      attempts++;
-      if (candidates.length >= CANDIDATE_COUNT) break;
-      excludeSet.clear();
-    }
-
+    let candidates = shuffled.filter((q) => !excludeSet.has(q.id)).slice(0, CANDIDATE_COUNT);
+    // If all remaining quotes are in the recent list, fall back to the full shuffled pool.
     if (candidates.length === 0) {
-      candidates = available.slice(0, Math.min(CANDIDATE_COUNT, available.length));
+      candidates = shuffled.slice(0, Math.min(CANDIDATE_COUNT, shuffled.length));
     }
 
     const chosen = pickOneByWeight(candidates, selectedCats);

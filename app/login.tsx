@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet,
-  KeyboardAvoidingView, Platform, ScrollView, Alert,
+  KeyboardAvoidingView, Platform, ScrollView,
   ActivityIndicator, Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -45,6 +45,13 @@ export default function LoginScreen() {
   const [loginErrorMessage, setLoginErrorMessage] = useState('');
   const [signupErrorModalVisible, setSignupErrorModalVisible] = useState(false);
   const [signupErrorMessage, setSignupErrorMessage] = useState('');
+  const [alertModal, setAlertModal] = useState<{
+    visible: boolean; title: string; message: string; onClose?: () => void;
+  }>({ visible: false, title: '', message: '' });
+
+  const showAlert = useCallback((title: string, message: string, onClose?: () => void) => {
+    setAlertModal({ visible: true, title, message, onClose });
+  }, []);
 
   const { response, promptAsync } = useGoogleAuth();
 
@@ -75,11 +82,11 @@ export default function LoginScreen() {
 
   const validateEmail = (emailToCheck: string): boolean => {
     if (!emailToCheck.trim()) {
-      Alert.alert(t('login.error'), t('login.enterEmail'));
+      showAlert(t('login.error'), t('login.enterEmail'));
       return false;
     }
     if (!EMAIL_REGEX.test(emailToCheck.trim())) {
-      Alert.alert(t('login.error'), t('login.invalidEmail'));
+      showAlert(t('login.error'), t('login.invalidEmail'));
       return false;
     }
     return true;
@@ -88,7 +95,7 @@ export default function LoginScreen() {
   const handleEmailLogin = async () => {
     if (!validateEmail(email)) return;
     if (!password.trim()) {
-      Alert.alert(t('login.error'), t('login.enterPassword'));
+      showAlert(t('login.error'), t('login.enterPassword'));
       return;
     }
 
@@ -109,8 +116,8 @@ export default function LoginScreen() {
         router.replace('/(tabs)');
       }
     } catch (e: any) {
-      const msg = e?.message || t('login.invalidCredentials');
-      setLoginErrorMessage(msg);
+      // Map all Firebase auth errors to a single localized message
+      setLoginErrorMessage(t('login.invalidCredentials'));
       setLoginErrorModalVisible(true);
     } finally {
       setLoading(false);
@@ -119,12 +126,12 @@ export default function LoginScreen() {
 
   const handleSignUp = async () => {
     if (!displayName.trim()) {
-      Alert.alert(t('login.error'), t('login.enterName'));
+      showAlert(t('login.error'), t('login.enterName'));
       return;
     }
     if (!validateEmail(email)) return;
     if (!password) {
-      Alert.alert(t('login.error'), t('login.enterPassword'));
+      showAlert(t('login.error'), t('login.enterPassword'));
       return;
     }
     if (password !== confirmPassword) {
@@ -133,7 +140,7 @@ export default function LoginScreen() {
       return;
     }
     if (password.length < 6) {
-      Alert.alert(t('login.error'), t('login.passwordTooShort'));
+      showAlert(t('login.error'), t('login.passwordTooShort'));
       return;
     }
 
@@ -157,11 +164,9 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await sendPasswordResetEmail(email.trim());
-      Alert.alert(t('login.emailSent'), t('login.resetInstructions'), [
-        { text: 'OK', onPress: () => setMode('login') },
-      ]);
+      showAlert(t('login.emailSent'), t('login.resetInstructions'), () => setMode('login'));
     } catch (e: any) {
-      Alert.alert(t('login.error'), e.message);
+      showAlert(t('login.error'), e.message);
     } finally {
       setLoading(false);
     }
@@ -176,10 +181,10 @@ export default function LoginScreen() {
         return;
       }
       await sendEmailVerification(user);
-      Alert.alert(t('login.emailSent'), t('login.verificationResent'));
+      showAlert(t('login.emailSent'), t('login.verificationResent'));
     } catch (e: any) {
       appLog.error('[login.handleResendVerification] Error', e);
-      Alert.alert(t('login.error'), e.message);
+      showAlert(t('login.error'), e.message);
     } finally {
       setResendingEmail(false);
     }
@@ -205,6 +210,28 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient colors={[colors.background, colors.surfaceAlt]} style={s.container}>
+      {/* Generic Alert Modal (replaces all Alert.alert calls) */}
+      <Modal transparent visible={alertModal.visible} animationType="fade" onRequestClose={() => setAlertModal(m => ({ ...m, visible: false }))}>
+        <View style={s.modalOverlay}>
+          <View style={[s.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={s.modalIconWrapper}>
+              <Ionicons name="information-circle-outline" size={48} color={colors.primary} />
+            </View>
+            <Text style={[s.modalTitle, { color: colors.textPrimary }]}>{alertModal.title}</Text>
+            <Text style={[s.modalDesc, { color: colors.textSecondary }]}>{alertModal.message}</Text>
+            <Pressable
+              style={[s.modalConfirmBtn, { backgroundColor: colors.primary }]}
+              onPress={() => {
+                setAlertModal(m => ({ ...m, visible: false }));
+                alertModal.onClose?.();
+              }}
+            >
+              <Text style={s.modalConfirmText}>{t('common.ok')}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {/* Signup Error Modal */}
       <Modal transparent visible={signupErrorModalVisible} animationType="fade" onRequestClose={() => setSignupErrorModalVisible(false)}>
         <View style={s.modalOverlay}>

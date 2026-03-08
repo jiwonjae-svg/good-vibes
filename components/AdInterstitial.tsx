@@ -12,6 +12,32 @@ const isExpoGo =
 
 let showAdFunction: (() => void) | null = null;
 let isAdLoaded = false;
+let ttsButtonCount = 0;
+
+/**
+ * Shows an interstitial ad after a follow-along activity is completed.
+ * Only fires in production builds (not Expo Go, not __DEV__).
+ * Premium users are exempt.
+ */
+export function showAdForActivity(isPremium: boolean): void {
+  if (isPremium || isExpoGo || __DEV__) return;
+  showAdFunction?.();
+}
+
+/**
+ * Call this every time the user presses the TTS read button.
+ * Shows an interstitial ad every 5 presses.
+ * Only fires in production builds (not Expo Go, not __DEV__).
+ * Premium users are exempt.
+ */
+export function onTTSPressed(isPremium: boolean): void {
+  if (isPremium || isExpoGo || __DEV__) return;
+  ttsButtonCount += 1;
+  if (ttsButtonCount >= 5) {
+    ttsButtonCount = 0;
+    showAdFunction?.();
+  }
+}
 
 async function initAds() {
   if (isExpoGo) {

@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { shareQuoteText } from '../services/shareService';
 import LoginPromptModal from './LoginPromptModal';
 import PremiumPromptModal from './PremiumPromptModal';
+import { onTTSPressed } from './AdInterstitial';
 
 const ACTION_BG_LIGHT = 'rgba(255,255,255,0.92)';
 const ACTION_BG_DARK = 'rgba(30,30,30,0.85)';
@@ -70,7 +71,14 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
   const quoteMarkColor = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(50,50,50,0.4)';
   const quoteTextColor = isDark ? '#ffffff' : '#2d2d2d';
 
-  const handleTTS = () => (isSpeaking ? stop() : speak(quote.text));
+  const handleTTS = () => {
+    if (isSpeaking) {
+      stop();
+    } else {
+      speak(quote.text);
+      onTTSPressed(isPremium);
+    }
+  };
   
   const handleBookmark = () => {
     if (isGuest) {

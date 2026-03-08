@@ -30,19 +30,19 @@ export async function requestNotificationPermission(): Promise<boolean> {
   }
 }
 
-export async function scheduleDailyReminder(): Promise<void> {
+export async function scheduleDailyReminder(quoteText?: string): Promise<boolean> {
   const Notifications = getNotifications();
-  if (!Notifications) return;
+  if (!Notifications) return false;
 
   try {
     await Notifications.cancelAllScheduledNotificationsAsync();
     const granted = await requestNotificationPermission();
-    if (!granted) return;
+    if (!granted) return false;
 
     await Notifications.scheduleNotificationAsync({
       content: {
         title: i18n.t('notification.title'),
-        body: i18n.t('notification.body'),
+        body: quoteText ?? i18n.t('notification.body'),
         sound: true,
       },
       trigger: {
@@ -51,7 +51,10 @@ export async function scheduleDailyReminder(): Promise<void> {
         minute: 0,
       },
     });
-  } catch { /* silent */ }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function cancelDailyReminder(): Promise<void> {

@@ -2,6 +2,7 @@ import {
   doc,
   setDoc,
   getDoc,
+  getDocs,
   collection,
   addDoc,
   serverTimestamp,
@@ -236,11 +237,9 @@ export async function logActivityCompletion(
 }
 
 // =============================================================================
-// Quote History sub-collection  (`quoteHistory`)
+// Viewed Quotes — date-keyed `quoteHistory/{YYYY-MM-DD}`
 // Structure:
-//   users/{uid}/quoteHistory/bookmarked  → { quoteIds: string[], lastUpdated }
-//   users/{uid}/quoteHistory/allViewed   → { quoteIds: string[], lastUpdated }
-//   users/{uid}/quoteHistory/todayViewed → { quoteIds: string[], date: string, lastUpdated }
+//   users/{uid}/quoteHistory/{YYYY-MM-DD}  → { quoteIds: string[], lastUpdated }
 // =============================================================================
 
 const QUOTE_HISTORY = 'quoteHistory';
@@ -291,57 +290,131 @@ export async function logQuoteBookmarked(
   await logActivity(uid, 'quote_bookmarked', { quoteId, isBookmarked });
 }
 
-// =============================================================================
-// Viewed Quotes (today + all-time)  —  see quoteHistory constant above
-// =============================================================================
-
 /**
- * Saves today's viewed quote IDs to users/{uid}/quoteHistory/todayViewed
+ * Saves viewed quote IDs for a specific date to users/{uid}/quoteHistory/{YYYY-MM-DD}
  */
-export async function saveTodayViewedQuotes(
+export async function saveViewedQuotesForDate(
   uid: string,
-  quoteIds: string[],
   date: string,
-): Promise<void> {
-  try {
-    initFirebase();
-    const db = getDb();
-    if (!db) return;
-    const ref = doc(db, 'users', uid, QUOTE_HISTORY, 'todayViewed');
-    await setDoc(ref, { quoteIds, date, lastUpdated: serverTimestamp() });
-  } catch { /* silent */ }
-}
-
-/**
- * Saves the full list of all-time viewed quote IDs to users/{uid}/quoteHistory/allViewed
- */
-export async function saveAllViewedQuoteIds(
-  uid: string,
   quoteIds: string[],
 ): Promise<void> {
   try {
     initFirebase();
     const db = getDb();
     if (!db) return;
-    const ref = doc(db, 'users', uid, QUOTE_HISTORY, 'allViewed');
+    const ref = doc(db, 'users', uid, QUOTE_HISTORY, date);
     await setDoc(ref, { quoteIds, lastUpdated: serverTimestamp() });
   } catch { /* silent */ }
 }
 
 /**
- * Fetches the all-time viewed quote IDs from users/{uid}/quoteHistory/allViewed
+ * Fetches viewed quote IDs for a specific date from users/{uid}/quoteHistory/{YYYY-MM-DD}
  */
-export async function fetchAllViewedQuoteIds(uid: string): Promise<string[]> {
+export async function fetchViewedQuotesForDate(uid: string, date: string): Promise<string[]> {
   try {
     initFirebase();
     const db = getDb();
     if (!db) return [];
-    const ref = doc(db, 'users', uid, QUOTE_HISTORY, 'allViewed');
+    const ref = doc(db, 'users', uid, QUOTE_HISTORY, date);
     const snap = await getDoc(ref);
     if (snap.exists()) return (snap.data()?.quoteIds as string[]) ?? [];
     return [];
   } catch {
     return [];
+  }
+}
+
+// =============================================================================
+// Streak  (stored on the main user doc as `users/{uid}.streak`)
+// =============================================================================
+
+/**
+ * Saves the current streak to Firestore.
+ */
+export async function saveStreakToFirestore(
+  uid: string,
+  currentStreak: number,
+  lastActiveDate: string,
+): Promise<void> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return;
+    const userRef = doc(db, 'users', uid);
+    await setDoc(userRef, { streak: { current: currentStreak, lastActiveDate } }, { merge: true });
+  } catch { /* silent */ }
+}
+
+/**
+ * Fetches the saved streak from Firestore.
+ * Returns null when no streak data exists yet.
+ */
+export async function fetchStreakFromFirestore(
+  uid: string,
+): Promise<{ current: number; lastActiveDate: string } | null> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return null;
+    const userRef = doc(db, 'users', uid);
+    const snap = await getDoc(userRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      if (data?.streak) return data.streak as { current: number; lastActiveDate: string };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// =============================================================================
+// Grass History  (`users/{uid}/grassHistory/{YYYY-MM-DD}`)
+// =============================================================================
+
+export interface GrassDay {
+  date: string;
+  speakCount: number;
+  writeCount: number;
+  typeCount: number;
+  speakQuotes: Array<{ id: string; text: string; timestamp: number }>;
+  writeQuotes: Array<{ id: string; text: string; timestamp: number }>;
+  typeQuotes: Array<{ id: string; text: string; timestamp: number }>;
+}
+
+const GRASS_HISTORY = 'grassHistory';
+
+/**
+ * Saves a single day's grass activity to users/{uid}/grassHistory/{YYYY-MM-DD}
+ */
+export async function saveGrassDay(uid: string, date: string, grassDay: GrassDay): Promise<void> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return;
+    const ref = doc(db, 'users', uid, GRASS_HISTORY, date);
+    await setDoc(ref, grassDay);
+  } catch { /* silent */ }
+}
+
+/**
+ * Fetches all grass history for a user from users/{uid}/grassHistory/
+ * Returns a record keyed by date string.
+ */
+export async function fetchGrassData(uid: string): Promise<Record<string, GrassDay>> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return {};
+    const colRef = collection(db, 'users', uid, GRASS_HISTORY);
+    const snap = await getDocs(colRef);
+    const result: Record<string, GrassDay> = {};
+    snap.forEach((docSnap) => {
+      result[docSnap.id] = docSnap.data() as GrassDay;
+    });
+    return result;
+  } catch {
+    return {};
   }
 }
 

@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import i18n from '../i18n';
 import type { LanguageCode } from '../i18n';
 import { clearQuoteCache } from '../services/quoteService';
-import { updatePremiumStatus, fetchPremiumStatus, logActivity, saveBookmarkedQuotes, fetchBookmarkedQuotes, logQuoteBookmarked, saveTodayViewedQuotes, saveAllViewedQuoteIds, fetchAllViewedQuoteIds, saveUserSettings, fetchUserSettings } from '../services/firestoreUserService';
+import { updatePremiumStatus, fetchPremiumStatus, logActivity, saveBookmarkedQuotes, fetchBookmarkedQuotes, logQuoteBookmarked, saveViewedQuotesForDate, fetchViewedQuotesForDate, saveStreakToFirestore, fetchStreakFromFirestore, saveUserSettings, fetchUserSettings } from '../services/firestoreUserService';
 
 interface UserState {
   isPremium: boolean;
@@ -264,12 +264,16 @@ export const useUserStore = create<UserState>((set, get) => ({
   setAuth: async (user) => {
     if (user) {
       set({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
-      
-      const [premiumStatus, cloudBookmarks, cloudAllViewed, cloudSettings] = await Promise.all([
+
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+      const [premiumStatus, cloudBookmarks, cloudTodayViewed, cloudSettings, cloudStreak] = await Promise.all([
         fetchPremiumStatus(user.uid),
         fetchBookmarkedQuotes(user.uid),
-        fetchAllViewedQuoteIds(user.uid),
+        fetchViewedQuotesForDate(user.uid, todayStr),
         fetchUserSettings(user.uid),
+        fetchStreakFromFirestore(user.uid),
       ]);
       
       if (premiumStatus) {
@@ -282,13 +286,24 @@ export const useUserStore = create<UserState>((set, get) => ({
         set({ bookmarkedQuoteIds: merged });
       }
 
-      // Merge all-time viewed quote IDs (cloud is source of truth when larger)
-      if (cloudAllViewed.length > 0) {
-        const localAll = get().allViewedQuoteIds;
-        const merged = [...new Set([...localAll, ...cloudAllViewed])];
-        if (merged.length > localAll.length) {
-          set({ allViewedQuoteIds: merged });
-          AsyncStorage.setItem(ALL_VIEWED_KEY, JSON.stringify(merged)).catch(() => {});
+      // Restore today's viewed quotes from cloud
+      if (cloudTodayViewed.length > 0) {
+        const localToday = get().todayViewedDate === todayStr ? get().todayViewedQuoteIds : [];
+        // Cloud IDs are plain q_ids; local entries may be "q_id|author|source|text" format
+        const localIds = localToday.map((q) => q.split('|')[0]);
+        const allIds = [...new Set([...localIds, ...cloudTodayViewed])];
+        // Keep local entries (with full metadata) where available, or use plain id for cloud-only entries
+        const localMap = new Map(localToday.map((e) => [e.split('|')[0], e]));
+        const merged = allIds.map((id) => localMap.get(id) ?? id);
+        set({ todayViewedQuoteIds: merged, todayViewedDate: todayStr });
+        AsyncStorage.setItem(VIEWED_QUOTES_KEY, JSON.stringify({ ids: merged, date: todayStr })).catch(() => {});
+      }
+
+      // Restore streak from cloud (cloud wins if higher)
+      if (cloudStreak) {
+        const localStreak = get().currentStreak;
+        if (cloudStreak.current > localStreak) {
+          set({ currentStreak: cloudStreak.current, lastActiveDate: cloudStreak.lastActiveDate });
         }
       }
 
@@ -314,6 +329,8 @@ export const useUserStore = create<UserState>((set, get) => ({
         todayViewedQuoteIds: [],
         todayViewedDate: null,
         allViewedQuoteIds: [],
+        currentStreak: 0,
+        lastActiveDate: null,
       });
       // Clear local viewed-quotes caches
       AsyncStorage.removeItem(VIEWED_QUOTES_KEY).catch(() => {});
@@ -323,7 +340,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   },
 
   updateStreak: async (todayStr) => {
-    const { lastActiveDate, currentStreak } = get();
+    const { lastActiveDate, currentStreak, uid } = get();
     if (lastActiveDate === todayStr) return;
 
     const yesterday = new Date();
@@ -333,6 +350,8 @@ export const useUserStore = create<UserState>((set, get) => ({
     const newStreak = lastActiveDate === yStr ? currentStreak + 1 : 1;
     set({ currentStreak: newStreak, lastActiveDate: todayStr });
     await get().persistUser();
+    // Sync to Firestore (fire-and-forget)
+    if (uid) saveStreakToFirestore(uid, newStreak, todayStr).catch(() => {});
   },
 
   addViewedQuote: async (quoteId, quoteText, author, source, todayStr) => {
@@ -359,13 +378,10 @@ export const useUserStore = create<UserState>((set, get) => ({
     if (needsAllViewedUpdate) {
       AsyncStorage.setItem(ALL_VIEWED_KEY, JSON.stringify(newAllViewed)).catch(() => {});
     }
-    // Persist to Firebase (fire-and-forget)
+    // Persist to Firebase (fire-and-forget) — save today's viewed IDs keyed by date
     if (uid) {
       const todayIdsOnly = newIds.map((q) => q.split('|')[0]);
-      saveTodayViewedQuotes(uid, todayIdsOnly, todayStr).catch(() => {});
-      if (needsAllViewedUpdate) {
-        saveAllViewedQuoteIds(uid, newAllViewed).catch(() => {});
-      }
+      saveViewedQuotesForDate(uid, todayStr, todayIdsOnly).catch(() => {});
     }
   },
 

@@ -12,6 +12,8 @@ import { useUserStore } from '../../stores/useUserStore';
 import { LANGUAGES, type LanguageCode } from '../../i18n';
 import { useGoogleAuth, signInWithGoogle, logOut, onAuthChange } from '../../services/authService';
 import { scheduleDailyReminder, cancelDailyReminder } from '../../services/notificationService';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const clientQuotes: Array<{ quote: string }> = require('../../data/quotesClient.json');
 import LanguagePickerModal from '../../components/LanguagePickerModal';
 import CategoryPickerModal from '../../components/CategoryPickerModal';
 
@@ -67,10 +69,15 @@ export default function SettingsScreen() {
   };
 
   const handleNotification = async (enabled: boolean) => {
-    if (isGuest || !isPremium) return;
-    if (enabled) await scheduleDailyReminder();
-    else await cancelDailyReminder();
-    setDailyReminder(enabled);
+    if (isGuest) return;
+    if (enabled) {
+      const randomQuote = clientQuotes[Math.floor(Math.random() * clientQuotes.length)];
+      const granted = await scheduleDailyReminder(randomQuote?.quote);
+      setDailyReminder(granted);
+    } else {
+      await cancelDailyReminder();
+      setDailyReminder(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -129,10 +136,6 @@ export default function SettingsScreen() {
               <View style={s.benefitItem}>
                 <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
                 <Text style={[s.benefitText, { color: colors.textPrimary }]}>{t('premium.benefit2')}</Text>
-              </View>
-              <View style={s.benefitItem}>
-                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-                <Text style={[s.benefitText, { color: colors.textPrimary }]}>{t('premium.benefit3')}</Text>
               </View>
               <View style={s.benefitItem}>
                 <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
@@ -305,25 +308,22 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Notifications - Premium feature */}
+        {/* Notifications */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>{t('settings.notifications')}</Text>
           <View style={s.card}>
-            <View style={[s.row, (isGuest || !isPremium) && s.disabledRow]}>
+            <View style={[s.row, isGuest && s.disabledRow]}>
               <View style={s.rowLeft}>
-                <Ionicons name="notifications-outline" size={22} color={(isGuest || !isPremium) ? colors.textMuted : colors.textSecondary} />
+                <Ionicons name="notifications-outline" size={22} color={isGuest ? colors.textMuted : colors.textSecondary} />
                 <View>
-                  <Text style={[s.rowTitle, (isGuest || !isPremium) && { color: colors.textMuted }]}>{t('settings.dailyReminder')}</Text>
-                  <Text style={[s.rowSubtitle, { color: (isGuest || !isPremium) ? colors.textMuted : colors.textSecondary }]}>
-                    {isGuest ? t('settings.loginRequired') : !isPremium ? t('settings.premiumRequired') : t('settings.dailyReminderDesc')}
+                  <Text style={[s.rowTitle, isGuest && { color: colors.textMuted }]}>{t('settings.dailyReminder')}</Text>
+                  <Text style={[s.rowSubtitle, { color: isGuest ? colors.textMuted : colors.textSecondary }]}>
+                    {isGuest ? t('settings.loginRequired') : t('settings.dailyReminderDesc')}
                   </Text>
                 </View>
               </View>
-              {isGuest || !isPremium ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Ionicons name="diamond-outline" size={16} color={colors.primary} />
-                  <Ionicons name="lock-closed" size={16} color={colors.textMuted} />
-                </View>
+              {isGuest ? (
+                <Ionicons name="lock-closed" size={16} color={colors.textMuted} />
               ) : (
                 <Switch value={dailyReminderEnabled} onValueChange={handleNotification} trackColor={{ false: colors.grass0, true: colors.primaryLight }} thumbColor={dailyReminderEnabled ? colors.primary : '#f4f3f4'} />
               )}

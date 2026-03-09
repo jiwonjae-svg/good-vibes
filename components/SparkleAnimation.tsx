@@ -5,95 +5,96 @@ import { useThemeColors } from '../hooks/useThemeColors';
 const SPARKLE_SOURCE = require('../assets/sparkle-elem-icon.png');
 
 const CONTAINER_W = 160;
-const CONTAINER_H = 90;
+const CONTAINER_H = 100;
 
 /** Random integer in [lo, hi] inclusive */
 function ri(lo: number, hi: number): number {
   return lo + Math.floor(Math.random() * (hi - lo + 1));
 }
 
-/**
- * Returns a pixel size for the given particle slot.
- * isLarge: 38–50 px
- * smallIndex 0: 20–26 px   (medium-small)
- * smallIndex 1: 14–19 px   (small)
- * smallIndex 2: 10–14 px   (tiny)
- */
-function getSize(isLarge: boolean, si = 0): number {
-  if (isLarge) return ri(38, 50);
-  return [ri(20, 26), ri(14, 19), ri(10, 14)][si];
-}
-
-/** Returns a random {x, y} spawn position that keeps the particle inside the container */
-function randomPos(sz: number): { x: number; y: number } {
+/** Returns a random spawn state: random size + random position inside container */
+function randomSpawn(): { x: number; y: number; size: number } {
+  const size = ri(10, 50);
   return {
-    x: ri(0, Math.max(0, CONTAINER_W - sz)),
-    y: ri(0, Math.max(0, CONTAINER_H - sz)),
+    size,
+    x: ri(0, Math.max(0, CONTAINER_W - size)),
+    y: ri(0, Math.max(0, CONTAINER_H - size)),
   };
-}
-
-interface SparkleProps {
-  isLarge: boolean;
-  smallIndex?: number;
-  initDelay: number;
-  tintColor: string;
 }
 
 /**
  * A single sparkle particle.
- * Behaviour:
- *   1. Gradually appear while drifting upward.
- *   2. Continue upward while gradually disappearing.
- *   3. Once fully invisible, teleport to a new random position with a new
- *      random size, then wait a brief random pause before repeating.
+ *
+ * Lifecycle:
+ *  - Born at a random position with a random size.
+ *  - Has a fixed lifetime (randomly chosen per cycle).
+ *  - Opacity curve (in parallel with movement — never blocking each other):
+ *      0 → 1 during   0 … lifetime×¼   (fade in)
+ *      1 → 1 during   lifetime×¼ … lifetime×¾  (hold)
+ *      1 → 0 during   lifetime×¾ … lifetime     (fade out)
+ *  - Movement: drifts upward across the full lifetime (parallel to opacity).
+ *  - When lifetime ends, respawns at a new random position/size.
  */
-function SingleSparkle({ isLarge, smallIndex = 0, initDelay, tintColor }: SparkleProps) {
+function SingleSparkle({ initDelay, tintColor }: { initDelay: number; tintColor: string }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(0)).current;
   const mounted = useRef(true);
   const animRef = useRef<Animated.CompositeAnimation | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [spawn, setSpawn] = useState(() => {
-    const sz = getSize(isLarge, smallIndex);
-    return { ...randomPos(sz), size: sz };
-  });
+  const [spawn, setSpawn] = useState(randomSpawn);
 
   const run = useCallback(() => {
     if (!mounted.current) return;
+
+    // Reset to invisible & un-translated at current spawn position
     opacity.setValue(0);
     translateY.setValue(0);
 
-    const drift = ri(28, 55);    // total upward distance
-    const riseMs = ri(480, 880);  // appear + first half of travel
-    const fadeMs = ri(450, 800);  // fade-out + second half of travel
+    const lifetime = ri(2000, 3800);          // total lifespan in ms
+    const drift    = ri(18, 48);              // upward pixel distance over lifetime
+    const peak     = 0.85 + Math.random() * 0.1; // slight peak opacity variation
 
-    const a = Animated.sequence([
-      // Phase 1: fade in while rising
-      Animated.parallel([
-        Animated.timing(opacity,     { toValue: 0.9,         duration: riseMs, useNativeDriver: true }),
-        Animated.timing(translateY,  { toValue: -(drift * 0.5), duration: riseMs, useNativeDriver: true }),
-      ]),
-      // Phase 2: fade out while continuing to rise
-      Animated.parallel([
-        Animated.timing(opacity,     { toValue: 0,    duration: fadeMs, useNativeDriver: true }),
-        Animated.timing(translateY,  { toValue: -drift, duration: fadeMs, useNativeDriver: true }),
-      ]),
+    // ── Opacity: three phases in sequence ──────────────────────────────────
+    const opacityAnim = Animated.sequence([
+      Animated.timing(opacity, {
+        toValue: peak,
+        duration: lifetime * 0.25,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: peak,
+        duration: lifetime * 0.50,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: lifetime * 0.25,
+        useNativeDriver: true,
+      }),
     ]);
 
-    animRef.current = a;
-    a.start(({ finished }) => {
+    // ── Movement: upward drift over the full lifetime (runs in parallel) ───
+    const moveAnim = Animated.timing(translateY, {
+      toValue: -drift,
+      duration: lifetime,
+      useNativeDriver: true,
+    });
+
+    // ── Start both simultaneously ───────────────────────────────────────────
+    const anim = Animated.parallel([opacityAnim, moveAnim]);
+    animRef.current = anim;
+
+    anim.start(({ finished }) => {
       if (finished && mounted.current) {
-        // Reset the Y offset synchronously BEFORE the React state update so the
-        // particle doesn't briefly flash at an unexpected vertical position.
+        // Opacity is already 0; reset translateY before re-render so there's
+        // no visible jump when the new spawn position is applied.
         translateY.setValue(0);
-        const sz = getSize(isLarge, smallIndex);
-        setSpawn({ ...randomPos(sz), size: sz });
-        // Short pause before repeating — small enough to feel continuous.
-        timerRef.current = setTimeout(run, ri(60, 200));
+        setSpawn(randomSpawn());
+        timerRef.current = setTimeout(run, ri(40, 160));
       }
     });
-  }, [isLarge, smallIndex]);
+  }, []);
 
   useEffect(() => {
     mounted.current = true;
@@ -124,15 +125,17 @@ function SingleSparkle({ isLarge, smallIndex = 0, initDelay, tintColor }: Sparkl
   );
 }
 
-/** Four sparkles: 1 large + 3 progressively smaller, staggered start times. */
+/** Six sparkles with staggered initial delays for a lively, continuous feel. */
 export default function SparkleAnimation() {
   const colors = useThemeColors();
   return (
     <View style={styles.container}>
-      <SingleSparkle isLarge                  initDelay={0}    tintColor={colors.primary} />
-      <SingleSparkle isLarge={false} smallIndex={0} initDelay={300}  tintColor={colors.primary} />
-      <SingleSparkle isLarge={false} smallIndex={1} initDelay={680}  tintColor={colors.primary} />
-      <SingleSparkle isLarge={false} smallIndex={2} initDelay={1080} tintColor={colors.primary} />
+      <SingleSparkle initDelay={0}    tintColor={colors.primary} />
+      <SingleSparkle initDelay={280}  tintColor={colors.primary} />
+      <SingleSparkle initDelay={620}  tintColor={colors.primary} />
+      <SingleSparkle initDelay={1050} tintColor={colors.primary} />
+      <SingleSparkle initDelay={1480} tintColor={colors.primary} />
+      <SingleSparkle initDelay={1900} tintColor={colors.primary} />
     </View>
   );
 }

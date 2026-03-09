@@ -20,7 +20,6 @@ import CategoryPickerModal from '../../components/CategoryPickerModal';
 export default function SettingsScreen() {
   const { t } = useTranslation();
   const colors = useThemeColors();
-  const router = useRouter();
   const {
     isPremium, setPremium,
     isDarkMode, setDarkMode,

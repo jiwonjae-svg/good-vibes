@@ -74,9 +74,14 @@ export default function LoginScreen() {
   const s = makeStyles(colors);
 
   return (
-    <LinearGradient colors={[colors.background, colors.surfaceAlt]} style={s.container}>
+    <LinearGradient
+      colors={[colors.background, colors.primary + '22', colors.surfaceAlt]}
+      start={{ x: 0.15, y: 0 }}
+      end={{ x: 0.85, y: 1 }}
+      style={s.container}
+    >
       {/* Header: logo + sparkle */}
-      <View style={[s.header, { paddingTop: insets.top + Spacing.xxl }]}>
+      <View style={[s.header, { paddingTop: insets.top + Spacing.xxl + Spacing.lg }]}>
         <View style={s.sparkleWrapper}>
           <SparkleAnimation />
         </View>

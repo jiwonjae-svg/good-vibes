@@ -9,7 +9,7 @@ import { useThemeColors } from '../../hooks/useThemeColors';
 import { Fonts, FontSize, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { useUserStore } from '../../stores/useUserStore';
 import { LANGUAGES, type LanguageCode } from '../../i18n';
-import { useGoogleAuth, signInWithGoogle, logOut, onAuthChange } from '../../services/authService';
+import { signInWithGoogleNative, logOut, onAuthChange } from '../../services/authService';
 import { logActivity } from '../../services/firestoreUserService';
 import { scheduleDailyReminder, cancelDailyReminder } from '../../services/notificationService';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -33,21 +33,9 @@ export default function SettingsScreen() {
   } = useUserStore();
 
   const isGuest = !uid;
-  const { response, promptAsync } = useGoogleAuth();
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [catModalVisible, setCatModalVisible] = useState(false);
   const [premiumModalVisible, setPremiumModalVisible] = useState(false);
-
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const idToken = response.authentication?.idToken;
-      if (idToken) {
-        signInWithGoogle(idToken).then((user) => {
-          if (user) setAuth({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
-        });
-      }
-    }
-  }, [response]);
 
   useEffect(() => {
     const unsub = onAuthChange((user) => {
@@ -201,7 +189,13 @@ export default function SettingsScreen() {
                       borderColor: isDarkMode ? colors.grass0 : '#dadce0',
                     },
                   ]}
-                  onPress={() => promptAsync()}
+                  onPress={() => {
+                    signInWithGoogleNative()
+                      .then((user) => {
+                        if (user) setAuth({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
+                      })
+                      .catch((err) => console.error('[settings] Google sign-in failed:', err));
+                  }}
                 >
                   <Ionicons name="logo-google" size={20} color="#EA4335" />
                   <Text style={[s.loginBtnText, { color: colors.textPrimary }]}>{t('settings.loginWithGoogle')}</Text>

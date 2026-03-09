@@ -7,6 +7,7 @@ import * as NavigationBar from 'expo-navigation-bar';
 import '../i18n';
 import { initFirebase } from '../services/firebaseConfig';
 import { initSentry } from '../services/sentryService';
+import { configureGoogleSignIn } from '../services/authService';
 import { initNotificationHandler } from '../services/notificationService';
 import { useGrassStore } from '../stores/useGrassStore';
 import { useUserStore } from '../stores/useUserStore';
@@ -32,6 +33,7 @@ export default function RootLayout() {
   useEffect(() => {
     initSentry();
     initFirebase();
+    configureGoogleSignIn();
     initNotificationHandler();
     loadGrass();
     loadUser();

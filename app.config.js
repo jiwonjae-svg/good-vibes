@@ -69,6 +69,7 @@ export default {
         },
       ],
       "expo-web-browser",
+      "@react-native-google-signin/google-signin",
       ["expo-navigation-bar", { visibility: "visible" }],
       "@react-native-firebase/app",
       [

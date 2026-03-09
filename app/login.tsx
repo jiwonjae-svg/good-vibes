@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, Pressable, StyleSheet, ActivityIndicator,
 } from 'react-native';
@@ -10,7 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { FontSize, Spacing, BorderRadius, Fonts } from '../constants/theme';
 import { useUserStore } from '../stores/useUserStore';
-import { useGoogleAuth, signInWithGoogle } from '../services/authService';
+import { signInWithGoogleNative } from '../services/authService';
 import SparkleAnimation from '../components/SparkleAnimation';
 
 export default function LoginScreen() {
@@ -26,25 +26,11 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const { response, promptAsync } = useGoogleAuth();
-
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const idToken = response.authentication?.idToken;
-      if (idToken) {
-        handleGoogleSignIn(idToken);
-      }
-    } else if (response?.type === 'error') {
-      setErrorMsg(t('login.signInFailed'));
-      setLoading(false);
-    }
-  }, [response]);
-
-  const handleGoogleSignIn = async (idToken: string) => {
+  const handleGoogleSignIn = async () => {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const user = await signInWithGoogle(idToken);
+      const user = await signInWithGoogleNative();
       if (user) {
         await setAuth({
           uid: user.uid,
@@ -57,8 +43,10 @@ export default function LoginScreen() {
           router.replace('/(tabs)');
         }
       } else {
-        setErrorMsg(t('login.signInFailed'));
+        // user cancelled — no error message needed
       }
+    } catch {
+      setErrorMsg(t('login.signInFailed'));
     } finally {
       setLoading(false);
     }
@@ -103,11 +91,7 @@ export default function LoginScreen() {
               borderColor: isDarkMode ? colors.grass0 : '#dadce0',
             },
           ]}
-          onPress={() => {
-            setLoading(true);
-            setErrorMsg(null);
-            promptAsync();
-          }}
+          onPress={handleGoogleSignIn}
           disabled={loading}
         >
           {loading ? (

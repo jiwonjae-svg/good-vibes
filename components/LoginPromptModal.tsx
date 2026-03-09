@@ -3,11 +3,10 @@ import {
   View, Text, Modal, Pressable, StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { Fonts, FontSize, Spacing, BorderRadius, Shadows } from '../constants/theme';
-import { useGoogleAuth, signInWithGoogle } from '../services/authService';
+import { signInWithGoogleNative } from '../services/authService';
 import { useUserStore } from '../stores/useUserStore';
 
 interface LoginPromptModalProps {
@@ -25,32 +24,19 @@ export default function LoginPromptModal({
 }: LoginPromptModalProps) {
   const { t } = useTranslation();
   const colors = useThemeColors();
-  const router = useRouter();
-  const { response, promptAsync } = useGoogleAuth();
   const setAuth = useUserStore((s) => s.setAuth);
   const isDarkMode = useUserStore((s) => s.isDarkMode);
 
-  React.useEffect(() => {
-    if (response?.type === 'success') {
-      const idToken = response.authentication?.idToken;
-      if (idToken) {
-        signInWithGoogle(idToken).then((user) => {
-          if (user) {
-            setAuth({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
-            onClose();
-          }
-        });
+  const handleGoogleLogin = async () => {
+    try {
+      const user = await signInWithGoogleNative();
+      if (user) {
+        setAuth({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
+        onClose();
       }
+    } catch {
+      // sign-in failed — modal stays open so user can retry
     }
-  }, [response]);
-
-  const handleGoogleLogin = () => {
-    promptAsync();
-  };
-
-  const handleEmailLogin = () => {
-    onClose();
-    router.push('/login');
   };
 
   return (
@@ -80,14 +66,6 @@ export default function LoginPromptModal({
           >
             <Ionicons name="logo-google" size={20} color="#EA4335" />
             <Text style={[styles.btnText, { color: colors.textPrimary }]}>{t('settings.loginWithGoogle')}</Text>
-          </Pressable>
-
-          <Pressable
-            style={[styles.emailBtn, { backgroundColor: colors.primary }]}
-            onPress={handleEmailLogin}
-          >
-            <Ionicons name="mail-outline" size={20} color="#fff" />
-            <Text style={[styles.btnText, { color: '#fff' }]}>{t('settings.loginWithEmail')}</Text>
           </Pressable>
 
           <Pressable style={styles.laterBtn} onPress={onClose}>
@@ -145,16 +123,6 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     borderRadius: BorderRadius.md,
     borderWidth: 1.5,
-    marginBottom: Spacing.sm,
-  },
-  emailBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-    width: '100%',
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
     marginBottom: Spacing.md,
   },
   btnText: {

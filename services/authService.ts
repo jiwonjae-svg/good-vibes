@@ -5,51 +5,56 @@
   onAuthStateChanged,
   type User,
 } from 'firebase/auth';
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
+import {
+  GoogleSignin,
+  statusCodes,
+} from '@react-native-google-signin/google-signin';
 import { getFirebaseAuth } from './firebaseConfig';
 import {
   syncUserToFirestore,
   logLoginActivity,
 } from './firestoreUserService';
 
-WebBrowser.maybeCompleteAuthSession();
-
 // =============================================================================
-// Google OAuth Client IDs from Environment
+// Configure Google Sign-In (call once at app startup)
 // =============================================================================
 
-function getGoogleClientIds() {
-  return {
+export function configureGoogleSignIn() {
+  GoogleSignin.configure({
     webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '',
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '',
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? '',
-  };
-}
-
-export function useGoogleAuth() {
-  const clientIds = getGoogleClientIds();
-
-  if (!clientIds.webClientId) {
-    console.warn(
-      '[authService] Google OAuth not configured. Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in .env',
-    );
-  }
-
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    clientId: clientIds.webClientId,
-    iosClientId: clientIds.iosClientId,
-    androidClientId: clientIds.androidClientId,
+    scopes: ['email', 'profile'],
+    offlineAccess: true,
   });
-
-  return { request, response, promptAsync };
 }
 
 // =============================================================================
-// Google Sign In
+// Native Google Sign-In → shows OS account picker → Firebase credential
 // =============================================================================
 
-export async function signInWithGoogle(idToken: string): Promise<User | null> {
+export async function signInWithGoogleNative(): Promise<User | null> {
+  try {
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    const userInfo = await GoogleSignin.signIn();
+    const idToken = userInfo.data?.idToken;
+    if (!idToken) {
+      console.error('[authService] No idToken from Google Sign-In');
+      return null;
+    }
+    return await _firebaseSignIn(idToken);
+  } catch (error: any) {
+    if (
+      error.code === statusCodes.SIGN_IN_CANCELLED ||
+      error.code === statusCodes.IN_PROGRESS
+    ) {
+      return null; // user cancelled or already in progress — not an error
+    }
+    console.error('[authService] Native Google Sign-In failed:', error);
+    throw error; // re-throw so callers can show error UI
+  }
+}
+
+// Internal: exchange Google idToken for a Firebase user
+async function _firebaseSignIn(idToken: string): Promise<User | null> {
   try {
     const auth = getFirebaseAuth();
     if (!auth) return null;
@@ -63,46 +68,38 @@ export async function signInWithGoogle(idToken: string): Promise<User | null> {
 
     return user;
   } catch (error) {
-    console.error('[authService] Google sign in failed:', error);
+    console.error('[authService] Firebase sign-in with Google credential failed:', error);
     return null;
   }
 }
 
 // =============================================================================
-// Sign Out
+// Sign Out — clears both Firebase session AND cached Google account
 // =============================================================================
 
 export async function logOut(): Promise<void> {
   try {
     const auth = getFirebaseAuth();
-    if (!auth) return;
-    await signOut(auth);
+    if (auth) await signOut(auth);
+    // Also clear the GoogleSignin cached account so the picker shows on next login
+    await GoogleSignin.signOut();
   } catch {
-    /* silent */
+    // silent
   }
 }
 
 // =============================================================================
-// Auth State Listener
+// Auth state listener
 // =============================================================================
 
-export function onAuthChange(
-  callback: (user: User | null) => void,
-): () => void {
-  try {
-    const auth = getFirebaseAuth();
-    if (!auth) return () => {};
-    return onAuthStateChanged(auth, callback);
-  } catch {
-    return () => {};
-  }
+export function onAuthChange(callback: (user: User | null) => void) {
+  const auth = getFirebaseAuth();
+  if (!auth) return () => {};
+  return onAuthStateChanged(auth, callback);
 }
 
 export function getCurrentUser(): User | null {
-  try {
-    const auth = getFirebaseAuth();
-    return auth?.currentUser ?? null;
-  } catch {
-    return null;
-  }
+  const auth = getFirebaseAuth();
+  return auth?.currentUser ?? null;
 }
+

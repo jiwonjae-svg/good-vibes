@@ -11,6 +11,7 @@ import { useThemeColors } from '../hooks/useThemeColors';
 import { FontSize, Spacing, BorderRadius, Fonts } from '../constants/theme';
 import { useUserStore } from '../stores/useUserStore';
 import { signInWithGoogleNative } from '../services/authService';
+import { appLog } from '../services/logger';
 import SparkleAnimation from '../components/SparkleAnimation';
 
 export default function LoginScreen() {
@@ -29,9 +30,11 @@ export default function LoginScreen() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setErrorMsg(null);
+    appLog.log('[login] Google sign-in button pressed');
     try {
       const user = await signInWithGoogleNative();
       if (user) {
+        appLog.log('[login] signInWithGoogleNative returned user', { uid: user.uid });
         await setAuth({
           uid: user.uid,
           displayName: user.displayName,
@@ -39,13 +42,19 @@ export default function LoginScreen() {
           photoURL: user.photoURL,
         });
         await setAuthCompleted();
+        appLog.log('[login] setAuth + setAuthCompleted done, navigating');
         if (hasSeenOnboarding) {
           router.replace('/(tabs)');
         }
       } else {
+        appLog.log('[login] signInWithGoogleNative returned null (user cancelled)');
         // user cancelled — no error message needed
       }
-    } catch {
+    } catch (err: any) {
+      appLog.error('[login] signInWithGoogleNative threw', {
+        code: err?.code,
+        message: err?.message,
+      });
       setErrorMsg(t('login.signInFailed'));
     } finally {
       setLoading(false);

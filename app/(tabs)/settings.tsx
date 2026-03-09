@@ -16,6 +16,7 @@ import { scheduleDailyReminder, cancelDailyReminder } from '../../services/notif
 const clientQuotes: Array<{ quote: string }> = require('../../data/quotesClient.json');
 import LanguagePickerModal from '../../components/LanguagePickerModal';
 import CategoryPickerModal from '../../components/CategoryPickerModal';
+import LogStatusModal from '../../components/LogStatusModal';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
@@ -36,6 +37,7 @@ export default function SettingsScreen() {
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [catModalVisible, setCatModalVisible] = useState(false);
   const [premiumModalVisible, setPremiumModalVisible] = useState(false);
+  const [logModalVisible, setLogModalVisible] = useState(false);
 
   useEffect(() => {
     const unsub = onAuthChange((user) => {
@@ -96,6 +98,7 @@ export default function SettingsScreen() {
         onSelect={setCategories}
         onClose={() => setCatModalVisible(false)}
       />
+      <LogStatusModal visible={logModalVisible} onClose={() => setLogModalVisible(false)} />
 
       {/* Premium Modal */}}
       <Modal
@@ -346,6 +349,17 @@ export default function SettingsScreen() {
               </View>
               <Text style={s.rowValue}>DailyGlow Team</Text>
             </View>
+            <View style={s.divider} />
+            <Pressable style={s.row} onPress={() => setLogModalVisible(true)}>
+              <View style={s.rowLeft}>
+                <Ionicons name="terminal-outline" size={22} color={colors.textSecondary} />
+                <View>
+                  <Text style={s.rowTitle}>{t('settings.logStatus')}</Text>
+                  <Text style={s.rowSubtitle}>{t('settings.logStatusDesc')}</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            </Pressable>
           </View>
         </View>
 

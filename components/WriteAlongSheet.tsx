@@ -66,7 +66,15 @@ export default function WriteAlongSheet({ visible, quoteText, onClose, onSuccess
               {recognizedText ? (
                 <View style={[styles.resultBox, { backgroundColor: colors.surfaceAlt }]}>
                   <Text style={[styles.resultLabel, { color: colors.textMuted }]}>{t('write.recognized')}</Text>
-                  <Text style={[styles.resultText, { color: colors.textPrimary }]}>{recognizedText}</Text>
+                  {/* Char-by-char diff: highlight matching/non-matching characters */}
+                  <Text style={styles.resultDiffText}>
+                    {quoteText.split('').map((char, i) => {
+                      const recChar = recognizedText[i];
+                      const matched = recChar != null && recChar.toLowerCase() === char.toLowerCase();
+                      const color = recChar == null ? colors.textMuted : matched ? colors.success : colors.error;
+                      return <Text key={i} style={{ color }}>{char}</Text>;
+                    })}
+                  </Text>
                   <Text style={[styles.similarityText, { color: colors.primary }]}>{t('write.match')} {Math.round(similarity * 100)}%</Text>
                 </View>
               ) : null}
@@ -115,6 +123,7 @@ const styles = StyleSheet.create({
   processingText: { ...Fonts.body, fontSize: FontSize.sm, marginTop: Spacing.sm },
   resultBox: { marginTop: Spacing.sm, padding: Spacing.sm, borderRadius: BorderRadius.sm },
   resultLabel: { ...Fonts.body, fontSize: FontSize.xs, marginBottom: Spacing.xs },
+  resultDiffText: { ...Fonts.quote, fontSize: FontSize.md, lineHeight: 26, textAlign: 'center', flexWrap: 'wrap' },
   resultText: { ...Fonts.body, fontSize: FontSize.md },
   similarityText: { ...Fonts.heading, fontSize: FontSize.sm, marginTop: Spacing.xs },
   retakeButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.full, alignSelf: 'center', marginTop: Spacing.sm },

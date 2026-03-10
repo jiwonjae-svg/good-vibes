@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, Platform } from 'react-native';
+import { StyleSheet, Platform, useColorScheme } from 'react-native';
 import * as NavigationBar from 'expo-navigation-bar';
 import '../i18n';
 import { initFirebase } from '../services/firebaseConfig';
@@ -13,19 +13,30 @@ import { useGrassStore } from '../stores/useGrassStore';
 import { useUserStore } from '../stores/useUserStore';
 import OnboardingScreen from '../components/OnboardingScreen';
 import AnimatedSplash from '../components/AnimatedSplash';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
+  const colorScheme = useColorScheme();
   const loadGrass = useGrassStore((s) => s.loadGrassData);
   const loadUser = useUserStore((s) => s.loadUser);
   const isLoaded = useUserStore((s) => s.isLoaded);
   const isDarkMode = useUserStore((s) => s.isDarkMode);
+  const setDarkMode = useUserStore((s) => s.setDarkMode);
+  const followSystemDarkMode = useUserStore((s) => s.followSystemDarkMode);
   const hasCompletedAuth = useUserStore((s) => s.hasCompletedAuth);
   const hasSeenOnboarding = useUserStore((s) => s.hasSeenOnboarding);
   const setOnboardingSeen = useUserStore((s) => s.setOnboardingSeen);
   const showOnboardingFlag = useUserStore((s) => s.showOnboardingFlag);
   const setShowOnboardingFlag = useUserStore((s) => s.setShowOnboardingFlag);
+
+  // Sync dark mode with system preference when user has opted in
+  useEffect(() => {
+    if (followSystemDarkMode) {
+      setDarkMode(colorScheme === 'dark');
+    }
+  }, [colorScheme, followSystemDarkMode]);
   
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
@@ -93,30 +104,36 @@ export default function RootLayout() {
 
   if (showSplash) {
     return (
-      <GestureHandlerRootView style={styles.root}>
-        <StatusBar style="dark" />
-        <AnimatedSplash onAnimationComplete={handleSplashComplete} />
-      </GestureHandlerRootView>
+      <ErrorBoundary>
+        <GestureHandlerRootView style={styles.root}>
+          <StatusBar style="dark" />
+          <AnimatedSplash onAnimationComplete={handleSplashComplete} />
+        </GestureHandlerRootView>
+      </ErrorBoundary>
     );
   }
 
   if (showOnboarding) {
     return (
-      <GestureHandlerRootView style={styles.root}>
-        <StatusBar style={isDarkMode ? 'light' : 'dark'} />
-        <OnboardingScreen onComplete={handleOnboardingComplete} />
-      </GestureHandlerRootView>
+      <ErrorBoundary>
+        <GestureHandlerRootView style={styles.root}>
+          <StatusBar style={isDarkMode ? 'light' : 'dark'} />
+          <OnboardingScreen onComplete={handleOnboardingComplete} />
+        </GestureHandlerRootView>
+      </ErrorBoundary>
     );
   }
 
   return (
-    <GestureHandlerRootView style={styles.root}>
-      <StatusBar style={isDarkMode ? 'light' : 'dark'} />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="login" options={{ gestureEnabled: false }} />
-        <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
-      </Stack>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={styles.root}>
+        <StatusBar style={isDarkMode ? 'light' : 'dark'} />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="login" options={{ gestureEnabled: false }} />
+          <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
+        </Stack>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }
 

@@ -113,6 +113,7 @@ export default function LogStatusModal({ visible, onClose }: LogStatusModalProps
                 style={[s.contentBox, { backgroundColor: colors.surfaceAlt }]}
                 nestedScrollEnabled
                 showsVerticalScrollIndicator
+                persistentScrollbar
               >
                 <Text style={[s.contentText, { color: colors.textPrimary }]} selectable>
                   {status.content || t('settings.logEmpty')}
@@ -150,7 +151,7 @@ export default function LogStatusModal({ visible, onClose }: LogStatusModalProps
 function makeStyles(colors: any) {
   return StyleSheet.create({
     overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: Spacing.lg },
-    sheet: { width: '100%', maxWidth: 400, maxHeight: '80%', borderRadius: BorderRadius.xl, padding: Spacing.lg },
+    sheet: { width: '100%', maxWidth: 400, maxHeight: '90%', borderRadius: BorderRadius.xl, padding: Spacing.lg, flex: 0 },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
     title: { ...Fonts.heading, fontSize: FontSize.lg },
     loader: { padding: Spacing.xxl, alignItems: 'center' },
@@ -158,7 +159,7 @@ function makeStyles(colors: any) {
     label: { ...Fonts.body, fontSize: FontSize.xs, marginBottom: 4 },
     pathText: { ...Fonts.body, fontSize: FontSize.xs, fontFamily: 'monospace' },
     statusText: { ...Fonts.body, fontSize: FontSize.sm },
-    contentBox: { maxHeight: 200, padding: Spacing.md, borderRadius: BorderRadius.md, marginBottom: Spacing.md },
+    contentBox: { flex: 1, minHeight: 120, padding: Spacing.md, borderRadius: BorderRadius.md, marginBottom: Spacing.md },
     contentText: { ...Fonts.body, fontSize: FontSize.xs, fontFamily: 'monospace' },
     emptyText: { ...Fonts.body, padding: Spacing.lg, textAlign: 'center' },
     actions: { flexDirection: 'row', gap: Spacing.sm },

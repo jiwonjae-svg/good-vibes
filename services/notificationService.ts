@@ -30,7 +30,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
   }
 }
 
-export async function scheduleDailyReminder(quoteText?: string): Promise<boolean> {
+export async function scheduleDailyReminder(quoteText?: string, hour = 9): Promise<boolean> {
   const Notifications = getNotifications();
   if (!Notifications) return false;
 
@@ -47,7 +47,7 @@ export async function scheduleDailyReminder(quoteText?: string): Promise<boolean
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DAILY,
-        hour: 9,
+        hour,
         minute: 0,
       },
     });

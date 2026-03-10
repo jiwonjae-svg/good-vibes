@@ -19,7 +19,8 @@ interface SpeakOptions {
 }
 
 export function useTTS(options: TTSOptions = {}) {
-  const { rate = 0.9, pitch = 1.0 } = options;
+  const storedSpeed = useUserStore((s) => s.ttsSpeed);
+  const { rate = storedSpeed, pitch = 1.0 } = options;
   const [isSpeaking, setIsSpeaking] = useState(false);
   const speakingRef = useRef(false);
   const userLanguage = useUserStore((s) => s.language);

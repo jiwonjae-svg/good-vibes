@@ -22,8 +22,17 @@ export default function GrassScreen() {
   const colors = useThemeColors();
   const { loadGrassData, isLoaded, getGrassDay, getActivityQuotes } = useGrassStore();
   const currentStreak = useUserStore((s) => s.currentStreak);
+  const earnedBadges = useUserStore((s) => s.earnedBadges);
+  const earnedBadgeDates = useUserStore((s) => s.earnedBadgeDates);
   const uid = useUserStore((s) => s.uid);
   const isGuest = !uid;
+
+  const BADGE_DISPLAY: Record<string, { emoji: string; titleKey: string }> = {
+    streak_7:   { emoji: '\uD83D\uDD25', titleKey: 'badge.streak7Title' },
+    streak_30:  { emoji: '\u2B50', titleKey: 'badge.streak30Title' },
+    streak_100: { emoji: '\uD83D\uDC51', titleKey: 'badge.streak100Title' },
+    streak_365: { emoji: '\uD83C\uDFC6', titleKey: 'badge.streak365Title' },
+  };
 
   const [loginPromptVisible, setLoginPromptVisible] = useState(false);
   const [activityModalVisible, setActivityModalVisible] = useState(false);
@@ -43,6 +52,21 @@ export default function GrassScreen() {
   const today = todayString();
   const todayData = getGrassDay(today);
   const todayTotal = todayData.speakCount + todayData.writeCount + todayData.typeCount;
+
+  // Calculate this week's total activity count
+  const WEEKLY_GOAL = 5;
+  const weeklyTotal = (() => {
+    let count = 0;
+    const d = new Date();
+    for (let i = 0; i < 7; i++) {
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const day = getGrassDay(key);
+      count += day.speakCount + day.writeCount + day.typeCount;
+      d.setDate(d.getDate() - 1);
+    }
+    return Math.min(count, WEEKLY_GOAL * 2); // cap display but show real numbers in text
+  })();
+  const weeklyGoalMet = weeklyTotal >= WEEKLY_GOAL;
 
   const handleActivityPress = (type: ActivityType) => {
     setSelectedActivityType(type);
@@ -131,6 +155,20 @@ export default function GrassScreen() {
 
         <GrassGrid />
 
+        {/* Weekly goal progress */}
+        <View style={[styles.weeklyCard, { backgroundColor: colors.surface }]}>
+          <View style={styles.weeklyHeader}>
+            <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+            <Text style={[styles.weeklyTitle, { color: colors.textPrimary }]}>{t('grass.weeklyGoal')}</Text>
+            <Text style={[styles.weeklyCount, { color: weeklyGoalMet ? colors.success : colors.textSecondary }]}>
+              {t('grass.weeklyProgress', { count: weeklyTotal, goal: WEEKLY_GOAL })}
+            </Text>
+          </View>
+          <View style={[styles.weeklyBarBg, { backgroundColor: colors.grass0 }]}>
+            <View style={[styles.weeklyBarFill, { width: `${Math.min((weeklyTotal / WEEKLY_GOAL) * 100, 100)}%`, backgroundColor: weeklyGoalMet ? colors.success : colors.primary }]} />
+          </View>
+        </View>
+
         <View style={[styles.todayCard, { backgroundColor: colors.surface }]}>
           <Text style={[styles.todayTitle, { color: colors.textPrimary }]}>{t('grass.todayActivity')}</Text>
           <View style={styles.todayRow}>
@@ -167,6 +205,31 @@ export default function GrassScreen() {
           </View>
           {todayTotal === 0 && (
             <Text style={[styles.emptyHint, { color: colors.textMuted }]}>{t('grass.emptyHint')}</Text>
+          )}
+        </View>
+
+        {/* Milestone Badges */}
+        <View style={[styles.badgesCard, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.badgesTitle, { color: colors.textPrimary }]}>{t('grass.badges')}</Text>
+          {earnedBadges.length === 0 ? (
+            <>
+              <Text style={[styles.noBadgesText, { color: colors.textSecondary }]}>{t('grass.noBadges')}</Text>
+              <Text style={[styles.noBadgesHint, { color: colors.textMuted }]}>{t('grass.noBadgesHint')}</Text>
+            </>
+          ) : (
+            <View style={styles.badgesGrid}>
+              {earnedBadges.map((badge) => (
+                <View key={badge} style={[styles.badgeChip, { backgroundColor: colors.primaryLight + '22' }]}>
+                  <Text style={styles.badgeEmoji}>{BADGE_DISPLAY[badge]?.emoji ?? '\uD83C\uDFC5'}</Text>
+                  <View>
+                    <Text style={[styles.badgeName, { color: colors.textPrimary }]}>{t(BADGE_DISPLAY[badge]?.titleKey ?? badge)}</Text>
+                    {earnedBadgeDates[badge] && (
+                      <Text style={[styles.badgeDate, { color: colors.textMuted }]}>{t('grass.badgeEarned', { date: earnedBadgeDates[badge] })}</Text>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </View>
           )}
         </View>
       </ScrollView>
@@ -345,4 +408,19 @@ const styles = StyleSheet.create({
   },
   quoteItemText: { ...Fonts.body, fontSize: FontSize.sm, lineHeight: 22 },
   quoteItemTime: { ...Fonts.body, fontSize: FontSize.xs, marginTop: Spacing.xs },
+  badgesCard: { marginHorizontal: Spacing.md, marginBottom: Spacing.md, marginTop: 0, borderRadius: 16, padding: Spacing.lg, ...Shadows.floating },
+  badgesTitle: { ...Fonts.heading, fontSize: FontSize.lg, marginBottom: Spacing.md },
+  badgesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  badgeChip: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.full },
+  badgeEmoji: { fontSize: 20 },
+  badgeName: { ...Fonts.body, fontSize: FontSize.sm },
+  badgeDate: { ...Fonts.body, fontSize: FontSize.xs - 1, marginTop: 1 },
+  noBadgesText: { ...Fonts.body, fontSize: FontSize.md, marginBottom: Spacing.xs },
+  noBadgesHint: { ...Fonts.body, fontSize: FontSize.xs },
+  weeklyCard: { marginHorizontal: Spacing.md, marginBottom: Spacing.sm, borderRadius: BorderRadius.lg, padding: Spacing.md, ...Shadows.floating },
+  weeklyHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginBottom: Spacing.sm },
+  weeklyTitle: { ...Fonts.heading, fontSize: FontSize.sm, flex: 1 },
+  weeklyCount: { ...Fonts.body, fontSize: FontSize.sm },
+  weeklyBarBg: { height: 8, borderRadius: 4, overflow: 'hidden' },
+  weeklyBarFill: { height: '100%', borderRadius: 4 },
 });

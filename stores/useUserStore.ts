@@ -1,9 +1,34 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import i18n from '../i18n';
+import i18n, { LANGUAGES } from '../i18n';
+import * as Localization from 'expo-localization';
 import type { LanguageCode } from '../i18n';
 import { clearQuoteCache } from '../services/quoteService';
-import { updatePremiumStatus, fetchPremiumStatus, logActivity, saveBookmarkedQuotes, fetchBookmarkedQuotes, logQuoteBookmarked, saveViewedQuotesForDate, fetchViewedQuotesForDate, saveStreakToFirestore, fetchStreakFromFirestore, saveUserSettings, fetchUserSettings, fetchUsername, saveUserProfile } from '../services/firestoreUserService';
+import { appLog } from '../services/logger';
+import { updatePremiumStatus, fetchPremiumStatus, logActivity, saveBookmarkedQuotes, fetchBookmarkedQuotes, logQuoteBookmarked, saveViewedQuotesForDate, fetchViewedQuotesForDate, saveStreakToFirestore, fetchStreakFromFirestore, saveUserSettings, fetchUserSettings, fetchUsername, saveUserProfile, saveUserBadges, saveQuoteRating } from '../services/firestoreUserService';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function getISOWeekKey(dateStr: string): string {
+  const d = new Date(dateStr);
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((date as unknown as number) - (yearStart as unknown as number)) / 86400000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+function dateDiffInDays(a: string | null, b: string): number {
+  if (!a) return 999;
+  const utcA = Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10));
+  const utcB = Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10));
+  return Math.round((utcB - utcA) / 86400000);
+}
+
+export const STREAK_BADGE_THRESHOLDS = [7, 30, 100, 365] as const;
+export type BadgeId = `streak_${typeof STREAK_BADGE_THRESHOLDS[number]}`;
 
 interface UserState {
   isPremium: boolean;
@@ -34,9 +59,38 @@ interface UserState {
   // Streak
   currentStreak: number;
   lastActiveDate: string | null;
-  
+
+  // Streak Freeze (1 granted per ISO week, auto-used when 1 day missed)
+  streakFreezeCount: number;
+  streakFreezeWeekKey: string | null;
+
+  // Badges
+  earnedBadges: string[];
+  newBadgeEarned: string | null; // transient: badge id just awarded, for toast display
+
+  // Premium trial (7 days)
+  premiumTrialExpiry: string | null; // ISO date string
+  premiumTrialUsed: boolean;
+
+  // Display preferences
+  quoteFontSizeMultiplier: number; // 0.85 | 1.0 | 1.15 | 1.3
+  followSystemDarkMode: boolean;
+
   // Guest trial
   guestTrialCount: number;
+
+  // Notification
+  notificationHour: number; // 8 | 12 | 21
+
+  // TTS speed
+  ttsSpeed: number; // 0.6 | 0.9 | 1.2
+
+  // Badge earned dates
+  earnedBadgeDates: Record<string, string>; // badgeId → YYYY-MM-DD
+
+  // Quote ratings
+  likedQuoteIds: string[];
+  dislikedQuoteIds: string[];
 
   loadUser: () => Promise<void>;
   persistUser: () => Promise<void>;
@@ -56,10 +110,19 @@ interface UserState {
   setAuth: (user: { uid: string; displayName: string | null; email: string | null; photoURL: string | null } | null) => Promise<void>;
   setProfile: (displayName: string, username: string) => Promise<void>;
   updateStreak: (todayStr: string) => Promise<void>;
+  startPremiumTrial: () => Promise<void>;
+  isEffectivelyPremium: () => boolean;
+  setFontSizeMultiplier: (mult: number) => Promise<void>;
+  setFollowSystemDarkMode: (follow: boolean) => Promise<void>;
+  clearNewBadge: () => void;
+  checkTrialExpiry: () => void;
   addViewedQuote: (quoteId: string, quoteText: string, author: string, source: string, todayStr: string) => Promise<void>;
   getTodayViewedQuotes: () => string[];
   incrementGuestTrial: () => number;
   setShowOnboardingFlag: (show: boolean) => void;
+  setNotificationHour: (hour: number) => Promise<void>;
+  setTtsSpeed: (speed: number) => Promise<void>;
+  rateQuote: (quoteId: string, rating: 'like' | 'dislike') => Promise<void>;
 }
 
 const USER_KEY = '@dailyglow_user_v1';
@@ -90,7 +153,20 @@ export const useUserStore = create<UserState>((set, get) => ({
   username: null,
   currentStreak: 0,
   lastActiveDate: null,
+  streakFreezeCount: 0,
+  streakFreezeWeekKey: null,
+  earnedBadges: [],
+  newBadgeEarned: null,
+  premiumTrialExpiry: null,
+  premiumTrialUsed: false,
+  quoteFontSizeMultiplier: 1.0,
+  followSystemDarkMode: false,
   guestTrialCount: 0,
+  notificationHour: 9,
+  ttsSpeed: 0.9,
+  earnedBadgeDates: {},
+  likedQuoteIds: [],
+  dislikedQuoteIds: [],
 
   loadUser: async () => {
     try {
@@ -127,10 +203,26 @@ export const useUserStore = create<UserState>((set, get) => ({
           username: d.username ?? null,
           currentStreak: d.currentStreak ?? 0,
           lastActiveDate: d.lastActiveDate ?? null,
+          streakFreezeCount: d.streakFreezeCount ?? 0,
+          streakFreezeWeekKey: d.streakFreezeWeekKey ?? null,
+          earnedBadges: d.earnedBadges ?? [],
+          premiumTrialExpiry: d.premiumTrialExpiry ?? null,
+          premiumTrialUsed: d.premiumTrialUsed ?? false,
+          quoteFontSizeMultiplier: d.quoteFontSizeMultiplier ?? 1.0,
+          followSystemDarkMode: d.followSystemDarkMode ?? false,
+          notificationHour: d.notificationHour ?? 9,
+          ttsSpeed: d.ttsSpeed ?? 0.9,
+          earnedBadgeDates: d.earnedBadgeDates ?? {},
+          likedQuoteIds: d.likedQuoteIds ?? [],
+          dislikedQuoteIds: d.dislikedQuoteIds ?? [],
           isLoaded: true,
         });
       } else {
-        set({ isLoaded: true });
+        // First install — auto-detect device language
+        const deviceLocale = Localization.getLocales()?.[0]?.languageCode ?? 'ko';
+        const detectedLang = (LANGUAGES.find((l) => l.code === deviceLocale)?.code ?? 'ko') as LanguageCode;
+        if (detectedLang !== 'ko') i18n.changeLanguage(detectedLang);
+        set({ language: detectedLang, isLoaded: true });
       }
     } catch {
       set({ isLoaded: true });
@@ -159,6 +251,18 @@ export const useUserStore = create<UserState>((set, get) => ({
         username: s.username,
         currentStreak: s.currentStreak,
         lastActiveDate: s.lastActiveDate,
+        streakFreezeCount: s.streakFreezeCount,
+        streakFreezeWeekKey: s.streakFreezeWeekKey,
+        earnedBadges: s.earnedBadges,
+        premiumTrialExpiry: s.premiumTrialExpiry,
+        premiumTrialUsed: s.premiumTrialUsed,
+        quoteFontSizeMultiplier: s.quoteFontSizeMultiplier,
+        followSystemDarkMode: s.followSystemDarkMode,
+        notificationHour: s.notificationHour,
+        ttsSpeed: s.ttsSpeed,
+        earnedBadgeDates: s.earnedBadgeDates,
+        likedQuoteIds: s.likedQuoteIds,
+        dislikedQuoteIds: s.dislikedQuoteIds,
       }));
     } catch { /* silent */ }
   },
@@ -349,7 +453,9 @@ export const useUserStore = create<UserState>((set, get) => ({
         });
       }
     } else {
-      // Logout: clear all user-specific data so the next user starts clean
+      // Logout: clear all user-specific data so the next user starts clean.
+      // earnedBadges and premiumTrial* are deliberately NOT cleared — they are
+      // device-side achievements and should survive a re-login.
       set({
         uid: null, displayName: null, email: null, photoURL: null, username: null,
         isPremium: false,
@@ -359,6 +465,9 @@ export const useUserStore = create<UserState>((set, get) => ({
         allViewedQuoteIds: [],
         currentStreak: 0,
         lastActiveDate: null,
+        streakFreezeCount: 0,
+        streakFreezeWeekKey: null,
+        newBadgeEarned: null,
       });
       // Clear local viewed-quotes caches
       AsyncStorage.removeItem(VIEWED_QUOTES_KEY).catch(() => {});
@@ -371,15 +480,89 @@ export const useUserStore = create<UserState>((set, get) => ({
     const { lastActiveDate, currentStreak, uid } = get();
     if (lastActiveDate === todayStr) return;
 
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+    // Replenish streak freeze if this is a new ISO week
+    const thisWeekKey = getISOWeekKey(todayStr);
+    if (get().streakFreezeWeekKey !== thisWeekKey) {
+      appLog.log('[streak] new week — freeze replenished', { uid, weekKey: thisWeekKey });
+      set({ streakFreezeCount: 1, streakFreezeWeekKey: thisWeekKey });
+    }
 
-    const newStreak = lastActiveDate === yStr ? currentStreak + 1 : 1;
+    const daysSince = dateDiffInDays(lastActiveDate, todayStr);
+    let newStreak: number;
+
+    if (daysSince === 1) {
+      newStreak = currentStreak + 1;
+    } else if (daysSince === 2 && get().streakFreezeCount > 0) {
+      // Auto-apply streak freeze for exactly one missed day
+      appLog.log('[streak] freeze auto-applied', { uid, daysSince });
+      set({ streakFreezeCount: get().streakFreezeCount - 1 });
+      newStreak = currentStreak + 1;
+    } else {
+      appLog.log('[streak] reset', { uid, daysSince, prev: currentStreak });
+      newStreak = 1;
+    }
+
     set({ currentStreak: newStreak, lastActiveDate: todayStr });
+    appLog.log('[streak] updated', { uid, newStreak, daysSince });
+
+    // Award streak milestones
+    const currentBadges = get().earnedBadges;
+    for (const threshold of STREAK_BADGE_THRESHOLDS) {
+      const badgeId = `streak_${threshold}`;
+      if (newStreak >= threshold && !currentBadges.includes(badgeId)) {
+        const next = [...get().earnedBadges, badgeId];
+        const newDates = { ...get().earnedBadgeDates, [badgeId]: todayStr };
+        appLog.log('[badge] milestone earned', { uid, badgeId, streak: newStreak });
+        set({ earnedBadges: next, newBadgeEarned: badgeId, earnedBadgeDates: newDates });
+        if (uid) saveUserBadges(uid, next).catch(() => {});
+        break; // award at most one badge per streak update
+      }
+    }
+
     await get().persistUser();
-    // Sync to Firestore (fire-and-forget)
     if (uid) saveStreakToFirestore(uid, newStreak, todayStr).catch(() => {});
+  },
+
+  startPremiumTrial: async () => {
+    if (get().premiumTrialUsed) return;
+    const expiry = new Date();
+    expiry.setDate(expiry.getDate() + 7);
+    const expiryStr = expiry.toISOString().split('T')[0];
+    appLog.log('[premium] trial started', { uid: get().uid, expiry: expiryStr });
+    set({ premiumTrialExpiry: expiryStr, premiumTrialUsed: true });
+    await get().persistUser();
+  },
+
+  isEffectivelyPremium: () => {
+    const { isPremium, premiumTrialExpiry } = get();
+    if (isPremium) return true;
+    if (premiumTrialExpiry) {
+      return new Date() < new Date(premiumTrialExpiry + 'T23:59:59');
+    }
+    return false;
+  },
+
+  setFontSizeMultiplier: async (mult) => {
+    set({ quoteFontSizeMultiplier: mult });
+    await get().persistUser();
+  },
+
+  setFollowSystemDarkMode: async (follow) => {
+    set({ followSystemDarkMode: follow });
+    await get().persistUser();
+  },
+
+  clearNewBadge: () => {
+    set({ newBadgeEarned: null });
+  },
+
+  checkTrialExpiry: () => {
+    const { premiumTrialExpiry, isPremium } = get();
+    if (!isPremium && premiumTrialExpiry) {
+      if (new Date() > new Date(premiumTrialExpiry + 'T23:59:59')) {
+        // Trial expired; leave premiumTrialUsed=true so they can't re-activate
+      }
+    }
   },
 
   addViewedQuote: async (quoteId, quoteText, author, source, todayStr) => {
@@ -427,5 +610,35 @@ export const useUserStore = create<UserState>((set, get) => ({
   
   setShowOnboardingFlag: (show) => {
     set({ showOnboardingFlag: show });
+  },
+
+  setNotificationHour: async (hour) => {
+    set({ notificationHour: hour });
+    await get().persistUser();
+  },
+
+  setTtsSpeed: async (speed) => {
+    appLog.log('[settings] ttsSpeed changed', { speed });
+    set({ ttsSpeed: speed });
+    await get().persistUser();
+  },
+
+  rateQuote: async (quoteId, rating) => {
+    const uid = get().uid;
+    const liked = get().likedQuoteIds;
+    const disliked = get().dislikedQuoteIds;
+    let newLiked = liked;
+    let newDisliked = disliked;
+    if (rating === 'like') {
+      newLiked = liked.includes(quoteId) ? liked.filter((id) => id !== quoteId) : [...liked, quoteId];
+      newDisliked = disliked.filter((id) => id !== quoteId);
+    } else {
+      newDisliked = disliked.includes(quoteId) ? disliked.filter((id) => id !== quoteId) : [...disliked, quoteId];
+      newLiked = liked.filter((id) => id !== quoteId);
+    }
+    appLog.log('[quote] rated', { quoteId, rating, uid });
+    set({ likedQuoteIds: newLiked, dislikedQuoteIds: newDisliked });
+    await get().persistUser();
+    if (uid) saveQuoteRating(uid, quoteId, rating).catch(() => {});
   },
 }));

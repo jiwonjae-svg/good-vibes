@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { getDb, initFirebase } from './firebaseConfig';
 import type { User } from 'firebase/auth';
+import { appLog } from './logger';
 
 // =============================================================================
 // Types
@@ -528,6 +529,78 @@ export async function saveUserProfile(
   }
 }
 
+// =============================================================================
+// Quote Reports  (`reports/{autoId}`)
+// =============================================================================
+
+export type ReportReason = 'incorrect' | 'inappropriate' | 'duplicate' | 'other';
+
+/**
+ * Submits a user report for a quote to the `reports` collection.
+ * Security rule: only the authenticated user can create their own report.
+ */
+export async function reportQuote(
+  uid: string,
+  quoteId: string,
+  quoteText: string,
+  reason: ReportReason,
+): Promise<{ success: boolean }> {
+  appLog.log('[firestore] reportQuote', { uid, quoteId, reason });
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return { success: false };
+    await addDoc(collection(db, 'reports'), {
+      uid,
+      quoteId,
+      quoteText: quoteText.slice(0, 300), // cap length
+      reason,
+      createdAt: serverTimestamp(),
+    });
+    appLog.log('[firestore] reportQuote success', { uid, quoteId });
+    return { success: true };
+  } catch (err) {
+    appLog.warn('[firestore] reportQuote failed', { uid, quoteId, err: String(err) });
+    return { success: false };
+  }
+}
+
+// =============================================================================
+// User Badges  (stored on the main user doc as `users/{uid}.badges`)
+// =============================================================================
+
+/**
+ * Saves the user's earned badge array to Firestore.
+ */
+export async function saveUserBadges(uid: string, badges: string[]): Promise<void> {
+  appLog.log('[firestore] saveUserBadges', { uid, count: badges.length });
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return;
+    const userRef = doc(db, 'users', uid);
+    await setDoc(userRef, { badges }, { merge: true });
+  } catch { /* silent */ }
+}
+
+/**
+ * Fetches the user's earned badges from Firestore.
+ */
+export async function fetchUserBadges(uid: string): Promise<string[]> {
+  appLog.log('[firestore] fetchUserBadges', { uid });
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return [];
+    const userRef = doc(db, 'users', uid);
+    const snap = await getDoc(userRef);
+    if (snap.exists()) return (snap.data()?.badges as string[]) ?? [];
+    return [];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Fetches the username for a given uid.
  */
@@ -537,6 +610,22 @@ export async function fetchUsername(uid: string): Promise<string | null> {
     return (user as any)?.username ?? null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Saves a quote rating (like/dislike) to Firestore.
+ */
+export async function saveQuoteRating(uid: string, quoteId: string, rating: 'like' | 'dislike'): Promise<void> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return;
+    const ratingRef = doc(db, 'quoteRatings', `${uid}_${quoteId}`);
+    await setDoc(ratingRef, { uid, quoteId, rating, timestamp: serverTimestamp() }, { merge: true });
+    appLog.log('[firestore] saveQuoteRating', { uid, quoteId, rating });
+  } catch (err) {
+    appLog.warn('[firestore] saveQuoteRating failed', { err: String(err) });
   }
 }
 

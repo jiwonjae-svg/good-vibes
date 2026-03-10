@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, Switch, Modal,
+  View, Text, StyleSheet, ScrollView, Pressable, Switch, Modal, TextInput, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import { LANGUAGES, type LanguageCode } from '../../i18n';
 import { signInWithGoogleNative, logOut, onAuthChange } from '../../services/authService';
 import { logActivity } from '../../services/firestoreUserService';
 import { scheduleDailyReminder, cancelDailyReminder } from '../../services/notificationService';
+import { appLog } from '../../services/logger';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const clientQuotes: Array<{ quote: string }> = require('../../data/quotesClient.json');
 import LanguagePickerModal from '../../components/LanguagePickerModal';
@@ -24,20 +25,39 @@ export default function SettingsScreen() {
   const {
     isPremium, setPremium,
     isDarkMode, setDarkMode,
+    followSystemDarkMode, setFollowSystemDarkMode,
     language, setLanguage,
     selectedCategories, setCategories,
     dailyReminderEnabled, setDailyReminder,
     autoReadEnabled, setAutoRead,
     uid, displayName, email, setAuth,
+    username, setProfile,
     currentStreak,
     setShowOnboardingFlag,
+    streakFreezeCount,
+    quoteFontSizeMultiplier, setFontSizeMultiplier,
+    isEffectivelyPremium,
+    startPremiumTrial,
+    premiumTrialUsed,
+    notificationHour, setNotificationHour,
+    ttsSpeed, setTtsSpeed,
   } = useUserStore();
+
+  const FONT_SIZE_OPTIONS = [
+    { label: 'A-', value: 0.85 },
+    { label: 'A', value: 1.0 },
+    { label: 'A+', value: 1.15 },
+    { label: 'A++', value: 1.3 },
+  ];
 
   const isGuest = !uid;
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [catModalVisible, setCatModalVisible] = useState(false);
   const [premiumModalVisible, setPremiumModalVisible] = useState(false);
   const [logModalVisible, setLogModalVisible] = useState(false);
+  const [editProfileVisible, setEditProfileVisible] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editUsername, setEditUsername] = useState('');
 
   useEffect(() => {
     const unsub = onAuthChange((user) => {
@@ -47,8 +67,26 @@ export default function SettingsScreen() {
   }, []);
 
   const handlePremiumPurchase = () => {
-    setPremium(true);
+    appLog.log('[settings] premium purchased (mock)', { uid });
+    startPremiumTrial();
     setPremiumModalVisible(false);
+  };
+
+  const handleOpenEditProfile = () => {
+    setEditName(displayName ?? '');
+    setEditUsername(username ?? '');
+    setEditProfileVisible(true);
+  };
+
+  const handleSaveProfile = async () => {
+    const trimmedName = editName.trim();
+    const trimmedUsername = editUsername.trim();
+    if (!trimmedName) {
+      Alert.alert(t('profile.nameRequired'));
+      return;
+    }
+    await setProfile(trimmedName, trimmedUsername);
+    setEditProfileVisible(false);
   };
 
   const handleLanguage = () => setLangModalVisible(true);
@@ -59,9 +97,11 @@ export default function SettingsScreen() {
 
   const handleNotification = async (enabled: boolean) => {
     if (isGuest) return;
+    appLog.log('[settings] notification toggle', { enabled, uid });
     if (enabled) {
       const randomQuote = clientQuotes[Math.floor(Math.random() * clientQuotes.length)];
-      const granted = await scheduleDailyReminder(randomQuote?.quote);
+      const granted = await scheduleDailyReminder(randomQuote?.quote, notificationHour);
+      appLog.log('[settings] notification scheduling result', { granted });
       setDailyReminder(granted);
     } else {
       await cancelDailyReminder();
@@ -69,7 +109,16 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleNotificationHour = async (hour: number) => {
+    await setNotificationHour(hour);
+    if (dailyReminderEnabled) {
+      const randomQuote = clientQuotes[Math.floor(Math.random() * clientQuotes.length)];
+      scheduleDailyReminder(randomQuote?.quote, hour).catch(() => {});
+    }
+  };
+
   const handleLogout = async () => {
+    appLog.log('[settings] logout', { uid });
     if (uid) await logActivity(uid, 'logout');
     await logOut();
     setAuth(null);
@@ -99,6 +148,58 @@ export default function SettingsScreen() {
         onClose={() => setCatModalVisible(false)}
       />
       <LogStatusModal visible={logModalVisible} onClose={() => setLogModalVisible(false)} />
+
+      {/* Profile Edit Modal */}
+      <Modal
+        transparent
+        visible={editProfileVisible}
+        animationType="slide"
+        onRequestClose={() => setEditProfileVisible(false)}
+      >
+        <Pressable style={s.modalOverlay} onPress={() => setEditProfileVisible(false)}>
+          <Pressable style={[s.modalSheet, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
+            <Text style={[s.premiumModalTitle, { color: colors.textPrimary, marginBottom: Spacing.lg }]}>
+              {t('settings.editProfile')}
+            </Text>
+            <View style={{ width: '100%', gap: Spacing.md }}>
+              <View>
+                <Text style={[s.rowSubtitle, { color: colors.textSecondary, marginBottom: 6 }]}>
+                  {t('settings.editProfileName')}
+                </Text>
+                <TextInput
+                  value={editName}
+                  onChangeText={setEditName}
+                  placeholder={t('profile.namePlaceholder')}
+                  placeholderTextColor={colors.textMuted}
+                  style={[s.textInput, { color: colors.textPrimary, borderColor: colors.grass0, backgroundColor: colors.surfaceAlt }]}
+                />
+              </View>
+              <View>
+                <Text style={[s.rowSubtitle, { color: colors.textSecondary, marginBottom: 6 }]}>
+                  {t('settings.editProfileUsername')}
+                </Text>
+                <TextInput
+                  value={editUsername}
+                  onChangeText={setEditUsername}
+                  placeholder={t('profile.usernamePlaceholder')}
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="none"
+                  style={[s.textInput, { color: colors.textPrimary, borderColor: colors.grass0, backgroundColor: colors.surfaceAlt }]}
+                />
+              </View>
+            </View>
+            <Pressable
+              style={[s.purchaseBtn, { backgroundColor: colors.primary, marginTop: Spacing.xl }]}
+              onPress={handleSaveProfile}
+            >
+              <Text style={s.purchaseBtnText}>{t('settings.editProfileSave')}</Text>
+            </Pressable>
+            <Pressable style={s.laterBtn} onPress={() => setEditProfileVisible(false)}>
+              <Text style={[s.laterBtnText, { color: colors.textMuted }]}>{t('common.cancel')}</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Premium Modal */}}
       <Modal
@@ -163,10 +264,23 @@ export default function SettingsScreen() {
                     <Ionicons name="logo-google" size={22} color="#EA4335" />
                     <View>
                       <Text style={s.rowTitle}>{displayName ?? email ?? t('settings.googleUser')}</Text>
-                      <Text style={s.rowSubtitle}>{t('settings.loggedInWith')} Google</Text>
+                      {(username || email) && (
+                        <Text style={[s.rowSubtitle, { color: colors.textMuted, fontSize: FontSize.xs }]}>
+                          {username ? `@${username}` : email}
+                        </Text>
+                      )}
                     </View>
                   </View>
                 </View>
+                <View style={s.divider} />
+                <Pressable style={s.row} onPress={handleOpenEditProfile}>
+                  <View style={s.rowLeft}>
+                    <Ionicons name="pencil-outline" size={22} color={colors.textSecondary} />
+                    <Text style={s.rowTitle}>{t('settings.editProfile')}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                </Pressable>
+                <View style={s.divider} />
                 <Pressable style={s.row} onPress={handleLogout}>
                   <View style={s.rowLeft}>
                     <Ionicons name="log-out-outline" size={22} color={colors.error} />
@@ -223,20 +337,22 @@ export default function SettingsScreen() {
                     </View>
                   </View>
                   <View style={[s.premiumBadge, { backgroundColor: colors.primary }]}>
-                    <Text style={s.premiumBadgeText}>PRO</Text>
+                    <Text style={s.premiumBadgeText}>Glow+</Text>
                   </View>
                 </View>
               ) : (
-                <Pressable style={s.row} onPress={() => setPremiumModalVisible(true)}>
-                  <View style={s.rowLeft}>
-                    <Ionicons name="diamond-outline" size={22} color={colors.primary} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.rowTitle}>{t('premium.upgrade')}</Text>
-                      <Text style={[s.rowSubtitle, { color: colors.textSecondary }]}>{t('premium.upgradeDesc')}</Text>
+                <>
+                  <Pressable style={s.row} onPress={() => setPremiumModalVisible(true)}>
+                    <View style={s.rowLeft}>
+                      <Ionicons name="diamond-outline" size={22} color={colors.primary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.rowTitle}>{t('premium.upgrade')}</Text>
+                        <Text style={[s.rowSubtitle, { color: colors.textSecondary }]}>{t('premium.upgradeDesc')}</Text>
+                      </View>
                     </View>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-                </Pressable>
+                    <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                  </Pressable>
+                </>
               )}
             </View>
           </View>
@@ -257,15 +373,88 @@ export default function SettingsScreen() {
               </View>
             </Pressable>
             <View style={s.divider} />
-            <View style={s.row}>
+
+            {/* Theme selector – radio group */}
+            <View style={[s.row, { flexDirection: 'column', alignItems: 'flex-start', gap: Spacing.sm }]}>
               <View style={s.rowLeft}>
-                <Ionicons name="moon-outline" size={22} color={colors.textSecondary} />
+                <Ionicons name="color-palette-outline" size={22} color={colors.textSecondary} />
+                <Text style={s.rowTitle}>{t('settings.theme')}</Text>
+              </View>
+              <View style={{ paddingLeft: Spacing.xxl + Spacing.xs, gap: Spacing.sm, width: '100%' }}>
+                {[
+                  { label: t('settings.themeLight'), value: 'light' },
+                  { label: t('settings.themeDark'), value: 'dark' },
+                  { label: t('settings.themeSystem'), value: 'system' },
+                ].map((opt) => {
+                  const isSelected =
+                    opt.value === 'system'
+                      ? followSystemDarkMode
+                      : opt.value === 'dark'
+                      ? !followSystemDarkMode && isDarkMode
+                      : !followSystemDarkMode && !isDarkMode;
+                  return (
+                    <Pressable
+                      key={opt.value}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: 4 }}
+                      onPress={() => {
+                        if (opt.value === 'system') {
+                          appLog.log('[settings] theme → system');
+                          setFollowSystemDarkMode(true);
+                        } else if (opt.value === 'dark') {
+                          appLog.log('[settings] theme → dark');
+                          setFollowSystemDarkMode(false);
+                          setDarkMode(true);
+                        } else {
+                          appLog.log('[settings] theme → light');
+                          setFollowSystemDarkMode(false);
+                          setDarkMode(false);
+                        }
+                      }}
+                    >
+                      <View style={{
+                        width: 20, height: 20, borderRadius: 10,
+                        borderWidth: 2, borderColor: isSelected ? colors.primary : colors.textMuted,
+                        alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {isSelected && (
+                          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary }} />
+                        )}
+                      </View>
+                      <Text style={[s.rowTitle, { fontWeight: isSelected ? '600' : '400' }]}>{opt.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+            <View style={s.divider} />
+            <View style={[s.row, { flexDirection: 'column', alignItems: 'flex-start', gap: Spacing.sm }]}>
+              <View style={s.rowLeft}>
+                <Ionicons name="text-outline" size={22} color={colors.textSecondary} />
                 <View>
-                  <Text style={s.rowTitle}>{t('settings.darkMode')}</Text>
-                  <Text style={s.rowSubtitle}>{t('settings.darkModeDesc')}</Text>
+                  <Text style={s.rowTitle}>{t('settings.fontSize')}</Text>
+                  <Text style={s.rowSubtitle}>{t('settings.fontSizeDesc')}</Text>
                 </View>
               </View>
-              <Switch value={isDarkMode} onValueChange={setDarkMode} trackColor={{ false: colors.grass0, true: colors.primaryLight }} thumbColor={isDarkMode ? colors.primary : '#f4f3f4'} />
+              <View style={{ flexDirection: 'row', gap: Spacing.sm, paddingLeft: Spacing.xl + Spacing.xs }}>
+                {FONT_SIZE_OPTIONS.map((opt) => (
+                  <Pressable
+                    key={opt.value}
+                    style={[
+                      s.fontSizeBtn,
+                      { borderColor: colors.primary, backgroundColor: quoteFontSizeMultiplier === opt.value ? colors.primary : 'transparent' },
+                    ]}
+                    onPress={() => { appLog.log('[settings] fontSize changed', { value: opt.value }); setFontSizeMultiplier(opt.value); }}
+                  >
+                    <Text style={[s.fontSizeBtnText, { color: quoteFontSizeMultiplier === opt.value ? '#fff' : colors.textPrimary }]}>
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              {/* Live preview */}
+              <View style={[s.fontPreviewBox, { backgroundColor: colors.surfaceAlt, marginLeft: Spacing.xl + Spacing.xs }]}>
+                <Text style={[s.fontPreviewText, { color: colors.textPrimary, fontSize: 16 * quoteFontSizeMultiplier }]}>{t('settings.fontSizePreviewSample')}</Text>
+              </View>
             </View>
             <View style={s.divider} />
             <Pressable style={[s.row, isGuest && s.disabledRow]} onPress={handleCategory} disabled={isGuest}>
@@ -291,10 +480,58 @@ export default function SettingsScreen() {
                   <Text style={s.rowSubtitle}>{t('settings.autoReadDesc')}</Text>
                 </View>
               </View>
-              <Switch value={autoReadEnabled} onValueChange={setAutoRead} trackColor={{ false: colors.grass0, true: colors.primaryLight }} thumbColor={autoReadEnabled ? colors.primary : '#f4f3f4'} />
+                      <Switch value={autoReadEnabled} onValueChange={(val) => { appLog.log('[settings] autoRead toggle', { val }); setAutoRead(val); }} trackColor={{ false: colors.grass0, true: colors.primaryLight }} thumbColor={autoReadEnabled ? colors.primary : '#f4f3f4'} />
+            </View>
+            <View style={s.divider} />
+            {/* TTS Speed */}
+            <View style={[s.row, { flexDirection: 'column', alignItems: 'flex-start', gap: Spacing.sm }]}>
+              <View style={s.rowLeft}>
+                <Ionicons name="speedometer-outline" size={22} color={colors.textSecondary} />
+                <View>
+                  <Text style={s.rowTitle}>{t('settings.ttsSpeed')}</Text>
+                  <Text style={s.rowSubtitle}>{t('settings.ttsSpeedDesc')}</Text>
+                </View>
+              </View>
+              <View style={{ paddingLeft: Spacing.xxl + Spacing.xs, gap: Spacing.sm, width: '100%' }}>
+                {[
+                  { label: t('settings.ttsSpeedSlow'),   value: 0.6 },
+                  { label: t('settings.ttsSpeedNormal'), value: 0.9 },
+                  { label: t('settings.ttsSpeedFast'),   value: 1.2 },
+                ].map((opt) => (
+                  <Pressable
+                    key={opt.value}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: 4 }}
+                    onPress={() => setTtsSpeed(opt.value)}
+                  >
+                    <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: ttsSpeed === opt.value ? colors.primary : colors.textMuted, alignItems: 'center', justifyContent: 'center' }}>
+                      {ttsSpeed === opt.value && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary }} />}
+                    </View>
+                    <Text style={[s.rowTitle, { fontWeight: ttsSpeed === opt.value ? '600' : '400' }]}>{opt.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
           </View>
         </View>
+
+        {/* Streak Freeze */}
+        {!isGuest && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>{t('settings.streakFreeze')}</Text>
+            <View style={s.card}>
+              <View style={s.row}>
+                <View style={s.rowLeft}>
+                  <Ionicons name="snow-outline" size={22} color="#64b5f6" />
+                  <View>
+                    <Text style={s.rowTitle}>{t('settings.streakFreezeCount', { count: streakFreezeCount })}</Text>
+                    <Text style={s.rowSubtitle}>{t('settings.streakFreezeDesc')}</Text>
+                  </View>
+                </View>
+                <Text style={[s.rowValue, { fontSize: FontSize.lg, color: '#64b5f6' }]}>{'❄️'.repeat(Math.min(streakFreezeCount, 3))}</Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Notifications */}
         <View style={s.section}>
@@ -316,6 +553,36 @@ export default function SettingsScreen() {
                 <Switch value={dailyReminderEnabled} onValueChange={handleNotification} trackColor={{ false: colors.grass0, true: colors.primaryLight }} thumbColor={dailyReminderEnabled ? colors.primary : '#f4f3f4'} />
               )}
             </View>
+            {/* Notification time picker — shown only when enabled and logged in */}
+            {dailyReminderEnabled && !isGuest && (
+              <>
+                <View style={s.divider} />
+                <View style={[s.row, { flexDirection: 'column', alignItems: 'flex-start', gap: Spacing.sm }]}>
+                  <View style={s.rowLeft}>
+                    <Ionicons name="time-outline" size={22} color={colors.textSecondary} />
+                    <Text style={s.rowTitle}>{t('settings.notificationTime')}</Text>
+                  </View>
+                  <View style={{ paddingLeft: Spacing.xxl + Spacing.xs, gap: Spacing.sm, width: '100%' }}>
+                    {[
+                      { label: t('settings.notificationMorning'), hour: 8 },
+                      { label: t('settings.notificationNoon'),    hour: 12 },
+                      { label: t('settings.notificationEvening'), hour: 21 },
+                    ].map((opt) => (
+                      <Pressable
+                        key={opt.hour}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: 4 }}
+                        onPress={() => handleNotificationHour(opt.hour)}
+                      >
+                        <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: notificationHour === opt.hour ? colors.primary : colors.textMuted, alignItems: 'center', justifyContent: 'center' }}>
+                          {notificationHour === opt.hour && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary }} />}
+                        </View>
+                        <Text style={[s.rowTitle, { fontWeight: notificationHour === opt.hour ? '600' : '400' }]}>{opt.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              </>
+            )}
           </View>
         </View>
 
@@ -395,6 +662,10 @@ function makeStyles(colors: any) {
     guestTitle: { ...Fonts.heading, fontSize: FontSize.md },
     guestDesc: { ...Fonts.body, fontSize: FontSize.xs, marginTop: 2 },
     loginBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, padding: Spacing.md, marginHorizontal: Spacing.sm, marginBottom: Spacing.sm, borderRadius: BorderRadius.md, borderWidth: 1.5 },
+    fontSizeBtn: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.md, borderWidth: 1.5, minWidth: 44, alignItems: 'center' },
+    fontSizeBtnText: { ...Fonts.body, fontSize: FontSize.sm },
+    fontPreviewBox: { padding: Spacing.md, borderRadius: BorderRadius.md, marginTop: Spacing.xs, marginRight: Spacing.md },
+    fontPreviewText: { ...Fonts.quote, textAlign: 'center', lineHeight: 28 },
     loginBtnText: { ...Fonts.body, fontSize: FontSize.md },
     premiumBadge: { paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: BorderRadius.sm },
     premiumBadgeText: { ...Fonts.heading, fontSize: FontSize.xs, color: '#fff' },
@@ -410,5 +681,6 @@ function makeStyles(colors: any) {
     purchaseBtnText: { ...Fonts.heading, fontSize: FontSize.md, color: '#fff' },
     laterBtn: { padding: Spacing.sm },
     laterBtnText: { ...Fonts.body, fontSize: FontSize.sm },
+    textInput: { width: '100%', padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1, fontSize: FontSize.md, ...Fonts.body },
   });
 }

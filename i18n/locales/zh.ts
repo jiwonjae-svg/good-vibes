@@ -92,9 +92,11 @@ export default {
     books: '书籍', study: '学习', newYear: '新年', truth: '真理', art: '艺术', music: '音乐',
     writing: '写作', creativity: '创造力'
   },
-  onboarding: { slide1Title: '每天一句好话', slide1Desc: 'AI每天为你生成温暖的名言。', slide2Title: '跟读、跟写、打字', slide2Desc: '朗读、手写或打字名言，铭记于心。', slide3Title: '填满你的草坪', slide3Desc: '每次活动都会填满草坪。看看你的努力！', slide4Title: '准备好了吗？', slide4Desc: '现在就来看看你的第一句名言吧！', next: '下一步', start: '开始', skip: '跳过' },
+  onboarding: { slide1Title: '每天一句好话', slide1Desc: '每天发现世界伟人的名言。数千条精选名言，每天更新，等你来探索。', slide2Title: '跟读、跟写、打字', slide2Desc: '朗读、手写或打字名言，铭记于心。', slide3Title: '填满你的草坪', slide3Desc: '每次活动都会填满草坪。一眼看清你每天的努力！', slide4Title: '准备好了吗？', slide4Desc: '现在就来看看你的第一句名言吧！', next: '下一步', start: '开始', skip: '跳过' },
   share: { shareQuote: '分享名言' },
   guest: { loginPromptTitle: '登录以保存您的进度', loginPromptDesc: '今天的活动未保存', loginPromptAction: '登录', laterAction: '稍后', featureRestricted: '此功能需要登录', trialEnded: '免费试用已结束，请登录后继续使用。' },
   bookmark: { saved: '已保存', save: '保存', title: '已保存的名言', empty: '还没有保存的名言。' },
   notification: { title: '今天的名言在等你', body: '现在就到DailyGlow查看温暖的名言吧！' },
+  login: { tagline: '每天，进步一点点', signInWithGoogle: '使用Google登录', continueWithoutAccount: '不使用账户继续', signInFailed: '登录失败，请重试。', confirmTitle: '使用Google账户登录DailyGlow', confirmDesc: '登录后，Google将与DailyGlow共享您的姓名、电子邮件地址和个人资料照片。', confirmAgree: '同意并共享' },
+  profile: { nameTitle: '设置显示名称', nameSubtitle: '这是显示在屏幕上的名称，可以重复。', namePlaceholder: '输入姓名', nameHint: '支持字母、数字、空格、「-」「_」（最多30个字符）', nameRequired: '请输入姓名。', nameInvalid: '姓名包含不允许的字符。', usernameTitle: '选择用户名', usernameSubtitle: '您的唯一ID，之后可以更改。', usernamePlaceholder: 'my_id', usernameHint: '仅支持英文字母(a–z A–Z)、数字、「-」「_」（3~20个字符）', usernameRequired: '请输入用户名。', usernameInvalid: '只能使用英文字母、数字、「-」「_」（3~20个字符）', usernameTaken: '该用户名已被使用。', usernameAvailable: '可以使用该用户名！✓', next: '下一步', complete: '开始', skip: '稍后设置' },
 };

@@ -5,6 +5,9 @@ import {
   getDocs,
   collection,
   addDoc,
+  query,
+  where,
+  limit,
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
@@ -444,3 +447,96 @@ export async function fetchUserSettings(uid: string): Promise<Partial<UserSettin
     return null;
   }
 }
+
+// =============================================================================
+// Username (unique user handle, e.g. @jiwonjae)
+// Stored on users/{uid}.username AND indexed in usernames/{username} → {uid}
+// =============================================================================
+
+/** Validation: only a-z A-Z 0-9 - _ , max 20 chars, min 3 chars */
+export function isValidUsername(username: string): boolean {
+  return /^[a-zA-Z0-9\-_]{3,20}$/.test(username);
+}
+
+/** Validation: display name — allows letters, numbers, spaces, - and _ only. Max 30 chars. */
+export function isValidDisplayName(name: string): boolean {
+  // Rejects anything that is not a letter (any script), digit, space, hyphen or underscore
+  return /^[^\x00-\x1F\x7F!@#$%^&*()+={}\[\]|\\:;"'<>,.?/~`]{1,30}$/.test(name) &&
+    !/[!@#$%^&*()+={}\[\]|\\:;"'<>,.?/~`]/.test(name);
+}
+
+/**
+ * Checks if a username is already taken.
+ * Returns true if available, false if taken.
+ */
+export async function isUsernameAvailable(username: string): Promise<boolean> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return false;
+    const ref = doc(db, 'usernames', username.toLowerCase());
+    const snap = await getDoc(ref);
+    return !snap.exists();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Saves the profile (displayName + username) for a user.
+ * Writes to users/{uid} and reserves usernames/{username}.
+ * If the user previously had a username, the old reservation is deleted.
+ */
+export async function saveUserProfile(
+  uid: string,
+  displayName: string,
+  username: string,
+  previousUsername?: string,
+): Promise<{ success: boolean; error?: 'taken' | 'invalid' | 'unknown' }> {
+  try {
+    if (!isValidUsername(username)) return { success: false, error: 'invalid' };
+    if (!isValidDisplayName(displayName)) return { success: false, error: 'invalid' };
+
+    initFirebase();
+    const db = getDb();
+    if (!db) return { success: false, error: 'unknown' };
+
+    const lowerUsername = username.toLowerCase();
+
+    // Check availability (skip if same as current)
+    if (!previousUsername || previousUsername.toLowerCase() !== lowerUsername) {
+      const available = await isUsernameAvailable(lowerUsername);
+      if (!available) return { success: false, error: 'taken' };
+    }
+
+    // Write both docs (non-atomic but safe — username index is written last)
+    await setDoc(doc(db, 'users', uid), { displayName, username: lowerUsername }, { merge: true });
+
+    // Release old username reservation
+    if (previousUsername && previousUsername.toLowerCase() !== lowerUsername) {
+      try {
+        const { deleteDoc } = await import('firebase/firestore');
+        await deleteDoc(doc(db, 'usernames', previousUsername.toLowerCase()));
+      } catch { /* silent */ }
+    }
+
+    await setDoc(doc(db, 'usernames', lowerUsername), { uid, createdAt: serverTimestamp() });
+
+    return { success: true };
+  } catch {
+    return { success: false, error: 'unknown' };
+  }
+}
+
+/**
+ * Fetches the username for a given uid.
+ */
+export async function fetchUsername(uid: string): Promise<string | null> {
+  try {
+    const user = await getUserFromFirestore(uid);
+    return (user as any)?.username ?? null;
+  } catch {
+    return null;
+  }
+}
+

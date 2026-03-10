@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import i18n from '../i18n';
 import type { LanguageCode } from '../i18n';
 import { clearQuoteCache } from '../services/quoteService';
-import { updatePremiumStatus, fetchPremiumStatus, logActivity, saveBookmarkedQuotes, fetchBookmarkedQuotes, logQuoteBookmarked, saveViewedQuotesForDate, fetchViewedQuotesForDate, saveStreakToFirestore, fetchStreakFromFirestore, saveUserSettings, fetchUserSettings } from '../services/firestoreUserService';
+import { updatePremiumStatus, fetchPremiumStatus, logActivity, saveBookmarkedQuotes, fetchBookmarkedQuotes, logQuoteBookmarked, saveViewedQuotesForDate, fetchViewedQuotesForDate, saveStreakToFirestore, fetchStreakFromFirestore, saveUserSettings, fetchUserSettings, fetchUsername, saveUserProfile } from '../services/firestoreUserService';
 
 interface UserState {
   isPremium: boolean;
@@ -29,6 +29,7 @@ interface UserState {
   displayName: string | null;
   email: string | null;
   photoURL: string | null;
+  username: string | null;
 
   // Streak
   currentStreak: number;
@@ -53,6 +54,7 @@ interface UserState {
   toggleBookmark: (quoteId: string) => Promise<void>;
   isBookmarked: (quoteId: string) => boolean;
   setAuth: (user: { uid: string; displayName: string | null; email: string | null; photoURL: string | null } | null) => Promise<void>;
+  setProfile: (displayName: string, username: string) => Promise<void>;
   updateStreak: (todayStr: string) => Promise<void>;
   addViewedQuote: (quoteId: string, quoteText: string, author: string, source: string, todayStr: string) => Promise<void>;
   getTodayViewedQuotes: () => string[];
@@ -85,6 +87,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   displayName: null,
   email: null,
   photoURL: null,
+  username: null,
   currentStreak: 0,
   lastActiveDate: null,
   guestTrialCount: 0,
@@ -121,6 +124,7 @@ export const useUserStore = create<UserState>((set, get) => ({
           displayName: d.displayName ?? null,
           email: d.email ?? null,
           photoURL: d.photoURL ?? null,
+          username: d.username ?? null,
           currentStreak: d.currentStreak ?? 0,
           lastActiveDate: d.lastActiveDate ?? null,
           isLoaded: true,
@@ -152,6 +156,7 @@ export const useUserStore = create<UserState>((set, get) => ({
         displayName: s.displayName,
         email: s.email,
         photoURL: s.photoURL,
+        username: s.username,
         currentStreak: s.currentStreak,
         lastActiveDate: s.lastActiveDate,
       }));
@@ -243,6 +248,16 @@ export const useUserStore = create<UserState>((set, get) => ({
     await get().persistUser();
   },
 
+  setProfile: async (displayName, username) => {
+    const uid = get().uid;
+    const previousUsername = get().username ?? undefined;
+    set({ displayName, username });
+    await get().persistUser();
+    if (uid) {
+      await saveUserProfile(uid, displayName, username, previousUsername);
+    }
+  },
+
   toggleBookmark: async (quoteId) => {
     const uid = get().uid;
     const ids = get().bookmarkedQuoteIds;
@@ -268,16 +283,21 @@ export const useUserStore = create<UserState>((set, get) => ({
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-      const [premiumStatus, cloudBookmarks, cloudTodayViewed, cloudSettings, cloudStreak] = await Promise.all([
+      const [premiumStatus, cloudBookmarks, cloudTodayViewed, cloudSettings, cloudStreak, cloudUsername] = await Promise.all([
         fetchPremiumStatus(user.uid),
         fetchBookmarkedQuotes(user.uid),
         fetchViewedQuotesForDate(user.uid, todayStr),
         fetchUserSettings(user.uid),
         fetchStreakFromFirestore(user.uid),
+        fetchUsername(user.uid),
       ]);
       
       if (premiumStatus) {
         set({ isPremium: true });
+      }
+      
+      if (cloudUsername) {
+        set({ username: cloudUsername });
       }
       
       if (cloudBookmarks.length > 0) {
@@ -292,9 +312,21 @@ export const useUserStore = create<UserState>((set, get) => ({
         // Cloud IDs are plain q_ids; local entries may be "q_id|author|source|text" format
         const localIds = localToday.map((q) => q.split('|')[0]);
         const allIds = [...new Set([...localIds, ...cloudTodayViewed])];
-        // Keep local entries (with full metadata) where available, or use plain id for cloud-only entries
+        // Keep local entries (with full metadata) where available
         const localMap = new Map(localToday.map((e) => [e.split('|')[0], e]));
-        const merged = allIds.map((id) => localMap.get(id) ?? id);
+        // For cloud-only IDs, try to recover metadata from the quote store
+        let quoteMap: Map<string, { text: string; author: string; source?: string }> = new Map();
+        try {
+          const { useQuoteStore } = require('./useQuoteStore');
+          const quotes: Array<{ id: string; text: string; author: string; source?: string }> = useQuoteStore.getState().quotes;
+          quotes.forEach((q) => quoteMap.set(q.id, { text: q.text, author: q.author, source: q.source }));
+        } catch { /* silent */ }
+        const merged = allIds.map((id) => {
+          if (localMap.has(id)) return localMap.get(id)!;
+          const meta = quoteMap.get(id);
+          if (meta) return `${id}|${meta.author ?? ''}|${meta.source ?? ''}|${meta.text}`;
+          return id; // fallback: plain id (will be hidden in MyScreen since text is empty)
+        });
         set({ todayViewedQuoteIds: merged, todayViewedDate: todayStr });
         AsyncStorage.setItem(VIEWED_QUOTES_KEY, JSON.stringify({ ids: merged, date: todayStr })).catch(() => {});
       }
@@ -319,7 +351,7 @@ export const useUserStore = create<UserState>((set, get) => ({
     } else {
       // Logout: clear all user-specific data so the next user starts clean
       set({
-        uid: null, displayName: null, email: null, photoURL: null,
+        uid: null, displayName: null, email: null, photoURL: null, username: null,
         isPremium: false,
         bookmarkedQuoteIds: [],
         todayViewedQuoteIds: [],

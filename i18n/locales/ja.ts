@@ -92,9 +92,11 @@ export default {
     books: '本', study: '勉強', newYear: '新年', truth: '真実', art: '芸術', music: '音楽',
     writing: '執筆', creativity: '創造性'
   },
-  onboarding: { slide1Title: '毎日の良い言葉', slide1Desc: 'AIがあなたのために毎日温かい名言を生成します。', slide2Title: '読んで、書いて、タイプ', slide2Desc: '名言を声に出したり、手書きしたり、タイプして心に刻みましょう。', slide3Title: '芝生を埋めましょう', slide3Desc: '活動するたびに芝生が埋まります。毎日の努力が見えます！', slide4Title: '準備はいいですか？', slide4Desc: '今すぐ最初の名言に会いましょう！', next: '次へ', start: '始める', skip: 'スキップ' },
+  onboarding: { slide1Title: '毎日の良い言葉', slide1Desc: '世界の偉人たちの名言を毎日発見しましょう。何千もの厳選された名言があなたを待っています。', slide2Title: '読んで、書いて、タイプ', slide2Desc: '名言を声に出したり、手書きしたり、タイプして心に刻みましょう。', slide3Title: '芝生を埋めましょう', slide3Desc: '活動するたびに芝生が埋まります。毎日の努力が一目でわかります！', slide4Title: '準備はいいですか？', slide4Desc: '今すぐ最初の名言に会いましょう！', next: '次へ', start: '始める', skip: 'スキップ' },
   share: { shareQuote: '名言を共有' },
   guest: { loginPromptTitle: 'ログインして記録を残しましょう', loginPromptDesc: '今日の活動が保存されていません', loginPromptAction: 'ログイン', laterAction: '後で', featureRestricted: 'この機能はログインが必要です', trialEnded: '無料体験が終了しました。ログインしてご利用ください。' },
   bookmark: { saved: '保存済み', save: '保存', title: '保存した名言', empty: 'まだ保存した名言がありません。' },
   notification: { title: '今日の名言が待っています', body: 'DailyGlowで温かい名言を確認しましょう！' },
+  login: { tagline: '毎日、少しずつ良くなる', signInWithGoogle: 'Googleでログイン', continueWithoutAccount: 'アカウントなしで続ける', signInFailed: 'ログインに失敗しました。もう一度お試しください。', confirmTitle: 'GoogleアカウントでDailyGlowにログイン', confirmDesc: 'ログインすると、Googleからあなたの名前、メールアドレス、プロフィール写真がDailyGlowと共有されます。', confirmAgree: '同意して共有' },
+  profile: { nameTitle: '表示名を設定', nameSubtitle: '画面に表示される名前です。重複可能です。', namePlaceholder: '名前を入力', nameHint: '文字、数字、スペース、「-」「_」のみ使用可能です（最大30文字）', nameRequired: '名前を入力してください。', nameInvalid: '名前に使用できない文字が含まれています。', usernameTitle: 'ユーザー名を選択', usernameSubtitle: '一意のIDです。後で変更できます。', usernamePlaceholder: 'my_id', usernameHint: '英字(a–z A–Z)、数字、「-」「_」のみ使用可能（3〜20文字）', usernameRequired: 'ユーザー名を入力してください。', usernameInvalid: '英字、数字、「-」「_」のみ使用できます（3〜20文字）', usernameTaken: 'このユーザー名はすでに使用されています。', usernameAvailable: '使用可能なユーザー名です！✓', next: '次へ', complete: '始める', skip: '後で設定' },
 };

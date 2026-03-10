@@ -148,17 +148,32 @@ export default function MyScreen() {
 
   const bookmarkedQuotes = quotes.filter((q) => bookmarkedQuoteIds.includes(q.id));
 
-  const todayQuotes = todayViewedQuoteIds.map((entry, idx) => {
+  // Build a lookup map from the loaded quote store for metadata recovery
+  const quoteStoreMap = React.useMemo(() => {
+    const m = new Map<string, Quote>();
+    quotes.forEach((q) => m.set(q.id, q));
+    return m;
+  }, [quotes]);
+
+  const todayQuotes = React.useMemo(() => todayViewedQuoteIds.map((entry, idx) => {
     const parts = entry.split('|');
     if (parts.length >= 4) {
       // new format: quoteId|author|source|quoteText
       const [id, author, source, ...restParts] = parts;
-      return { id, author: author || undefined, source: source || undefined, text: restParts.join('|'), gradientIndex: idx % colors.cardGradients.length };
+      const text = restParts.join('|');
+      if (text) return { id, author: author || undefined, source: source || undefined, text, gradientIndex: idx % colors.cardGradients.length };
+    }
+    // plain id fallback — try to recover from quote store
+    const id = parts[0];
+    const storeQuote = quoteStoreMap.get(id);
+    if (storeQuote) {
+      return { id, author: storeQuote.author || undefined, source: storeQuote.source, text: storeQuote.text, gradientIndex: idx % colors.cardGradients.length };
     }
     // legacy format: quoteId|quoteText
-    const [id, ...textParts] = parts;
-    return { id, author: undefined as string | undefined, source: undefined as string | undefined, text: textParts.join('|'), gradientIndex: idx % colors.cardGradients.length };
-  });
+    const [, ...textParts] = parts;
+    const legacyText = textParts.join('|');
+    return legacyText ? { id, author: undefined as string | undefined, source: undefined as string | undefined, text: legacyText, gradientIndex: idx % colors.cardGradients.length } : null;
+  }).filter(Boolean) as Array<{ id: string; text: string; author?: string; source?: string; gradientIndex: number }>, [todayViewedQuoteIds, quoteStoreMap, colors.cardGradients.length]);
 
   const handleQuotePress = (quote: { id: string; text: string; author?: string; source?: string; gradientIndex: number }) => {
     setSelectedQuote(quote);

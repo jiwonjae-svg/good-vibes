@@ -1,14 +1,14 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, Platform, useColorScheme } from 'react-native';
+import { StyleSheet, Platform, useColorScheme, AppState, AppStateStatus } from 'react-native';
 import * as NavigationBar from 'expo-navigation-bar';
 import '../i18n';
 import { initFirebase } from '../services/firebaseConfig';
 import { initSentry } from '../services/sentryService';
 import { configureGoogleSignIn } from '../services/authService';
-import { initNotificationHandler } from '../services/notificationService';
+import { initNotificationHandler, validateAndRescheduleDailyReminder } from '../services/notificationService';
 import { useGrassStore } from '../stores/useGrassStore';
 import { useUserStore } from '../stores/useUserStore';
 import OnboardingScreen from '../components/OnboardingScreen';
@@ -30,6 +30,19 @@ export default function RootLayout() {
   const setOnboardingSeen = useUserStore((s) => s.setOnboardingSeen);
   const showOnboardingFlag = useUserStore((s) => s.showOnboardingFlag);
   const setShowOnboardingFlag = useUserStore((s) => s.setShowOnboardingFlag);
+
+  // Re-validate notification schedule when the app returns to the foreground
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
+        const { dailyReminderEnabled } = useUserStore.getState();
+        validateAndRescheduleDailyReminder(dailyReminderEnabled).catch(() => {});
+      }
+      appStateRef.current = nextState;
+    });
+    return () => sub.remove();
+  }, []);
 
   // Sync dark mode with system preference when user has opted in
   useEffect(() => {

@@ -56,9 +56,11 @@ async function getServerQuotes(): Promise<CrawledQuote[]> {
 function makeQuote(
   item: { id: string; quote: string; author: string; source: string },
   lang: string,
-): Quote {
+): Quote | null {
+  if (!item?.id || !item?.quote) return null;
   const text = (item as { translations?: Record<string, string> }).translations?.[lang]
     ?? (item as { quote: string }).quote;
+  if (!text) return null;
   return {
     id: item.id,
     text,
@@ -151,7 +153,9 @@ async function selectQuotes(count: number): Promise<Quote[]> {
     }
 
     const chosen = pickOneByWeight(candidates, selectedCats);
-    result.push(makeQuote(chosen, lang));
+    const q = makeQuote(chosen, lang);
+    if (!q) continue;
+    result.push(q);
 
     usedRecent.push(chosen.id);
     if (usedRecent.length > RECENT_EXCLUDE) {
@@ -163,10 +167,19 @@ async function selectQuotes(count: number): Promise<Quote[]> {
   return result;
 }
 
+/** Module-level flag prevents concurrent batch fetches (guards against rapid scrolling). */
+let isFetchingBatch = false;
+
 export async function fetchQuoteBatch(): Promise<Quote[]> {
-  const quotes = await selectQuotes(BATCH_SIZE);
-  await cacheQuotes(quotes);
-  return quotes;
+  if (isFetchingBatch) return [];
+  isFetchingBatch = true;
+  try {
+    const quotes = await selectQuotes(BATCH_SIZE);
+    await cacheQuotes(quotes);
+    return quotes;
+  } finally {
+    isFetchingBatch = false;
+  }
 }
 
 async function cacheQuotes(quotes: Quote[]): Promise<void> {

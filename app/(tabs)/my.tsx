@@ -101,7 +101,7 @@ function QuoteModal({ quote, onClose, onSpeak, onWrite, onType }: QuoteModalProp
                 </Pressable>
                 {!isGuest && (
                   <Pressable onPress={() => toggleBookmark(quote.id)} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
-                    <Ionicons name={bookmarked ? 'heart' : 'heart-outline'} size={20} color={bookmarked ? '#FF6B6B' : colors.textPrimary} />
+                    <Ionicons name={bookmarked ? 'heart' : 'heart-outline'} size={20} color={bookmarked ? colors.error : colors.textPrimary} />
                   </Pressable>
                 )}
                 {!isGuest && (
@@ -198,7 +198,7 @@ export default function MyScreen() {
         )}
       </View>
       <Pressable onPress={() => toggleBookmark(item.id)} hitSlop={10}>
-        <Ionicons name="heart" size={22} color="#FF6B6B" />
+        <Ionicons name="heart" size={22} color={colors.error} />
       </Pressable>
     </Pressable>
   ), [colors, toggleBookmark]);
@@ -241,7 +241,7 @@ export default function MyScreen() {
           <Ionicons
             name="heart"
             size={18}
-            color={activeTab === 'bookmarked' ? '#FF6B6B' : colors.textMuted}
+            color={activeTab === 'bookmarked' ? colors.error : colors.textMuted}
           />
           <Text style={[styles.tabText, { color: activeTab === 'bookmarked' ? colors.primary : colors.textMuted }]}>
             {t('my.saved')} ({bookmarkedQuotes.length})

@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { saveGrassDay, fetchGrassData } from '../services/firestoreUserService';
 
+/** Activity count thresholds for each grass colour level (1–3). Level 4 = above L3. */
+const LEVEL_THRESHOLDS = { L1: 1, L2: 3, L3: 6 } as const;
+
 export interface ActivityQuote {
   id: string;
   text: string;
@@ -148,9 +151,9 @@ export const useGrassStore = create<GrassState>((set, get) => ({
   getLevel: (date) => {
     const total = get().getTotalForDay(date);
     if (total === 0) return 0;
-    if (total <= 1) return 1;
-    if (total <= 3) return 2;
-    if (total <= 6) return 3;
+    if (total <= LEVEL_THRESHOLDS.L1) return 1;
+    if (total <= LEVEL_THRESHOLDS.L2) return 2;
+    if (total <= LEVEL_THRESHOLDS.L3) return 3;
     return 4;
   },
 

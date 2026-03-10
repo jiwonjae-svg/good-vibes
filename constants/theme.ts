@@ -53,14 +53,14 @@ export const DarkColors = {
   warning: '#FFA726',
   error: '#EF5350',
   cardGradients: [
-    ['#3D2A22', '#2E1F18'],
-    ['#1A2E3D', '#15253A'],
-    ['#3D3520', '#2E2818'],
-    ['#2E223D', '#22183A'],
-    ['#1A3D2A', '#153A22'],
-    ['#3D1A2A', '#3A1522'],
-    ['#1A323D', '#15293A'],
-    ['#3D3320', '#2E2818'],
+    ['#5C3D2E', '#1E1008'],  // warm brown
+    ['#1E3D5C', '#0A1A2E'],  // deep blue
+    ['#5C4E28', '#1E1800'],  // warm amber
+    ['#3D1E5C', '#180A2E'],  // violet
+    ['#1E5C3D', '#0A2E18'],  // forest green
+    ['#5C1E3D', '#2E0A18'],  // crimson
+    ['#1E4A5C', '#0A1E2E'],  // cerulean
+    ['#5C4A1E', '#2E2200'],  // gold
   ] as [string, string][],
 } as const;
 

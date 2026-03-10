@@ -67,7 +67,10 @@ export default function SettingsScreen() {
   }, []);
 
   const handlePremiumPurchase = () => {
-    appLog.log('[settings] premium purchased (mock)', { uid });
+    // TODO: Replace with real IAP via RevenueCat or Google Play Billing.
+    // This currently starts a free trial as a placeholder — no payment is collected.
+    // SECURITY: server-side receipt validation must be added before going live.
+    appLog.log('[settings] premium trial started (IAP not yet integrated)', { uid });
     startPremiumTrial();
     setPremiumModalVisible(false);
   };

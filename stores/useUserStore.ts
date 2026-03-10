@@ -20,11 +20,14 @@ function getISOWeekKey(dateStr: string): string {
   return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 }
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 function dateDiffInDays(a: string | null, b: string): number {
   if (!a) return 999;
+  if (!ISO_DATE_RE.test(a) || !ISO_DATE_RE.test(b)) return 999;
   const utcA = Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10));
   const utcB = Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10));
-  return Math.round((utcB - utcA) / 86400000);
+  const diff = Math.round((utcB - utcA) / 86400000);
+  return isNaN(diff) ? 999 : diff;
 }
 
 export const STREAK_BADGE_THRESHOLDS = [7, 30, 100, 365] as const;
@@ -313,7 +316,7 @@ export const useUserStore = create<UserState>((set, get) => ({
     try {
       const { useQuoteStore } = require('./useQuoteStore');
       useQuoteStore.getState().setQuotes([]);
-    } catch { /* silent */ }
+    } catch (err) { appLog.warn('[setLanguage] failed to reset quote store', { err: String(err) }); }
   },
 
   setCategories: async (cats) => {
@@ -325,7 +328,7 @@ export const useUserStore = create<UserState>((set, get) => ({
     try {
       const { useQuoteStore } = require('./useQuoteStore');
       useQuoteStore.getState().setQuotes([]);
-    } catch { /* silent */ }
+    } catch (err) { appLog.warn('[setCategories] failed to reset quote store', { err: String(err) }); }
   },
 
   setAutoRead: async (enabled) => {

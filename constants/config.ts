@@ -138,6 +138,11 @@ export const SIMILARITY_CONFIG: SimilarityConfig = {
   typeThreshold: 1.0,
 };
 
+export const GRASS_CONFIG = {
+  /** Target activities per week shown in the weekly progress bar. */
+  weeklyGoal: 5,
+} as const;
+
 // =============================================================================
 // Unified Config Object
 // =============================================================================

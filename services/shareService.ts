@@ -1,8 +1,12 @@
 import { Share, Platform } from 'react-native';
 import * as Sharing from 'expo-sharing';
+import { appLog } from './logger';
+
+/** Display strings for "unknown author" across all supported locales. */
+const UNKNOWN_AUTHOR = ['작자 미상', 'Unknown', 'Unknown Author', '不明', '不明な著者', '佚名'] as const;
 
 export async function shareQuoteText(text: string, author: string): Promise<void> {
-  const authorLine = author && author !== '작자 미상' ? `\n— ${author}` : '';
+  const authorLine = author && !UNKNOWN_AUTHOR.some((u) => author === u) ? `\n— ${author}` : '';
   const message = `"${text}"${authorLine}\n\n#dailyglow #명언`;
 
   try {
@@ -13,14 +17,19 @@ export async function shareQuoteText(text: string, author: string): Promise<void
   } catch { /* user cancelled */ }
 }
 
-export async function shareQuoteImage(uri: string): Promise<void> {
+export async function shareQuoteImage(uri: string): Promise<boolean> {
   const available = await Sharing.isAvailableAsync();
-  if (!available) return;
+  if (!available) {
+    appLog.warn('[share] image sharing unavailable on this device');
+    return false;
+  }
 
   try {
     await Sharing.shareAsync(uri, {
       mimeType: 'image/png',
       dialogTitle: 'DailyGlow',
     });
-  } catch { /* silent */ }
+    return true;
+  } catch { /* user cancelled */ }
+  return false;
 }

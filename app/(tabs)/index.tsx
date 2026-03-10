@@ -97,8 +97,9 @@ export default function HomeScreen() {
     if (!autoPlayChainRef.current || !useAutoPlayStore.getState().isAutoPlaying) return;
     const qs = useQuoteStore.getState().quotes;
     const nextIdx = autoPlayIndexRef.current + 1;
-    autoPlayIndexRef.current = nextIdx;
     if (nextIdx < qs.length) {
+      // Only advance the ref when the index is in bounds
+      autoPlayIndexRef.current = nextIdx;
       setActiveQuoteIndex(nextIdx);
       isProgrammaticScrollRef.current = true;
       flatListRef.current?.scrollToIndex({ index: nextIdx, animated: true });
@@ -107,6 +108,8 @@ export default function HomeScreen() {
         speak(nextQuote.text, { onDone: advanceAndSpeakNext });
       }
     } else {
+      // Don't advance the ref — leave it at the last valid index so that
+      // once prefetchMore appends new quotes the next callback resumes correctly.
       prefetchMore();
     }
   }, [speak, prefetchMore]);
@@ -295,9 +298,11 @@ export default function HomeScreen() {
         onSpeakAlong={() => { setActiveQuoteIndex(index); setActiveSheet('speak'); }}
         onWriteAlong={() => { setActiveQuoteIndex(index); setActiveSheet('write'); }}
         onTypeAlong={() => { setActiveQuoteIndex(index); setActiveSheet('type'); }}
-        onToggleAutoPlay={handleToggleAutoPlay}
       />
-    ), [handleToggleAutoPlay],
+    ),
+    // No dependency on handleToggleAutoPlay — QuoteCard reads the store directly
+    // to avoid re-rendering all cards when autoPlay state changes.
+    [],
   );
 
   if (isLoading) {
@@ -326,6 +331,15 @@ export default function HomeScreen() {
         viewabilityConfig={viewabilityConfig}
         getItemLayout={(_, index) => ({ length: CARD_HEIGHT, offset: CARD_HEIGHT * index, index })}
         ListFooterComponent={isGenerating ? <View style={styles.footer}><ActivityIndicator size="small" color={colors.primary} /></View> : null}
+        ListEmptyComponent={!isLoading ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="book-outline" size={48} color={colors.textMuted} />
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{t('home.searchEmpty')}</Text>
+            <Pressable onPress={loadQuotes} style={[styles.retryBtn, { backgroundColor: colors.primary }]}>
+              <Text style={styles.retryBtnText}>{t('common.ok')}</Text>
+            </Pressable>
+          </View>
+        ) : null}
       />
       {activeQuote && (
         <>
@@ -379,6 +393,10 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { ...Fonts.body, fontSize: FontSize.md, marginTop: Spacing.md },
   footer: { height: 60, justifyContent: 'center', alignItems: 'center' },
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 120, gap: Spacing.md },
+  emptyText: { ...Fonts.body, fontSize: FontSize.md, textAlign: 'center' },
+  retryBtn: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderRadius: 20 },
+  retryBtnText: { ...Fonts.heading, fontSize: FontSize.sm, color: '#fff' },
   searchBtn: {
     position: 'absolute',
     top: 14,

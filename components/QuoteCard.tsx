@@ -44,10 +44,11 @@ const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 export const CARD_HEIGHT = SCREEN_HEIGHT;
 
 interface QuoteCardPropsExtended extends QuoteCardProps {
-  onToggleAutoPlay?: () => void;
+  // onToggleAutoPlay removed: QuoteCard manages auto-play state directly
+  // via useAutoPlayStore to avoid FlatList re-renders when play state changes.
 }
 
-export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlong, onToggleAutoPlay }: QuoteCardPropsExtended) {
+export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlong }: QuoteCardPropsExtended) {
   const { t } = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
@@ -79,6 +80,8 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
+  // Ref-based guard prevents concurrent screenshot captures
+  const isCapturingRef = useRef(false);
 
   const viewShotRef = useRef<ViewShot>(null);
 
@@ -111,7 +114,10 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
       setPremiumPromptVisible(true);
       return;
     }
-    onToggleAutoPlay?.();
+    // Manage toggle directly to avoid passing a prop that changes on every render
+    const { isAutoPlaying: currentlyPlaying, setAutoPlaying } = useAutoPlayStore.getState();
+    if (currentlyPlaying) stop();
+    setAutoPlaying(!currentlyPlaying);
   };
   
   const handleShare = () => {
@@ -127,6 +133,9 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
       setLoginPromptVisible(true);
       return;
     }
+    // Prevent concurrent captures via ref (state updates are async and can miss rapid taps)
+    if (isCapturingRef.current) return;
+    isCapturingRef.current = true;
     appLog.log('[quote] shareImage tapped', { id: quote.id });
     try {
       setIsCapturing(true);
@@ -140,6 +149,8 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
       setIsCapturing(false);
       appLog.warn('[quote] shareImage capture failed, falling back to text', { err: String(err) });
       shareQuoteText(quote.text, quote.author);
+    } finally {
+      isCapturingRef.current = false;
     }
   };
 
@@ -238,7 +249,7 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
                   <Ionicons name={isSpeaking ? 'volume-high' : 'volume-medium-outline'} size={20} color={colors.textPrimary} />
                 </Pressable>
                 <Pressable onPress={handleBookmark} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
-                  <Ionicons name={bookmarked ? 'heart' : 'heart-outline'} size={20} color={bookmarked ? '#FF6B6B' : colors.textPrimary} />
+                  <Ionicons name={bookmarked ? 'heart' : 'heart-outline'} size={20} color={bookmarked ? colors.error : colors.textPrimary} />
                 </Pressable>
                 <Pressable onPress={handleAutoPlay} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
                   <Ionicons 
@@ -323,14 +334,19 @@ const QUOTE_MARK_SIZE = FontSize.xl * 2;
 
 /**
  * Returns an appropriate font size for the quote text based on its length.
- * Korean/CJK text is naturally compact; English longer quotes need smaller font.
+ * CJK (Chinese/Japanese/Korean) scripts pack more information per character
+ * so we apply a 1.8× effective-length factor before checking thresholds.
  */
+function isCJK(text: string): boolean {
+  return /[\u1100-\u11FF\u3040-\u30FF\u3130-\u318F\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF]/.test(text);
+}
+
 function getQuoteFontSize(text: string): number {
-  const len = text.length;
-  if (len < 80)  return FontSize.xl;       // 24 – short quote
-  if (len < 150) return FontSize.lg;       // 20 – medium
-  if (len < 260) return FontSize.md + 2;  // 18 – long
-  return FontSize.md;                      // 16 – very long
+  const effectiveLen = isCJK(text) ? text.length * 1.8 : text.length;
+  if (effectiveLen < 80)  return FontSize.xl;      // 24px – short quote
+  if (effectiveLen < 150) return FontSize.lg;      // 20px – medium
+  if (effectiveLen < 260) return FontSize.md + 2; // 18px – long
+  return FontSize.md;                              // 16px – very long
 }
 
 const styles = StyleSheet.create({

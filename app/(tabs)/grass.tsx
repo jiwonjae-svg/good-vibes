@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, FlatList, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal, FlatList, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { Fonts, FontSize, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { GRASS_CONFIG } from '../../constants/config';
 import { useGrassStore, ActivityQuote } from '../../stores/useGrassStore';
 import { useUserStore } from '../../stores/useUserStore';
 import GrassGrid from '../../components/GrassGrid';
@@ -20,7 +21,7 @@ type ActivityType = 'speak' | 'write' | 'type';
 export default function GrassScreen() {
   const { t } = useTranslation();
   const colors = useThemeColors();
-  const { loadGrassData, isLoaded, getGrassDay, getActivityQuotes } = useGrassStore();
+  const { loadGrassData, isLoaded, getGrassDay, getActivityQuotes, grassData } = useGrassStore();
   const currentStreak = useUserStore((s) => s.currentStreak);
   const earnedBadges = useUserStore((s) => s.earnedBadges);
   const earnedBadgeDates = useUserStore((s) => s.earnedBadgeDates);
@@ -54,8 +55,8 @@ export default function GrassScreen() {
   const todayTotal = todayData.speakCount + todayData.writeCount + todayData.typeCount;
 
   // Calculate this week's total activity count
-  const WEEKLY_GOAL = 5;
-  const weeklyTotal = (() => {
+  const WEEKLY_GOAL = GRASS_CONFIG.weeklyGoal;
+  const weeklyTotal = React.useMemo(() => {
     let count = 0;
     const d = new Date();
     for (let i = 0; i < 7; i++) {
@@ -65,7 +66,7 @@ export default function GrassScreen() {
       d.setDate(d.getDate() - 1);
     }
     return Math.min(count, WEEKLY_GOAL * 2); // cap display but show real numbers in text
-  })();
+  }, [grassData, getGrassDay, WEEKLY_GOAL]);
   const weeklyGoalMet = weeklyTotal >= WEEKLY_GOAL;
 
   const handleActivityPress = (type: ActivityType) => {
@@ -98,6 +99,17 @@ export default function GrassScreen() {
   };
 
   const activityQuotes = selectedActivityType ? getActivityQuotes(today, selectedActivityType) : [];
+
+  // Show spinner while data is loading (only for logged-in users)
+  if (!isLoaded && !isGuest) {
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top']}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (isGuest) {
     return (
@@ -315,6 +327,7 @@ function ActivityItem({ iconSource, label, count, color, subColor, iconTint, onP
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   container: { flex: 1, paddingTop: Spacing.md },
   header: { ...Fonts.heading, fontSize: FontSize.xl, marginHorizontal: Spacing.lg, marginBottom: Spacing.xs },
   subtitle: { ...Fonts.body, fontSize: FontSize.sm, marginHorizontal: Spacing.lg, marginBottom: Spacing.lg },

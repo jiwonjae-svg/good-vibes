@@ -35,9 +35,12 @@ export async function scheduleDailyReminder(quoteText?: string, hour = 9): Promi
   if (!Notifications) return false;
 
   try {
-    await Notifications.cancelAllScheduledNotificationsAsync();
+    // Check permission BEFORE cancelling — avoid wiping the schedule
+    // if the user has revoked permission since the last launch.
     const granted = await requestNotificationPermission();
     if (!granted) return false;
+
+    await Notifications.cancelAllScheduledNotificationsAsync();
 
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -64,6 +67,26 @@ export async function cancelDailyReminder(): Promise<void> {
   try {
     await Notifications.cancelAllScheduledNotificationsAsync();
   } catch { /* silent */ }
+}
+
+/**
+ * Re-validates the notification schedule when the app returns to the foreground.
+ * Timezone changes or OS-level clearing can silently drop the scheduled notification.
+ */
+export async function validateAndRescheduleDailyReminder(
+  dailyReminderEnabled: boolean,
+  reminderHour = 9,
+): Promise<void> {
+  if (!dailyReminderEnabled) return;
+  const Notifications = getNotifications();
+  if (!Notifications) return;
+
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    if (scheduled.length === 0) {
+      await scheduleDailyReminder(undefined, reminderHour);
+    }
+  } catch { /* silent — non-critical background check */ }
 }
 
 export function initNotificationHandler(): void {

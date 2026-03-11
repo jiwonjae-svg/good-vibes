@@ -131,7 +131,7 @@ export default function RootLayout() {
       <ErrorBoundary>
         <GestureHandlerRootView style={styles.root}>
           <StatusBar style={isDarkMode ? 'light' : 'dark'} />
-          <OnboardingScreen onComplete={handleOnboardingComplete} />
+          <OnboardingScreen onComplete={handleOnboardingComplete} isReplay={showOnboardingFlag} />
         </GestureHandlerRootView>
       </ErrorBoundary>
     );

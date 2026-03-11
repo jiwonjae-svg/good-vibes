@@ -17,6 +17,8 @@ import { appLog } from '../services/logger';
 import LoginPromptModal from './LoginPromptModal';
 import PremiumPromptModal from './PremiumPromptModal';
 import { onTTSPressed } from './AdInterstitial';
+import CommunityBadge from './CommunityBadge';
+import { useCommunityStore } from '../stores/useCommunityStore';
 
 const ACTION_BG_LIGHT = 'rgba(255,255,255,0.92)';
 const ACTION_BG_DARK = 'rgba(30,30,30,0.85)';
@@ -81,6 +83,17 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [showOverflow, setShowOverflow] = useState(false);
+
+  // Community-specific state (only active when quote.source === 'community')
+  const isCommunityQuote = quote.source === 'community';
+  const likedCommunityIds = useCommunityStore((s) => s.likedCommunityIds);
+  const toggleCommunityLike = useCommunityStore((s) => s.toggleLike);
+  const isCommunityLiked = likedCommunityIds.includes(quote.id);
+
+  const handleCommunityLike = () => {
+    if (isGuest) { setLoginPromptVisible(true); return; }
+    if (uid) toggleCommunityLike(uid, quote.id);
+  };
   // Ref-based guard prevents concurrent screenshot captures
   const isCapturingRef = useRef(false);
   const lastTapRef = useRef<number>(0);
@@ -252,8 +265,12 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
               ) : null}
             </Pressable>
 
-            {/* Source shown as a tappable label in the bottom-left corner of the card */}
-            {quote.source ? (
+            {/* Source shown as a tappable label or Community badge in the bottom-left corner */}
+            {isCommunityQuote ? (
+              <View style={styles.sourceLink}>
+                <CommunityBadge size="sm" />
+              </View>
+            ) : quote.source ? (
               <Pressable onPress={handleSourceOpen} style={styles.sourceLink}>
                 <Ionicons name="link-outline" size={10} color={quoteTextColor} />
                 <Text style={[styles.sourceText, { color: quoteTextColor }]}>
@@ -296,12 +313,20 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
                     <Pressable onPress={handleShareImage} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
                       <Ionicons name="image-outline" size={20} color={colors.textPrimary} />
                     </Pressable>
-                    <Pressable onPress={() => handleRateQuote('like')} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
-                      <Ionicons name={isLiked ? 'thumbs-up' : 'thumbs-up-outline'} size={19} color={isLiked ? colors.primary : colors.textPrimary} />
-                    </Pressable>
-                    <Pressable onPress={() => handleRateQuote('dislike')} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
-                      <Ionicons name={isDisliked ? 'thumbs-down' : 'thumbs-down-outline'} size={19} color={isDisliked ? colors.error : colors.textPrimary} />
-                    </Pressable>
+                    {isCommunityQuote ? (
+                      <Pressable onPress={handleCommunityLike} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
+                        <Ionicons name={isCommunityLiked ? 'heart' : 'heart-outline'} size={19} color={isCommunityLiked ? colors.error : colors.textPrimary} />
+                      </Pressable>
+                    ) : (
+                      <>
+                        <Pressable onPress={() => handleRateQuote('like')} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
+                          <Ionicons name={isLiked ? 'thumbs-up' : 'thumbs-up-outline'} size={19} color={isLiked ? colors.primary : colors.textPrimary} />
+                        </Pressable>
+                        <Pressable onPress={() => handleRateQuote('dislike')} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
+                          <Ionicons name={isDisliked ? 'thumbs-down' : 'thumbs-down-outline'} size={19} color={isDisliked ? colors.error : colors.textPrimary} />
+                        </Pressable>
+                      </>
+                    )}
                     <Pressable onPress={handleReport} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
                       <Ionicons name="flag-outline" size={19} color={colors.textSecondary} />
                     </Pressable>

@@ -31,6 +31,8 @@ import DailyQuoteModal, { getDailyQuote } from '../../components/DailyQuoteModal
 import QuoteSearchModal from '../../components/QuoteSearchModal';
 import OfflineBanner from '../../components/OfflineBanner';
 import MilestoneBadgeModal from '../../components/MilestoneBadgeModal';
+import SubmitQuoteSheet from '../../components/SubmitQuoteSheet';
+import { useCommunityStore } from '../../stores/useCommunityStore';
 import { Ionicons } from '@expo/vector-icons';
 
 type SheetType = 'speak' | 'write' | 'type' | null;
@@ -58,6 +60,28 @@ export default function HomeScreen() {
   const [isOffline, setIsOffline] = useState(false);
   const [searchVisible, setSearchVisible] = useState(false);
   const [showDailyModal, setShowDailyModal] = useState(false);
+  const [submitVisible, setSubmitVisible] = useState(false);
+
+  // Community feed
+  const {
+    feedMode, setFeedMode,
+    communityQuotes, isLoading: communityLoading,
+    hasMore: communityHasMore,
+    loadCommunityQuotes, loadMore: loadMoreCommunity,
+  } = useCommunityStore();
+
+  // Map community quotes to Quote shape for reuse in FlatList
+  const communityAsFeedQuotes: Quote[] = communityQuotes.map((cq, i) => ({
+    id: cq.id,
+    text: cq.text,
+    author: cq.author,
+    source: 'community' as const,
+    category: cq.categories[0],
+    createdAt: cq.createdAt,
+    gradientIndex: i % 8,
+  }));
+
+  const displayedQuotes = feedMode === 'community' ? communityAsFeedQuotes : quotes;
   const flatListRef = useRef<FlatList>(null);
   const lastViewedIndex = useRef(0);
   const loginPromptShown = useRef(false);
@@ -147,6 +171,8 @@ export default function HomeScreen() {
       return;
     }
     loadQuotes();
+    // Reset community feed on language change
+    if (feedMode === 'community') loadCommunityQuotes(language, true);
   }, [language]);
 
   useEffect(() => {
@@ -289,7 +315,7 @@ export default function HomeScreen() {
     showAdForActivity(isPremium, () => { showPraise(); });
   };
 
-  const activeQuote = quotes[activeQuoteIndex];
+  const activeQuote = displayedQuotes[activeQuoteIndex];
 
   const renderItem = useCallback(
     ({ item, index }: { item: Quote; index: number }) => (
@@ -319,7 +345,7 @@ export default function HomeScreen() {
       {isOffline && <OfflineBanner onDismiss={() => setIsOffline(false)} />}
       <FlatList
         ref={flatListRef}
-        data={quotes}
+        data={displayedQuotes}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         pagingEnabled
@@ -330,8 +356,12 @@ export default function HomeScreen() {
         onMomentumScrollEnd={onMomentumScrollEnd}
         viewabilityConfig={viewabilityConfig}
         getItemLayout={(_, index) => ({ length: CARD_HEIGHT, offset: CARD_HEIGHT * index, index })}
-        ListFooterComponent={isGenerating ? <View style={styles.footer}><ActivityIndicator size="small" color={colors.primary} /></View> : null}
-        ListEmptyComponent={!isLoading ? (
+        onEndReached={() => {
+          if (feedMode === 'community' && communityHasMore) loadMoreCommunity(language);
+        }}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={(isGenerating || (feedMode === 'community' && communityLoading)) ? <View style={styles.footer}><ActivityIndicator size="small" color={colors.primary} /></View> : null}
+        ListEmptyComponent={!(isLoading || communityLoading) ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="book-outline" size={48} color={colors.textMuted} />
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{t('home.searchEmpty')}</Text>
@@ -366,6 +396,42 @@ export default function HomeScreen() {
       >
         <Ionicons name="search-outline" size={22} color={colors.textPrimary} />
       </Pressable>
+
+      {/* Feed mode toggle: All Quotes / Community ★ */}
+      <View style={[styles.feedToggle, { top: insets.top + 8, backgroundColor: colors.surface }]}>
+        <Pressable
+          style={[styles.feedBtn, feedMode === 'all' && { backgroundColor: colors.primary }]}
+          onPress={() => setFeedMode('all')}
+        >
+          <Text style={[styles.feedBtnText, { color: feedMode === 'all' ? '#fff' : colors.textSecondary }]}>
+            {t('community.feedAll')}
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.feedBtn, feedMode === 'community' && { backgroundColor: colors.primary }]}
+          onPress={() => {
+            setFeedMode('community');
+            if (communityQuotes.length === 0) loadCommunityQuotes(language, true);
+          }}
+        >
+          <Text style={[styles.feedBtnText, { color: feedMode === 'community' ? '#fff' : colors.textSecondary }]}>
+            {t('community.feedCommunity')}
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* FAB: Submit a quote (logged-in users only) */}
+      {!isGuest && (
+        <Pressable
+          style={[styles.fab, { backgroundColor: colors.primary, bottom: insets.bottom + 80 }]}
+          onPress={() => setSubmitVisible(true)}
+        >
+          <Ionicons name="add" size={28} color="#fff" />
+        </Pressable>
+      )}
+
+      <SubmitQuoteSheet visible={submitVisible} onClose={() => setSubmitVisible(false)} />
+
       <QuoteSearchModal
         visible={searchVisible}
         quotes={quotes}
@@ -412,5 +478,43 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 6,
     elevation: 5,
+  },
+  feedToggle: {
+    position: 'absolute',
+    left: Spacing.lg,
+    flexDirection: 'row',
+    borderRadius: 20,
+    overflow: 'hidden',
+    zIndex: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  feedBtn: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  feedBtnText: {
+    ...Fonts.body,
+    fontSize: FontSize.xs,
+    fontWeight: '600',
+  },
+  fab: {
+    position: 'absolute',
+    right: Spacing.lg,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
 });

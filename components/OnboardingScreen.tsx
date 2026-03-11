@@ -34,13 +34,15 @@ const ONBOARDING_CATEGORIES = CATEGORY_THEMES.slice(0, 3).flatMap((theme) =>
   theme.categories.slice(0, 8),
 );
 
-const TOTAL_STEPS = SLIDES_DATA.length + 2; // 4 slides + category + notification
+const TOTAL_STEPS_FULL = SLIDES_DATA.length + 2; // 4 slides + category + notification
+const TOTAL_STEPS_REPLAY = SLIDES_DATA.length; // 4 slides only (replay mode)
 
 interface OnboardingScreenProps {
   onComplete: () => void;
+  isReplay?: boolean;
 }
 
-export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
+export default function OnboardingScreen({ onComplete, isReplay = false }: OnboardingScreenProps) {
   const { t } = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
@@ -69,11 +71,19 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
     });
   };
 
+  const TOTAL_STEPS = isReplay ? TOTAL_STEPS_REPLAY : TOTAL_STEPS_FULL;
+
   const goNext = async () => {
     if (step < SLIDES_DATA.length - 1) {
       // Advance within FlatList slides
       flatListRef.current?.scrollToIndex({ index: step + 1, animated: true });
     } else if (step === SLIDES_DATA.length - 1) {
+      if (isReplay) {
+        // Replay mode: skip category / notification steps
+        appLog.log('[onboarding] replay completed');
+        onComplete();
+        return;
+      }
       // Leave FlatList, go to category step
       setStep(SLIDES_DATA.length);
     } else if (step === SLIDES_DATA.length) {

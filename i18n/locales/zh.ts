@@ -56,12 +56,6 @@ export default {
     upgrade: '升级到Glow+',
     upgradeDesc: '移除广告、小部件等更多功能'
   },
-  login: {
-    tagline: '每天进步一点点',
-    signInWithGoogle: '使用Google登录',
-    continueWithoutAccount: '无账户继续',
-    signInFailed: '登录失败，请重试。',
-  },
   categoryPicker: {
     title: '选择分类', selected: '已选{{count}}/{{max}}个', clearAll: '清除全部',
     confirm: '确认', limitTitle: '选择限制', limitMessage: '最多可选择{{max}}个分类。'

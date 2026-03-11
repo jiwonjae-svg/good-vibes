@@ -361,5 +361,6 @@ export default {
     approved: '게시됨',
     rejected: '미승인',
     report: '신고',
+    xssBlocked: 'HTML 태그나 스크립트는 포함할 수 없습니다.',
   },
 };

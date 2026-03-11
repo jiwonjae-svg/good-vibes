@@ -51,14 +51,21 @@ Perfect for:
 - **Statistics**: Total quotes viewed, today's viewed quotes list, and active days tracked
 - **Auto-Read**: Optional automatic TTS when viewing new quotes
 
-### 🔐 Account & Sync
+### � Community
+- **Community Feed**: Browse community-submitted quotes in a dedicated feed tab
+- **Submit a Quote**: Authenticated users can submit their own quotes (3 per day, 10–500 chars)
+- **Like**: Heart-react to community quotes with optimistic UI updates
+- **Report**: Flag inappropriate content (auto-rejected at threshold)
+- **Moderation**: Submitted quotes enter `pending` state and appear after approval
+
+### �🔐 Account & Sync
 - **Google OAuth**: One-tap sign-in with Google
 - **Email Auth**: Traditional email/password with password reset
 - **Guest Mode**: Continue without account
 - **Firebase Sync**: Data synced across devices when logged in
 
 ### 🌍 Personalization
-- **4 Languages**: Korean 🇰🇷, English 🇺🇸, Japanese 🇯🇵, Chinese 🇨🇳
+- **5 Languages**: Korean 🇰🇷, English 🇺🇸, Spanish 🇪🇸, Japanese 🇯🇵, Chinese 🇨🇳
 - **Dark Mode**: Full dark theme, toggleable in settings
 - **Notification**: Daily 9 AM reminder (configurable)
 - **Premium**: Ad-free experience upgrade
@@ -189,11 +196,14 @@ dailyglow/
 │   ├── LanguagePickerModal.tsx    # Language selection modal
 │   ├── CategoryPickerModal.tsx    # Hierarchical category selection (150+ categories)
 │   └── AdInterstitial.tsx         # AdMob interstitial manager
+│   ├── CommunityBadge.tsx         # '👥 Community' pill badge for community cards
+│   └── SubmitQuoteSheet.tsx       # Bottom sheet for submitting community quotes
 │
 ├── 📁 services/                   # Business logic & external services
 │   ├── authService.ts             # Firebase Auth: Google, Email, Password Reset
 │   ├── firebaseConfig.ts          # Firestore init, server quotes loader, persistence
 │   ├── quoteService.ts            # Quote selection, caching, offline/online strategy
+│   ├── communityService.ts        # Firestore CRUD: community_quotes, likes, reports
 │   ├── praiseService.ts           # Praise selection (seed library)
 │   ├── notificationService.ts     # Push notifications (Expo Go safe)
 │   ├── shareService.ts            # SNS sharing
@@ -204,6 +214,7 @@ dailyglow/
 ├── 📁 stores/                     # Zustand state management
 │   ├── useQuoteStore.ts           # Quote list state
 │   ├── useGrassStore.ts           # Daily activity data
+│   ├── useCommunityStore.ts       # Community feed, likes, submission rate limit
 │   └── useUserStore.ts            # Auth, prefs, bookmarks, streak
 │
 ├── 📁 hooks/                      # Custom React hooks
@@ -217,6 +228,7 @@ dailyglow/
 │   └── locales/
 │       ├── ko.ts                  # Korean
 │       ├── en.ts                  # English
+│       ├── es.ts                  # Spanish
 │       ├── ja.ts                  # Japanese
 │       └── zh.ts                  # Chinese
 │
@@ -307,6 +319,10 @@ Modules incompatible with Expo Go are conditionally loaded:
 - ✅ **Local-first** — all data stored on device by default
 - ✅ **Optional cloud sync** — only when logged in to Firebase
 - ✅ **Open source** — audit the code yourself
+- ✅ **Input sanitization** — HTML tags, scripts, and event handlers blocked on community submissions
+- ✅ **Firestore security rules** — per-field write restrictions; clients cannot modify `status`, `submitterId`, or others' data
+- ✅ **Input sanitization** — HTML tags, scripts, and event handlers blocked on community quote submissions
+- ✅ **Firestore security rules** — per-field write restrictions; clients cannot modify `status`, `submitterId`, or others' data
 
 ## 🤝 Contributing
 

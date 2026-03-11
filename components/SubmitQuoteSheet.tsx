@@ -85,6 +85,14 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
       );
       if (result.success) {
         setSubmitted(true);
+      } else if (result.error === 'xssBlocked') {
+        setError(t('community.xssBlocked'));
+      } else if (result.error === 'tooShort') {
+        setError(t('community.tooShort'));
+      } else if (result.error === 'tooLong') {
+        setError(t('community.tooLong'));
+      } else if (result.error === 'noUrls') {
+        setError(t('community.noUrls'));
       } else {
         setError(t('community.submitError'));
       }

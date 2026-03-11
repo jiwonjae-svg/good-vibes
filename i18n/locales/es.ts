@@ -363,5 +363,6 @@ export default {
     approved: 'Publicada',
     rejected: 'No aprobada',
     report: 'Reportar',
+    xssBlocked: 'No se permiten etiquetas HTML ni scripts.',
   },
 };

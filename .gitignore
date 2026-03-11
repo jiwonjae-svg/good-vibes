@@ -63,9 +63,11 @@ app/google-services.json
 # Sentry
 .sentryclirc
 
-# Docs (internal)
-docs/
+# Deployment notes (may contain env-specific details)
 Deployment.md
+
+# Repomix output
+repomix-output.xml
 
 # Crawl raw/outputs (regeneratable)
 *_raw.json

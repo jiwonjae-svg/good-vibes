@@ -189,6 +189,7 @@ export default function MyScreen() {
       style={[styles.quoteItem, { backgroundColor: colors.surface }]}
       onPress={() => handleQuotePress({ ...item, gradientIndex: item.gradientIndex })}
     >
+      <View style={[styles.gradientSwatch, { backgroundColor: colors.cardGradients[item.gradientIndex % colors.cardGradients.length][0] }]} />
       <View style={styles.quoteItemContent}>
         <Text style={[styles.quoteItemText, { color: colors.textPrimary }]} numberOfLines={2}>
           {item.text}
@@ -354,6 +355,7 @@ const styles = StyleSheet.create({
     ...Shadows.floating,
   },
   quoteItemContent: { flex: 1, marginRight: Spacing.sm },
+  gradientSwatch: { width: 4, height: 40, borderRadius: 4, marginRight: Spacing.sm },
   quoteItemText: { ...Fonts.body, fontSize: FontSize.sm, lineHeight: 20 },
   quoteItemAuthor: { ...Fonts.body, fontSize: FontSize.xs, marginTop: Spacing.xs, fontStyle: 'italic' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.xxl },

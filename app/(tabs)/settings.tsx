@@ -94,7 +94,6 @@ export default function SettingsScreen() {
 
   const handleLanguage = () => setLangModalVisible(true);
   const handleCategory = () => {
-    if (isGuest) return;
     setCatModalVisible(true);
   };
 
@@ -264,7 +263,11 @@ export default function SettingsScreen() {
               <>
                 <View style={s.row}>
                   <View style={s.rowLeft}>
-                    <Ionicons name="logo-google" size={22} color="#EA4335" />
+                    <View style={[s.avatar, { backgroundColor: colors.primary + '30' }]}>
+                      <Text style={[s.avatarText, { color: colors.primary }]}>
+                        {(displayName ?? email ?? 'G').charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
                     <View>
                       <Text style={s.rowTitle}>{displayName ?? email ?? t('settings.googleUser')}</Text>
                       {(username || email) && (
@@ -460,17 +463,13 @@ export default function SettingsScreen() {
               </View>
             </View>
             <View style={s.divider} />
-            <Pressable style={[s.row, isGuest && s.disabledRow]} onPress={handleCategory} disabled={isGuest}>
+            <Pressable style={s.row} onPress={handleCategory}>
               <View style={s.rowLeft}>
-                <Ionicons name="pricetag-outline" size={22} color={isGuest ? colors.textMuted : colors.textSecondary} />
-                <View>
-                  <Text style={[s.rowTitle, isGuest && { color: colors.textMuted }]}>{t('settings.category')}</Text>
-                  {isGuest && <Text style={[s.rowSubtitle, { color: colors.textMuted }]}>{t('settings.loginRequired')}</Text>}
-                </View>
+                <Ionicons name="pricetag-outline" size={22} color={colors.textSecondary} />
+                <Text style={s.rowTitle}>{t('settings.category')}</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                {!isGuest && <Text style={s.rowValue}>{catLabel}</Text>}
-                {isGuest && <Ionicons name="lock-closed" size={16} color={colors.textMuted} />}
+                <Text style={s.rowValue}>{catLabel}</Text>
                 <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
               </View>
             </Pressable>
@@ -654,6 +653,8 @@ function makeStyles(colors: any) {
     row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: Spacing.md },
     disabledRow: { opacity: 0.6 },
     rowLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flex: 1 },
+    avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+    avatarText: { ...Fonts.heading, fontSize: FontSize.lg },
     rowTitle: { ...Fonts.body, fontSize: FontSize.md, color: colors.textPrimary },
     rowSubtitle: { ...Fonts.body, fontSize: FontSize.xs, color: colors.textSecondary, marginTop: 2 },
     rowValue: { ...Fonts.body, fontSize: FontSize.sm, color: colors.textSecondary },

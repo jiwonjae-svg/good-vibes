@@ -176,19 +176,20 @@ export default function GrassScreen() {
               {t('grass.weeklyProgress', { count: weeklyTotal, goal: WEEKLY_GOAL })}
             </Text>
           </View>
-          <View style={[styles.weeklyBarBg, { backgroundColor: colors.grass0 }]}>
-            <View style={[styles.weeklyBarFill, { width: `${Math.min((weeklyTotal / WEEKLY_GOAL) * 100, 100)}%`, backgroundColor: weeklyGoalMet ? colors.success : colors.primary }]} />
-          </View>
-        </View>
-
-        <View style={[styles.todayCard, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.todayTitle, { color: colors.textPrimary }]}>{t('grass.todayActivity')}</Text>
-          <View style={styles.todayRow}>
-            <ActivityItem
-              iconSource={getActivityImage('speak')}
+            <View style={styles.weeklySegments}>
+              {Array.from({ length: WEEKLY_GOAL }).map((_, i) => (
+                <View
+                  key={i}
+                  style={[styles.weeklySegment, {
+                    backgroundColor: i < weeklyTotal
+                      ? (weeklyGoalMet ? colors.success : colors.primary)
+                      : colors.grass0,
+                  }]}
+                />
+              ))}
               label={t('home.speakAlong')}
               count={todayData.speakCount}
-              color={colors.textPrimary}
+              color={colors.primary}
               subColor={colors.textSecondary}
               iconTint={colors.primary}
               onPress={() => handleActivityPress('speak')}
@@ -198,7 +199,7 @@ export default function GrassScreen() {
               iconSource={getActivityImage('write')}
               label={t('home.writeAlong')}
               count={todayData.writeCount}
-              color={colors.textPrimary}
+              color={colors.secondary}
               subColor={colors.textSecondary}
               iconTint={colors.secondary}
               onPress={() => handleActivityPress('write')}
@@ -208,7 +209,7 @@ export default function GrassScreen() {
               iconSource={getActivityImage('type')}
               label={t('home.typeAlong')}
               count={todayData.typeCount}
-              color={colors.textPrimary}
+              color={colors.accent}
               subColor={colors.textSecondary}
               iconTint={colors.accent}
               onPress={() => handleActivityPress('type')}
@@ -223,26 +224,31 @@ export default function GrassScreen() {
         {/* Milestone Badges */}
         <View style={[styles.badgesCard, { backgroundColor: colors.surface }]}>
           <Text style={[styles.badgesTitle, { color: colors.textPrimary }]}>{t('grass.badges')}</Text>
-          {earnedBadges.length === 0 ? (
-            <>
-              <Text style={[styles.noBadgesText, { color: colors.textSecondary }]}>{t('grass.noBadges')}</Text>
-              <Text style={[styles.noBadgesHint, { color: colors.textMuted }]}>{t('grass.noBadgesHint')}</Text>
-            </>
-          ) : (
-            <View style={styles.badgesGrid}>
-              {earnedBadges.map((badge) => (
-                <View key={badge} style={[styles.badgeChip, { backgroundColor: colors.primaryLight + '22' }]}>
-                  <Text style={styles.badgeEmoji}>{BADGE_DISPLAY[badge]?.emoji ?? '\uD83C\uDFC5'}</Text>
+          <View style={styles.badgesGrid}>
+            {Object.entries(BADGE_DISPLAY).map(([id, badge]) => {
+              const earned = earnedBadges.includes(id);
+              return (
+                <View
+                  key={id}
+                  style={[
+                    styles.badgeChip,
+                    { backgroundColor: earned ? colors.primaryLight + '22' : colors.grass0, opacity: earned ? 1 : 0.55 },
+                  ]}
+                >
+                  {!earned && <Ionicons name="lock-closed" size={12} color={colors.textMuted} />}
+                  <Text style={styles.badgeEmoji}>{badge.emoji}</Text>
                   <View>
-                    <Text style={[styles.badgeName, { color: colors.textPrimary }]}>{t(BADGE_DISPLAY[badge]?.titleKey ?? badge)}</Text>
-                    {earnedBadgeDates[badge] && (
-                      <Text style={[styles.badgeDate, { color: colors.textMuted }]}>{t('grass.badgeEarned', { date: earnedBadgeDates[badge] })}</Text>
+                    <Text style={[styles.badgeName, { color: earned ? colors.textPrimary : colors.textMuted }]}>
+                      {t(badge.titleKey)}
+                    </Text>
+                    {earned && earnedBadgeDates[id] && (
+                      <Text style={[styles.badgeDate, { color: colors.textMuted }]}>{t('grass.badgeEarned', { date: earnedBadgeDates[id] })}</Text>
                     )}
                   </View>
                 </View>
-              ))}
-            </View>
-          )}
+              );
+            })}
+          </View>
         </View>
       </ScrollView>
 
@@ -434,6 +440,6 @@ const styles = StyleSheet.create({
   weeklyHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginBottom: Spacing.sm },
   weeklyTitle: { ...Fonts.heading, fontSize: FontSize.sm, flex: 1 },
   weeklyCount: { ...Fonts.body, fontSize: FontSize.sm },
-  weeklyBarBg: { height: 8, borderRadius: 4, overflow: 'hidden' },
-  weeklyBarFill: { height: '100%', borderRadius: 4 },
+  weeklySegments: { flexDirection: 'row', gap: 4, flex: 1 },
+  weeklySegment: { flex: 1, height: 12, borderRadius: 4 },
 });

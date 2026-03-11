@@ -80,8 +80,30 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [showOverflow, setShowOverflow] = useState(false);
   // Ref-based guard prevents concurrent screenshot captures
   const isCapturingRef = useRef(false);
+  const lastTapRef = useRef<number>(0);
+
+  const handleDoubleTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      handleBookmark();
+      lastTapRef.current = 0;
+    } else {
+      lastTapRef.current = now;
+    }
+  };
+
+  const handleSourceOpen = () => {
+    const urls: Record<string, string> = {
+      quotable: 'https://quotable.io',
+      wikiquote: 'https://en.wikiquote.org',
+      gutenberg: 'https://www.gutenberg.org',
+    };
+    const url = quote.source ? urls[quote.source] : null;
+    if (url) Linking.openURL(url);
+  };
 
   const viewShotRef = useRef<ViewShot>(null);
 
@@ -205,7 +227,7 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
             <View style={styles.viewedOverlay} pointerEvents="none" />
           )}
           <View style={styles.cardFrame}>
-            <View style={styles.quoteContent}>
+            <Pressable style={styles.quoteContent} onPress={handleDoubleTap}>
               <Image
                 source={QUOTE_OPEN_IMG}
                 style={[styles.quoteMarkOpen, { tintColor: quoteMarkColor }]}
@@ -228,13 +250,16 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
                   </Text>
                 </Pressable>
               ) : null}
-            </View>
+            </Pressable>
 
-            {/* Source shown as a tiny label in the bottom-left corner of the card */}
+            {/* Source shown as a tappable label in the bottom-left corner of the card */}
             {quote.source ? (
-              <Text style={[styles.sourceText, { color: quoteTextColor }]}>
-                {sourceLabel(quote.source)}
-              </Text>
+              <Pressable onPress={handleSourceOpen} style={styles.sourceLink}>
+                <Ionicons name="link-outline" size={10} color={quoteTextColor} />
+                <Text style={[styles.sourceText, { color: quoteTextColor }]}>
+                  {sourceLabel(quote.source)}
+                </Text>
+              </Pressable>
             ) : null}
             
             {isCapturing && (
@@ -244,35 +269,44 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
             )}
 
             {!isCapturing && (
-              <View style={styles.topActions}>
-                <Pressable onPress={handleTTS} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
-                  <Ionicons name={isSpeaking ? 'volume-high' : 'volume-medium-outline'} size={20} color={colors.textPrimary} />
-                </Pressable>
-                <Pressable onPress={handleBookmark} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
-                  <Ionicons name={bookmarked ? 'heart' : 'heart-outline'} size={20} color={bookmarked ? colors.error : colors.textPrimary} />
-                </Pressable>
-                <Pressable onPress={handleAutoPlay} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
-                  <Ionicons 
-                    name={isAutoPlaying ? 'pause-circle' : 'play-circle-outline'} 
-                    size={20} 
-                    color={isAutoPlaying ? colors.primary : colors.textPrimary} 
-                  />
-                </Pressable>
-                <Pressable onPress={handleShare} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
-                  <Ionicons name="share-social-outline" size={20} color={colors.textPrimary} />
-                </Pressable>
-                <Pressable onPress={handleShareImage} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
-                  <Ionicons name="image-outline" size={20} color={colors.textPrimary} />
-                </Pressable>
-                <Pressable onPress={() => handleRateQuote('like')} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
-                  <Ionicons name={isLiked ? 'thumbs-up' : 'thumbs-up-outline'} size={19} color={isLiked ? colors.primary : colors.textPrimary} />
-                </Pressable>
-                <Pressable onPress={() => handleRateQuote('dislike')} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
-                  <Ionicons name={isDisliked ? 'thumbs-down' : 'thumbs-down-outline'} size={19} color={isDisliked ? colors.error : colors.textPrimary} />
-                </Pressable>
-                <Pressable onPress={handleReport} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
-                  <Ionicons name="flag-outline" size={19} color={colors.textSecondary} />
-                </Pressable>
+              <View style={styles.topActionsWrapper}>
+                <View style={styles.topActions}>
+                  <Pressable onPress={handleTTS} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
+                    <Ionicons name={isSpeaking ? 'volume-high' : 'volume-medium-outline'} size={20} color={colors.textPrimary} />
+                  </Pressable>
+                  <Pressable onPress={handleBookmark} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
+                    <Ionicons name={bookmarked ? 'heart' : 'heart-outline'} size={20} color={bookmarked ? colors.error : colors.textPrimary} />
+                  </Pressable>
+                  <Pressable onPress={handleAutoPlay} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
+                    <Ionicons
+                      name={isAutoPlaying ? 'pause-circle' : 'play-circle-outline'}
+                      size={20}
+                      color={isAutoPlaying ? colors.primary : colors.textPrimary}
+                    />
+                  </Pressable>
+                  <Pressable onPress={handleShare} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
+                    <Ionicons name="share-social-outline" size={20} color={colors.textPrimary} />
+                  </Pressable>
+                  <Pressable onPress={() => setShowOverflow(v => !v)} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
+                    <Ionicons name={showOverflow ? 'close' : 'ellipsis-horizontal'} size={20} color={colors.textPrimary} />
+                  </Pressable>
+                </View>
+                {showOverflow && (
+                  <View style={styles.topActions}>
+                    <Pressable onPress={handleShareImage} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
+                      <Ionicons name="image-outline" size={20} color={colors.textPrimary} />
+                    </Pressable>
+                    <Pressable onPress={() => handleRateQuote('like')} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
+                      <Ionicons name={isLiked ? 'thumbs-up' : 'thumbs-up-outline'} size={19} color={isLiked ? colors.primary : colors.textPrimary} />
+                    </Pressable>
+                    <Pressable onPress={() => handleRateQuote('dislike')} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
+                      <Ionicons name={isDisliked ? 'thumbs-down' : 'thumbs-down-outline'} size={19} color={isDisliked ? colors.error : colors.textPrimary} />
+                    </Pressable>
+                    <Pressable onPress={handleReport} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
+                      <Ionicons name="flag-outline" size={19} color={colors.textSecondary} />
+                    </Pressable>
+                  </View>
+                )}
               </View>
             )}
           </View>
@@ -371,7 +405,7 @@ const styles = StyleSheet.create({
   },
   quoteContent: {
     alignItems: 'center',
-    paddingTop: Spacing.xxl,   // clear the absolutely-positioned action button row (36px h at top: 16px)
+    paddingTop: 60,   // clear the absolutely-positioned action button row (44px h at top: 12px)
     paddingBottom: Spacing.md,
   },
   quoteMarkOpen: {
@@ -402,12 +436,17 @@ const styles = StyleSheet.create({
     opacity: 0.75,
     fontStyle: 'italic',
   },
-  sourceText: {
+  sourceLink: {
     position: 'absolute',
     bottom: 6,
     left: Spacing.sm,
-    fontSize: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     opacity: 0.35,
+  },
+  sourceText: {
+    fontSize: 9,
     letterSpacing: 0.3,
   },
   watermark: {
@@ -424,17 +463,21 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.85)',
     letterSpacing: 1.5,
   },
-  topActions: {
+  topActionsWrapper: {
     position: 'absolute',
     top: Spacing.md,
     right: Spacing.md,
+    alignItems: 'flex-end',
+    gap: Spacing.xs,
+  },
+  topActions: {
     flexDirection: 'row',
     gap: Spacing.xs,
   },
   iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadows.floating,

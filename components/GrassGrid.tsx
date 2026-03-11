@@ -6,8 +6,8 @@ import { Spacing, BorderRadius, FontSize, Fonts } from '../constants/theme';
 import { useGrassStore } from '../stores/useGrassStore';
 import { getPastDays, getDayOfWeek } from '../utils/dateUtils';
 
-const CELL_SIZE = 14;
-const GAP = 3;
+const CELL_SIZE = 16;
+const GAP = 4;
 const DAYS_TO_SHOW = 365;
 
 export default function GrassGrid() {
@@ -15,6 +15,7 @@ export default function GrassGrid() {
   const colors = useThemeColors();
   const { getLevel, grassData, getTotalForDay } = useGrassStore();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   const LEVEL_COLORS = [colors.grass0, colors.grass1, colors.grass2, colors.grass3, colors.grass4];
 
@@ -31,6 +32,19 @@ export default function GrassGrid() {
     if (currentWeek.length > 0) result.push(currentWeek);
     return result;
   }, [days]);
+
+  // Compute which week index starts each new month for labels
+  const monthLabels = useMemo(() => {
+    return weeks.map((week, wi) => {
+      const firstDay = week.find(d => d !== '');
+      if (!firstDay) return null;
+      const month = firstDay.slice(5, 7);
+      if (wi === 0) return month;
+      const prevFirst = weeks[wi - 1].find(d => d !== '');
+      if (!prevFirst || prevFirst.slice(5, 7) !== month) return month;
+      return null;
+    });
+  }, [weeks]);
 
   const totalActivities = useMemo(() =>
     Object.values(grassData).reduce((sum, day) => sum + day.speakCount + day.writeCount + day.typeCount, 0),
@@ -102,13 +116,21 @@ export default function GrassGrid() {
         <View style={styles.grid}>
           {weeks.map((week, wi) => (
             <View key={wi} style={styles.weekColumn}>
+              <Text style={[styles.monthLabel, { color: colors.textMuted }]}>
+                {monthLabels[wi] ?? ''}
+              </Text>
               {week.map((day, di) => (
                 <Pressable
                   key={`${wi}-${di}`}
                   onPress={() => handleCellPress(day)}
                   disabled={!day}
                 >
-                  <View style={[styles.cell, { backgroundColor: day ? LEVEL_COLORS[getLevel(day)] : 'transparent' }]} />
+                  <View style={[
+                    styles.cell,
+                    { backgroundColor: day ? LEVEL_COLORS[getLevel(day)] : 'transparent' },
+                    day === today && styles.todayCell,
+                    day === today && { borderColor: colors.primary },
+                  ]} />
                 </Pressable>
               ))}
             </View>
@@ -136,10 +158,11 @@ const styles = StyleSheet.create({
   gridScroll: { marginLeft: 4 },
   grid: { flexDirection: 'row', gap: GAP },
   weekColumn: { gap: GAP },
+  monthLabel: { ...Fonts.body, fontSize: 9, height: 14, textAlign: 'center' },
   cell: { width: CELL_SIZE, height: CELL_SIZE, borderRadius: 3 },
+  todayCell: { borderWidth: 2, borderRadius: 3 },
   legend: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: Spacing.md },
-  legendCell: { width: CELL_SIZE, height: CELL_SIZE, borderRadius: 3 },
-  legendLabel: { ...Fonts.body, fontSize: 10 },
+  legendCell: { width: CELL_SIZE, height: CELL_SIZE, borderRadius: 3 },  legendLabel: { ...Fonts.body, fontSize: 10 },
   tooltipOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' },
   tooltip: { padding: Spacing.lg, borderRadius: BorderRadius.lg, alignItems: 'center', minWidth: 150, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8 },
   tooltipDate: { ...Fonts.heading, fontSize: FontSize.md, marginBottom: Spacing.xs },

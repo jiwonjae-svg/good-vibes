@@ -364,5 +364,7 @@ export default {
     rejected: 'No aprobada',
     report: 'Reportar',
     xssBlocked: 'No se permiten etiquetas HTML ni scripts.',
+    emptyFeed: 'Aún no hay citas de la comunidad. ¡Sé el primero en compartir una!',
+    alreadyReported: 'Ya has reportado esta cita.',
   },
 };

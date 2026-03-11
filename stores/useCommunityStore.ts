@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import {
   fetchApprovedCommunityQuotes,
@@ -13,20 +14,58 @@ import { appLog } from '../services/logger';
 
 export type FeedMode = 'all' | 'community';
 
+const RATE_LIMIT_KEY = '@community_submission_times';
+const REPORTED_KEY = '@community_reported_ids';
+
+async function loadPersistedTimes(): Promise<number[]> {
+  try {
+    const raw = await AsyncStorage.getItem(RATE_LIMIT_KEY);
+    if (!raw) return [];
+    const all: number[] = JSON.parse(raw);
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    return all.filter((t) => t > cutoff);
+  } catch {
+    return [];
+  }
+}
+
+async function savePersistedTimes(times: number[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(RATE_LIMIT_KEY, JSON.stringify(times));
+  } catch {}
+}
+
+async function loadReportedIds(): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(REPORTED_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveReportedIds(ids: string[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(REPORTED_KEY, JSON.stringify(ids));
+  } catch {}
+}
+
 interface CommunityState {
   feedMode: FeedMode;
   communityQuotes: CommunityQuote[];
   likedCommunityIds: string[];
+  reportedCommunityIds: string[];
   isLoading: boolean;
   hasMore: boolean;
   lastCursor: QueryDocumentSnapshot<DocumentData> | null;
 
-  // Submission rate limit: track timestamps of recent submissions (persisted in memory only)
+  // Submission rate limit: track timestamps of recent submissions (persisted to AsyncStorage)
   recentSubmissionTimes: number[];
 
+  init: () => Promise<void>;
   setFeedMode: (mode: FeedMode) => void;
-  loadCommunityQuotes: (language: string, reset?: boolean) => Promise<void>;
-  loadMore: (language: string) => Promise<void>;
+  loadCommunityQuotes: (language: string, uid?: string, reset?: boolean) => Promise<void>;
+  loadMore: (language: string, uid?: string) => Promise<void>;
   toggleLike: (uid: string, quoteId: string) => Promise<void>;
   submitQuote: (
     uid: string,
@@ -44,14 +83,20 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
   feedMode: 'all',
   communityQuotes: [],
   likedCommunityIds: [],
+  reportedCommunityIds: [],
   isLoading: false,
   hasMore: true,
   lastCursor: null,
   recentSubmissionTimes: [],
 
+  init: async () => {
+    const [times, reportedIds] = await Promise.all([loadPersistedTimes(), loadReportedIds()]);
+    set({ recentSubmissionTimes: times, reportedCommunityIds: reportedIds });
+  },
+
   setFeedMode: (mode) => set({ feedMode: mode }),
 
-  loadCommunityQuotes: async (language, reset = false) => {
+  loadCommunityQuotes: async (language, uid, reset = false) => {
     const { isLoading } = get();
     if (isLoading && !reset) return;
     set({ isLoading: true });
@@ -59,12 +104,21 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
 
     try {
       const { quotes, lastDoc } = await fetchApprovedCommunityQuotes(language, 20, null);
-      const uid = undefined; // Caller passes uid if they want personalized likes
+
+      let likedIds: string[] = get().likedCommunityIds;
+      if (uid && quotes.length > 0) {
+        try {
+          likedIds = await fetchLikedIds(uid, quotes.map((q) => q.id));
+        } catch (e) {
+          appLog.warn('[communityStore] fetchLikedIds failed', e);
+        }
+      }
 
       set({
         communityQuotes: quotes,
         lastCursor: lastDoc,
         hasMore: quotes.length === 20,
+        likedCommunityIds: likedIds,
         isLoading: false,
       });
     } catch (e) {
@@ -73,17 +127,30 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
     }
   },
 
-  loadMore: async (language) => {
+  loadMore: async (language, uid) => {
     const { isLoading, hasMore, lastCursor } = get();
     if (isLoading || !hasMore) return;
     set({ isLoading: true });
 
     try {
       const { quotes, lastDoc } = await fetchApprovedCommunityQuotes(language, 20, lastCursor);
+
+      let newLikedIds: string[] = [];
+      if (uid && quotes.length > 0) {
+        try {
+          newLikedIds = await fetchLikedIds(uid, quotes.map((q) => q.id));
+        } catch (e) {
+          appLog.warn('[communityStore] fetchLikedIds (loadMore) failed', e);
+        }
+      }
+
       set((s) => ({
         communityQuotes: [...s.communityQuotes, ...quotes],
         lastCursor: lastDoc,
         hasMore: quotes.length === 20,
+        likedCommunityIds: uid && newLikedIds.length > 0
+          ? Array.from(new Set([...s.likedCommunityIds, ...newLikedIds]))
+          : s.likedCommunityIds,
         isLoading: false,
       }));
     } catch {
@@ -126,15 +193,18 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
   submitQuote: async (uid, submitterName, text, author, language, categories) => {
     const result = await submitCommunityQuote(uid, submitterName, text, author, language, categories);
     if (result.success) {
-      set((s) => ({
-        recentSubmissionTimes: [...s.recentSubmissionTimes, Date.now()],
-      }));
+      const updated = [...get().recentSubmissionTimes, Date.now()];
+      set({ recentSubmissionTimes: updated });
+      await savePersistedTimes(updated);
     }
     return result;
   },
 
   reportQuote: async (uid, quoteId, reason) => {
     await reportCommunityQuote(uid, quoteId, reason);
+    const updated = [...get().reportedCommunityIds, quoteId];
+    set({ reportedCommunityIds: updated });
+    await saveReportedIds(updated);
   },
 
   canSubmit: () => {

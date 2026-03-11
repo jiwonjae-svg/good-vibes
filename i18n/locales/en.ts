@@ -364,5 +364,7 @@ export default {
     rejected: 'Not approved',
     report: 'Report',
     xssBlocked: 'HTML tags and scripts are not allowed.',
+    emptyFeed: 'No community quotes yet. Be the first to share one!',
+    alreadyReported: 'You have already reported this quote.',
   },
 };

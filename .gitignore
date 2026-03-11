@@ -66,6 +66,11 @@ app/google-services.json
 # Deployment notes (may contain env-specific details)
 Deployment.md
 
+# Internal docs (local-only working documents — NEVER commit)
+# These files were fully purged from git history using git-filter-repo.
+# Do NOT stage or commit anything under docs/ — internal use only.
+docs/
+
 # Repomix output
 repomix-output.xml
 

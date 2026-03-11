@@ -41,9 +41,44 @@ export interface CommunityQuote {
 
 const COMMUNITY_QUOTES = 'community_quotes';
 const COMMUNITY_LIKES = 'community_likes';
+const COMMUNITY_REPORTS = 'community_reports';
 
 // Max 3 submissions per 24h per user (rate limit tracked locally via store)
 export const SUBMISSION_RATE_LIMIT = 3;
+
+// --------------------------------------------------------------------------
+// XSS / injection defence
+// --------------------------------------------------------------------------
+
+/** Patterns that indicate injection attempts. Checked BEFORE stripping tags. */
+const XSS_PATTERNS = [
+  /<script[\s>/]/i,
+  /javascript\s*:/i,
+  /vbscript\s*:/i,
+  /on\w+\s*=/i,       // inline event handlers (onclick=, onload=, …)
+  /<iframe[\s>/]/i,
+  /<object[\s>/]/i,
+  /<embed[\s>/]/i,
+  /data:\s*text\/html/i,
+  /expression\s*\(/i, // CSS expression()
+];
+
+/** Returns true when the input contains known XSS patterns. */
+function containsXss(input: string): boolean {
+  return XSS_PATTERNS.some((p) => p.test(input));
+}
+
+/**
+ * Strips residual HTML tags and normalises whitespace.
+ * Applied AFTER the XSS pattern check so malicious input is rejected,
+ * not silently mangled.
+ */
+function sanitizeText(input: string): string {
+  return input
+    .replace(/<[^>]*>/g, '')          // strip any remaining HTML tags
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // strip control chars
+    .trim();
+}
 
 // --------------------------------------------------------------------------
 // Submit
@@ -60,8 +95,14 @@ export async function submitCommunityQuote(
   const db = getDb();
   if (!db) return { success: false, error: 'offline' };
 
-  const trimmedText = text.trim();
-  const trimmedAuthor = author.trim();
+  // XSS defence — check raw input before any processing
+  if (containsXss(text) || containsXss(author)) {
+    appLog.warn('[communityService] XSS attempt blocked', { uid });
+    return { success: false, error: 'xssBlocked' };
+  }
+
+  const trimmedText = sanitizeText(text);
+  const trimmedAuthor = sanitizeText(author);
 
   // Client-side validation (also enforced server-side via security rules / Cloud Function)
   if (trimmedText.length < 10) return { success: false, error: 'tooShort' };

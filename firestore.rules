@@ -1,0 +1,89 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── 기존 컬렉션 ─────────────────────────────────────────────────────
+
+    // 서버 명언 카탈로그: 공개 읽기 전용
+    match /quotes_catalog/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // 사용자 데이터: 본인만 읽기/쓰기
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // 활동 로그: 본인 uid 문서만 생성/읽기
+    match /activity_logs/{logId} {
+      allow read: if request.auth != null
+        && request.auth.uid == resource.data.uid;
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.uid;
+      allow update, delete: if false;
+    }
+
+    // ── 커뮤니티 기능 ────────────────────────────────────────────────────
+
+    // community_quotes: 누구나 읽기; 인증 사용자만 'pending'으로 생성
+    // likeCount: 인증 사용자가 ±1만 수정 가능 (클라이언트 denormalized counter)
+    // reportCount: 인증 사용자가 +1만 허용 (신고 시)
+    match /community_quotes/{quoteId} {
+      allow read: if true;
+
+      allow create: if request.auth != null
+        && request.resource.data.status == 'pending'
+        && request.resource.data.submitterId == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() >= 10
+        && request.resource.data.text.size() <= 500;
+
+      // likeCount ±1 또는 reportCount +1만 허용
+      allow update: if request.auth != null
+        && (
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
+            && (request.resource.data.likeCount == resource.data.likeCount + 1
+                || request.resource.data.likeCount == resource.data.likeCount - 1)
+          )
+          ||
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reportCount'])
+            && request.resource.data.reportCount == resource.data.reportCount + 1
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // community_likes: 인증 사용자가 자기 좋아요만 쓰기/삭제
+    // 문서 ID 규칙: {userId}_{quoteId}
+    match /community_likes/{likeId} {
+      allow read: if request.auth != null;
+
+      allow create: if request.auth != null
+        && likeId.matches(request.auth.uid + '_.*')
+        && request.resource.data.userId == request.auth.uid;
+
+      allow delete: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+
+      allow update: if false;
+    }
+
+    // community_reports: 인증 사용자가 자기 신고만 생성, 수정/삭제 불가
+    // 문서 ID 규칙: {userId}_{quoteId}
+    match /community_reports/{reportId} {
+      allow read: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+
+      allow create: if request.auth != null
+        && reportId.matches(request.auth.uid + '_.*')
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.reason is string;
+
+      allow update, delete: if false;
+    }
+  }
+}

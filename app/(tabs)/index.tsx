@@ -68,6 +68,7 @@ export default function HomeScreen() {
     communityQuotes, isLoading: communityLoading,
     hasMore: communityHasMore,
     loadCommunityQuotes, loadMore: loadMoreCommunity,
+    init: initCommunityStore,
   } = useCommunityStore();
 
   // Map community quotes to Quote shape for reuse in FlatList
@@ -113,6 +114,7 @@ export default function HomeScreen() {
     };
     setupAudio();
     loadQuotes();
+    initCommunityStore();
   }, []);
 
   const autoPlayIndexRef = useRef(0);
@@ -172,7 +174,7 @@ export default function HomeScreen() {
     }
     loadQuotes();
     // Reset community feed on language change
-    if (feedMode === 'community') loadCommunityQuotes(language, true);
+    if (feedMode === 'community') loadCommunityQuotes(language, uid ?? undefined, true);
   }, [language]);
 
   useEffect(() => {
@@ -357,17 +359,21 @@ export default function HomeScreen() {
         viewabilityConfig={viewabilityConfig}
         getItemLayout={(_, index) => ({ length: CARD_HEIGHT, offset: CARD_HEIGHT * index, index })}
         onEndReached={() => {
-          if (feedMode === 'community' && communityHasMore) loadMoreCommunity(language);
+          if (feedMode === 'community' && communityHasMore) loadMoreCommunity(language, uid ?? undefined);
         }}
         onEndReachedThreshold={0.5}
         ListFooterComponent={(isGenerating || (feedMode === 'community' && communityLoading)) ? <View style={styles.footer}><ActivityIndicator size="small" color={colors.primary} /></View> : null}
         ListEmptyComponent={!(isLoading || communityLoading) ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="book-outline" size={48} color={colors.textMuted} />
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{t('home.searchEmpty')}</Text>
-            <Pressable onPress={loadQuotes} style={[styles.retryBtn, { backgroundColor: colors.primary }]}>
-              <Text style={styles.retryBtnText}>{t('common.ok')}</Text>
-            </Pressable>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              {feedMode === 'community' ? t('community.emptyFeed') : t('home.searchEmpty')}
+            </Text>
+            {feedMode !== 'community' && (
+              <Pressable onPress={loadQuotes} style={[styles.retryBtn, { backgroundColor: colors.primary }]}>
+                <Text style={styles.retryBtnText}>{t('common.ok')}</Text>
+              </Pressable>
+            )}
           </View>
         ) : null}
       />
@@ -411,7 +417,7 @@ export default function HomeScreen() {
           style={[styles.feedBtn, feedMode === 'community' && { backgroundColor: colors.primary }]}
           onPress={() => {
             setFeedMode('community');
-            if (communityQuotes.length === 0) loadCommunityQuotes(language, true);
+            if (communityQuotes.length === 0) loadCommunityQuotes(language, uid ?? undefined, true);
           }}
         >
           <Text style={[styles.feedBtnText, { color: feedMode === 'community' ? '#fff' : colors.textSecondary }]}>
@@ -420,8 +426,8 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      {/* FAB: Submit a quote (logged-in users only) */}
-      {!isGuest && (
+      {/* FAB: Submit a quote (community feed, logged-in users only) */}
+      {!isGuest && feedMode === 'community' && (
         <Pressable
           style={[styles.fab, { backgroundColor: colors.primary, bottom: insets.bottom + 80 }]}
           onPress={() => setSubmitVisible(true)}

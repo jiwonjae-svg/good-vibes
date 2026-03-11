@@ -88,7 +88,10 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
   const isCommunityQuote = quote.source === 'community';
   const likedCommunityIds = useCommunityStore((s) => s.likedCommunityIds);
   const toggleCommunityLike = useCommunityStore((s) => s.toggleLike);
+  const reportedCommunityIds = useCommunityStore((s) => s.reportedCommunityIds);
+  const communityReportQuote = useCommunityStore((s) => s.reportQuote);
   const isCommunityLiked = likedCommunityIds.includes(quote.id);
+  const isCommunityReported = isCommunityQuote && reportedCommunityIds.includes(quote.id);
 
   const handleCommunityLike = () => {
     if (isGuest) { setLoginPromptVisible(true); return; }
@@ -214,13 +217,19 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
     appLog.log('[quote] report submitted', { id: quote.id, reason, uid });
     setReportSubmitting(true);
     setReportModalVisible(false);
-    const result = await reportQuote(uid, quote.id, quote.text, reason);
-    setReportSubmitting(false);
-    if (result.success) {
-      appLog.log('[quote] report success', { id: quote.id });
+    if (isCommunityQuote) {
+      await communityReportQuote(uid, quote.id, reason);
+      setReportSubmitting(false);
       Alert.alert(t('report.success'), t('report.thanks'));
     } else {
-      appLog.warn('[quote] report failed', { id: quote.id });
+      const result = await reportQuote(uid, quote.id, quote.text, reason);
+      setReportSubmitting(false);
+      if (result.success) {
+        appLog.log('[quote] report success', { id: quote.id });
+        Alert.alert(t('report.success'), t('report.thanks'));
+      } else {
+        appLog.warn('[quote] report failed', { id: quote.id });
+      }
     }
   };
   
@@ -327,8 +336,8 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
                         </Pressable>
                       </>
                     )}
-                    <Pressable onPress={handleReport} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
-                      <Ionicons name="flag-outline" size={19} color={colors.textSecondary} />
+                    <Pressable onPress={handleReport} style={[styles.iconBtn, { backgroundColor: actionBg, opacity: isCommunityReported ? 0.5 : 1 }]} disabled={isCommunityReported}>
+                      <Ionicons name={isCommunityReported ? 'flag' : 'flag-outline'} size={19} color={isCommunityReported ? colors.error : colors.textSecondary} />
                     </Pressable>
                   </View>
                 )}

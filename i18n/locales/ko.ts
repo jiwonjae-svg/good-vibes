@@ -362,5 +362,7 @@ export default {
     rejected: '미승인',
     report: '신고',
     xssBlocked: 'HTML 태그나 스크립트는 포함할 수 없습니다.',
+    emptyFeed: '아직 커뮤니티 명언이 없습니다. 첫 번째로 등록해보세요!',
+    alreadyReported: '이미 신고한 명언입니다.',
   },
 };

@@ -371,7 +371,8 @@ const styles = StyleSheet.create({
   },
   quoteContent: {
     alignItems: 'center',
-    paddingVertical: Spacing.md,
+    paddingTop: Spacing.xxl,   // clear the absolutely-positioned action button row (36px h at top: 16px)
+    paddingBottom: Spacing.md,
   },
   quoteMarkOpen: {
     width: QUOTE_MARK_SIZE,

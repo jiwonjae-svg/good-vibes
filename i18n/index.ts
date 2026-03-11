@@ -5,10 +5,12 @@ import ko from './locales/ko';
 import en from './locales/en';
 import ja from './locales/ja';
 import zh from './locales/zh';
+import es from './locales/es';
 
 export const LANGUAGES = [
   { code: 'ko', label: '한국어' },
   { code: 'en', label: 'English' },
+  { code: 'es', label: 'Español' },
   { code: 'ja', label: '日本語' },
   { code: 'zh', label: '中文' },
 ] as const;
@@ -22,6 +24,7 @@ i18n.use(initReactI18next).init({
   resources: {
     ko: { translation: ko },
     en: { translation: en },
+    es: { translation: es },
     ja: { translation: ja },
     zh: { translation: zh },
   },

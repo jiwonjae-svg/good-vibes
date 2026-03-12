@@ -140,16 +140,18 @@ export async function fetchApprovedCommunityQuotes(
   language: string,
   pageLimit = 20,
   cursor?: QueryDocumentSnapshot<DocumentData> | null,
+  sortBy: 'latest' | 'likes' = 'latest',
 ): Promise<{ quotes: CommunityQuote[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
   const db = getDb();
   if (!db) return { quotes: [], lastDoc: null };
 
   try {
     const col = collection(db, COMMUNITY_QUOTES);
+    const sortField = sortBy === 'likes' ? 'likeCount' : 'createdAt';
     const constraints: QueryConstraint[] = [
       where('status', '==', 'approved'),
       where('language', '==', language),
-      orderBy('createdAt', 'desc'),
+      orderBy(sortField, 'desc'),
       limit(pageLimit),
     ];
     if (cursor) constraints.push(startAfter(cursor));
@@ -167,6 +169,79 @@ export async function fetchApprovedCommunityQuotes(
   } catch (e) {
     appLog.error('[communityService] fetch failed', e);
     return { quotes: [], lastDoc: null };
+  }
+}
+
+// --------------------------------------------------------------------------
+// My Submissions
+// --------------------------------------------------------------------------
+
+export async function fetchMySubmissions(
+  uid: string,
+  pageLimit = 50,
+): Promise<CommunityQuote[]> {
+  const db = getDb();
+  if (!db) return [];
+
+  try {
+    const col = collection(db, COMMUNITY_QUOTES);
+    const q = query(
+      col,
+      where('submitterId', '==', uid),
+      orderBy('createdAt', 'desc'),
+      limit(pageLimit),
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as Omit<CommunityQuote, 'id' | 'createdAt'>),
+      createdAt: d.data().createdAt?.toMillis?.() ?? Date.now(),
+    }));
+  } catch (e) {
+    appLog.error('[communityService] fetchMySubmissions failed', e);
+    return [];
+  }
+}
+
+// --------------------------------------------------------------------------
+// Server-side rate limit (Firestore users/{uid}.communitySubmissions)
+// --------------------------------------------------------------------------
+
+const USERS = 'users';
+
+export async function checkServerRateLimit(uid: string): Promise<boolean> {
+  const db = getDb();
+  if (!db) return false; // offline: fall through to local check
+
+  try {
+    const userRef = doc(db, USERS, uid);
+    const snap = await getDoc(userRef);
+    if (!snap.exists()) return false;
+    const data = snap.data();
+    const submissions: number[] = data?.communitySubmissions ?? [];
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const recent = submissions.filter((t) => t > cutoff);
+    return recent.length >= 3;
+  } catch (e) {
+    appLog.warn('[communityService] checkServerRateLimit failed, falling back to local', e);
+    return false;
+  }
+}
+
+export async function recordServerSubmission(uid: string): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+
+  try {
+    const userRef = doc(db, USERS, uid);
+    const snap = await getDoc(userRef);
+    const existing: number[] = snap.exists() ? (snap.data()?.communitySubmissions ?? []) : [];
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const pruned = existing.filter((t) => t > cutoff);
+    pruned.push(Date.now());
+    await updateDoc(userRef, { communitySubmissions: pruned });
+  } catch (e) {
+    appLog.warn('[communityService] recordServerSubmission failed', e);
   }
 }
 

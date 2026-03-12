@@ -39,19 +39,13 @@ service cloud.firestore {
         && request.resource.data.text.size() >= 10
         && request.resource.data.text.size() <= 500;
 
-      // likeCount ±1 또는 reportCount +1만 허용
+      // reportCount +1만 허용 (신고 시).
+      // likeCount는 Cloud Function(onLikeWrite)이 업데이트하므로
+      // 클라이언트 직접 수정은 허용하지 않습니다.
       allow update: if request.auth != null
         && (
-          (
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
-            && (request.resource.data.likeCount == resource.data.likeCount + 1
-                || request.resource.data.likeCount == resource.data.likeCount - 1)
-          )
-          ||
-          (
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reportCount'])
-            && request.resource.data.reportCount == resource.data.reportCount + 1
-          )
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reportCount'])
+          && request.resource.data.reportCount == resource.data.reportCount + 1
         );
 
       allow delete: if false;

@@ -50,7 +50,7 @@ function QuoteModal({ quote, onClose, onSpeak, onWrite, onType }: QuoteModalProp
   if (!quote) return null;
 
   const handleTTS = () => (isSpeaking ? stop() : speak(quote.text));
-  const handleShare = () => shareQuoteText(quote.text, quote.author);
+  const handleShare = () => shareQuoteText(quote.text, quote.author ?? '');
 
   const quoteMarkColor = isDarkMode ? 'rgba(255,255,255,0.5)' : 'rgba(50,50,50,0.4)';
   const quoteTextColor = isDarkMode ? '#ffffff' : '#2d2d2d';

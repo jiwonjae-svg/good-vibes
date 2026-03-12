@@ -260,7 +260,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  },
   extraEmoji: { fontSize: 64, marginBottom: Spacing.md },
   extraTitle: { ...Fonts.heading, fontSize: FontSize.xl, textAlign: 'center', marginBottom: Spacing.sm },
   extraDesc: { ...Fonts.body, fontSize: FontSize.md, textAlign: 'center', lineHeight: 24, marginBottom: Spacing.lg },

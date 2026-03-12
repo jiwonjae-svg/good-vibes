@@ -29,6 +29,8 @@ export interface FirestoreUser {
   provider?: string;
   isPremium?: boolean;
   premiumPurchasedAt?: Timestamp;
+  communitySubmissions?: number[];
+  fcmToken?: string;
 }
 
 export type ActivityType =

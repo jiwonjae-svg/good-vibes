@@ -11,13 +11,14 @@ import { useUserStore } from '../../stores/useUserStore';
 import { LANGUAGES, type LanguageCode } from '../../i18n';
 import { signInWithGoogleNative, logOut, onAuthChange } from '../../services/authService';
 import { logActivity } from '../../services/firestoreUserService';
-import { scheduleDailyReminder, cancelDailyReminder } from '../../services/notificationService';
+import { scheduleDailyReminder, cancelDailyReminder, saveFCMToken } from '../../services/notificationService';
 import { appLog } from '../../services/logger';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const clientQuotes: Array<{ quote: string }> = require('../../data/quotesClient.json');
 import LanguagePickerModal from '../../components/LanguagePickerModal';
 import CategoryPickerModal from '../../components/CategoryPickerModal';
 import LogStatusModal from '../../components/LogStatusModal';
+import MySubmissionsModal from '../../components/MySubmissionsModal';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
@@ -56,6 +57,7 @@ export default function SettingsScreen() {
   const [premiumModalVisible, setPremiumModalVisible] = useState(false);
   const [logModalVisible, setLogModalVisible] = useState(false);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
+  const [mySubmissionsVisible, setMySubmissionsVisible] = useState(false);
   const [editName, setEditName] = useState('');
   const [editUsername, setEditUsername] = useState('');
 
@@ -105,6 +107,7 @@ export default function SettingsScreen() {
       const granted = await scheduleDailyReminder(randomQuote?.quote, notificationHour);
       appLog.log('[settings] notification scheduling result', { granted });
       setDailyReminder(granted);
+      if (granted && uid) saveFCMToken(uid).catch(() => {});
     } else {
       await cancelDailyReminder();
       setDailyReminder(false);
@@ -150,6 +153,11 @@ export default function SettingsScreen() {
         onClose={() => setCatModalVisible(false)}
       />
       <LogStatusModal visible={logModalVisible} onClose={() => setLogModalVisible(false)} />
+      <MySubmissionsModal
+        visible={mySubmissionsVisible}
+        onClose={() => setMySubmissionsVisible(false)}
+        uid={uid!}
+      />
 
       {/* Profile Edit Modal */}
       <Modal
@@ -203,7 +211,7 @@ export default function SettingsScreen() {
         </Pressable>
       </Modal>
 
-      {/* Premium Modal */}}
+      {/* Premium Modal */}
       <Modal
         transparent
         visible={premiumModalVisible}
@@ -283,6 +291,17 @@ export default function SettingsScreen() {
                   <View style={s.rowLeft}>
                     <Ionicons name="pencil-outline" size={22} color={colors.textSecondary} />
                     <Text style={s.rowTitle}>{t('settings.editProfile')}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                </Pressable>
+                <View style={s.divider} />
+                <Pressable style={s.row} onPress={() => setMySubmissionsVisible(true)}>
+                  <View style={s.rowLeft}>
+                    <Ionicons name="document-text-outline" size={22} color={colors.textSecondary} />
+                    <View>
+                      <Text style={s.rowTitle}>{t('settings.mySubmissions')}</Text>
+                      <Text style={s.rowSubtitle}>{t('settings.mySubmissionsDesc')}</Text>
+                    </View>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
                 </Pressable>

@@ -9,6 +9,7 @@ import { type LanguageCode } from '../i18n';
 
 const ORDERED_LANGUAGES = [
   { code: 'en', label: 'English' },
+  { code: 'es', label: 'Español' },
   { code: 'ja', label: '日本語' },
   { code: 'zh', label: '中文' },
   { code: 'ko', label: '한국어' },
@@ -17,6 +18,7 @@ const ORDERED_LANGUAGES = [
 const LANG_FLAGS: Record<LanguageCode, string> = {
   ko: '🇰🇷',
   en: '🇺🇸',
+  es: '🇪🇸',
   ja: '🇯🇵',
   zh: '🇨🇳',
 };
@@ -24,6 +26,7 @@ const LANG_FLAGS: Record<LanguageCode, string> = {
 const LANG_WORD: Record<LanguageCode, string> = {
   ko: '언어',
   en: '',
+  es: 'Idioma',
   ja: '言語',
   zh: '语言',
 };

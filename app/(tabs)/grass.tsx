@@ -187,13 +187,17 @@ export default function GrassScreen() {
                   }]}
                 />
               ))}
+            </View>
+          <View style={styles.todayRow}>
+            <ActivityItem
+              iconSource={getActivityImage('speak')}
               label={t('home.speakAlong')}
               count={todayData.speakCount}
               color={colors.primary}
               subColor={colors.textSecondary}
               iconTint={colors.primary}
               onPress={() => handleActivityPress('speak')}
-              hasQuotes={todayData.speakCount > 0}
+              hasQuotes={todayData.speakCount !== 0}
             />
             <ActivityItem
               iconSource={getActivityImage('write')}
@@ -203,7 +207,7 @@ export default function GrassScreen() {
               subColor={colors.textSecondary}
               iconTint={colors.secondary}
               onPress={() => handleActivityPress('write')}
-              hasQuotes={todayData.writeCount > 0}
+              hasQuotes={todayData.writeCount !== 0}
             />
             <ActivityItem
               iconSource={getActivityImage('type')}
@@ -213,7 +217,7 @@ export default function GrassScreen() {
               subColor={colors.textSecondary}
               iconTint={colors.accent}
               onPress={() => handleActivityPress('type')}
-              hasQuotes={todayData.typeCount > 0}
+              hasQuotes={todayData.typeCount !== 0}
             />
           </View>
           {todayTotal === 0 && (

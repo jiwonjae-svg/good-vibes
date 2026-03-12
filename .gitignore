@@ -98,3 +98,7 @@ data/*.bak*
 data/*.bak
 scripts/serviceAccount.json
 *.apk
+
+# Cloud Functions build output
+functions/lib/
+functions/node_modules/

@@ -184,6 +184,8 @@ export default {
     notificationNoon: 'Mediodía (12:00 PM)',
     notificationEvening: 'Noche (9:00 PM)',
     fontSizePreviewSample: 'Un poco mejor, cada día.',
+    mySubmissions: 'Mis citas enviadas',
+    mySubmissionsDesc: 'Ver las citas que has enviado',
   },
   premium: {
     title: 'DailyGlow Glow+',
@@ -366,5 +368,9 @@ export default {
     xssBlocked: 'No se permiten etiquetas HTML ni scripts.',
     emptyFeed: 'Aún no hay citas de la comunidad. ¡Sé el primero en compartir una!',
     alreadyReported: 'Ya has reportado esta cita.',
+    sortLatest: 'Recientes',
+    sortLikes: 'Populares',
+    mySubmissionsEmpty: 'Todavía no has enviado ninguna cita.',
+    filterAll: 'Todos',
   },
 };

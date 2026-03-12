@@ -8,14 +8,18 @@ import {
   fetchLikedIds,
   submitCommunityQuote,
   reportCommunityQuote,
+  checkServerRateLimit,
+  recordServerSubmission,
   type CommunityQuote,
 } from '../services/communityService';
 import { appLog } from '../services/logger';
 
 export type FeedMode = 'all' | 'community';
+export type SortBy = 'latest' | 'likes';
 
 const RATE_LIMIT_KEY = '@community_submission_times';
 const REPORTED_KEY = '@community_reported_ids';
+const SORT_KEY = '@community_sort_by';
 
 async function loadPersistedTimes(): Promise<number[]> {
   try {
@@ -52,6 +56,7 @@ async function saveReportedIds(ids: string[]): Promise<void> {
 
 interface CommunityState {
   feedMode: FeedMode;
+  sortBy: SortBy;
   communityQuotes: CommunityQuote[];
   likedCommunityIds: string[];
   reportedCommunityIds: string[];
@@ -64,6 +69,7 @@ interface CommunityState {
 
   init: () => Promise<void>;
   setFeedMode: (mode: FeedMode) => void;
+  setSortBy: (sort: SortBy) => void;
   loadCommunityQuotes: (language: string, uid?: string, reset?: boolean) => Promise<void>;
   loadMore: (language: string, uid?: string) => Promise<void>;
   toggleLike: (uid: string, quoteId: string) => Promise<void>;
@@ -81,6 +87,7 @@ interface CommunityState {
 
 export const useCommunityStore = create<CommunityState>((set, get) => ({
   feedMode: 'all',
+  sortBy: 'latest',
   communityQuotes: [],
   likedCommunityIds: [],
   reportedCommunityIds: [],
@@ -90,20 +97,33 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
   recentSubmissionTimes: [],
 
   init: async () => {
-    const [times, reportedIds] = await Promise.all([loadPersistedTimes(), loadReportedIds()]);
-    set({ recentSubmissionTimes: times, reportedCommunityIds: reportedIds });
+    const [times, reportedIds, storedSort] = await Promise.all([
+      loadPersistedTimes(),
+      loadReportedIds(),
+      AsyncStorage.getItem(SORT_KEY).catch(() => null),
+    ]);
+    set({
+      recentSubmissionTimes: times,
+      reportedCommunityIds: reportedIds,
+      sortBy: (storedSort as SortBy) ?? 'latest',
+    });
   },
 
   setFeedMode: (mode) => set({ feedMode: mode }),
 
+  setSortBy: async (sort) => {
+    set({ sortBy: sort, communityQuotes: [], lastCursor: null, hasMore: true });
+    await AsyncStorage.setItem(SORT_KEY, sort).catch(() => {});
+  },
+
   loadCommunityQuotes: async (language, uid, reset = false) => {
-    const { isLoading } = get();
+    const { isLoading, sortBy } = get();
     if (isLoading && !reset) return;
     set({ isLoading: true });
     if (reset) set({ communityQuotes: [], lastCursor: null, hasMore: true });
 
     try {
-      const { quotes, lastDoc } = await fetchApprovedCommunityQuotes(language, 20, null);
+      const { quotes, lastDoc } = await fetchApprovedCommunityQuotes(language, 20, null, sortBy);
 
       let likedIds: string[] = get().likedCommunityIds;
       if (uid && quotes.length > 0) {
@@ -128,12 +148,12 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
   },
 
   loadMore: async (language, uid) => {
-    const { isLoading, hasMore, lastCursor } = get();
+    const { isLoading, hasMore, lastCursor, sortBy } = get();
     if (isLoading || !hasMore) return;
     set({ isLoading: true });
 
     try {
-      const { quotes, lastDoc } = await fetchApprovedCommunityQuotes(language, 20, lastCursor);
+      const { quotes, lastDoc } = await fetchApprovedCommunityQuotes(language, 20, lastCursor, sortBy);
 
       let newLikedIds: string[] = [];
       if (uid && quotes.length > 0) {
@@ -191,8 +211,17 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
   },
 
   submitQuote: async (uid, submitterName, text, author, language, categories) => {
+    // Server-side rate limit check (Firestore) takes priority over local AsyncStorage cache
+    const serverBlocked = await checkServerRateLimit(uid);
+    if (serverBlocked) {
+      return { success: false, error: 'rateLimit' };
+    }
+
     const result = await submitCommunityQuote(uid, submitterName, text, author, language, categories);
     if (result.success) {
+      // Record server-side submission timestamp
+      await recordServerSubmission(uid);
+      // Keep local AsyncStorage in sync as a fast offline cache
       const updated = [...get().recentSubmissionTimes, Date.now()];
       set({ recentSubmissionTimes: updated });
       await savePersistedTimes(updated);

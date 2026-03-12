@@ -182,6 +182,8 @@ export default {
     notificationNoon: '점심 (오후 12시)',
     notificationEvening: '저녁 (오후 9시)',
     fontSizePreviewSample: '매일 조금 더 성장하는 하루',
+    mySubmissions: '내가 제출한 명언',
+    mySubmissionsDesc: '내가 제출한 명언 목록 확인',
   },
   premium: {
     title: 'DailyGlow Glow+',
@@ -364,5 +366,9 @@ export default {
     xssBlocked: 'HTML 태그나 스크립트는 포함할 수 없습니다.',
     emptyFeed: '아직 커뮤니티 명언이 없습니다. 첫 번째로 등록해보세요!',
     alreadyReported: '이미 신고한 명언입니다.',
+    sortLatest: '최신순',
+    sortLikes: '인기순',
+    mySubmissionsEmpty: '아직 제출한 명언이 없습니다.',
+    filterAll: '전체',
   },
 };

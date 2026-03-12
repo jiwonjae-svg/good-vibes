@@ -1,5 +1,7 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import i18n from '../i18n';
+import { doc, updateDoc } from 'firebase/firestore';
+import { getDb } from './firebaseConfig';
 
 const isExpoGo =
   Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
@@ -104,4 +106,28 @@ export function initNotificationHandler(): void {
       }),
     });
   } catch { /* silent */ }
+}
+
+/**
+ * Retrieves the native device push token (FCM on Android, APNs on iOS) and
+ * persists it to `users/{uid}.fcmToken` in Firestore so Cloud Functions can
+ * send targeted push notifications when a community quote is approved/rejected.
+ *
+ * Should be called once after notification permission is granted, e.g. on
+ * successful login or when the user enables daily reminders.
+ */
+export async function saveFCMToken(uid: string): Promise<void> {
+  if (!uid) return;
+  const Notifications = getNotifications();
+  if (!Notifications) return;
+
+  try {
+    const { data: token } = await Notifications.getDevicePushTokenAsync();
+    if (!token) return;
+    const db = getDb();
+    if (!db) return;
+    await updateDoc(doc(db, 'users', uid), { fcmToken: token });
+  } catch {
+    // Non-critical — silently ignore if token retrieval or Firestore write fails
+  }
 }

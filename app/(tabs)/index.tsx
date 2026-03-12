@@ -65,6 +65,7 @@ export default function HomeScreen() {
   // Community feed
   const {
     feedMode, setFeedMode,
+    sortBy, setSortBy,
     communityQuotes, isLoading: communityLoading,
     hasMore: communityHasMore,
     loadCommunityQuotes, loadMore: loadMoreCommunity,
@@ -118,6 +119,13 @@ export default function HomeScreen() {
   }, []);
 
   const autoPlayIndexRef = useRef(0);
+
+  const prefetchMore = useCallback(async () => {
+    if (isGenerating) return;
+    setIsGenerating(true);
+    try { appendQuotes(await fetchQuoteBatch()); }
+    finally { setIsGenerating(false); }
+  }, [isGenerating]);
 
   const advanceAndSpeakNext = useCallback(() => {
     if (!autoPlayChainRef.current || !useAutoPlayStore.getState().isAutoPlaying) return;
@@ -215,13 +223,6 @@ export default function HomeScreen() {
       }
     });
   }, [quotes.length]);
-
-  const prefetchMore = useCallback(async () => {
-    if (isGenerating) return;
-    setIsGenerating(true);
-    try { appendQuotes(await fetchQuoteBatch()); }
-    finally { setIsGenerating(false); }
-  }, [isGenerating]);
 
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
@@ -426,6 +427,38 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
+      {/* Sort toggle: visible only in community mode */}
+      {feedMode === 'community' && (
+        <View style={[styles.sortToggle, { top: insets.top + 54, backgroundColor: colors.surface }]}>
+          <Pressable
+            style={[styles.sortBtn, sortBy === 'latest' && { backgroundColor: colors.primary }]}
+            onPress={() => {
+              if (sortBy !== 'latest') {
+                setSortBy('latest');
+                loadCommunityQuotes(language, uid ?? undefined, true);
+              }
+            }}
+          >
+            <Text style={[styles.feedBtnText, { color: sortBy === 'latest' ? '#fff' : colors.textSecondary }]}>
+              {t('community.sortLatest')}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.sortBtn, sortBy === 'likes' && { backgroundColor: colors.primary }]}
+            onPress={() => {
+              if (sortBy !== 'likes') {
+                setSortBy('likes');
+                loadCommunityQuotes(language, uid ?? undefined, true);
+              }
+            }}
+          >
+            <Text style={[styles.feedBtnText, { color: sortBy === 'likes' ? '#fff' : colors.textSecondary }]}>
+              {t('community.sortLikes')}
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
       {/* FAB: Submit a quote (community feed, logged-in users only) */}
       {!isGuest && feedMode === 'community' && (
         <Pressable
@@ -497,6 +530,24 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 6,
     elevation: 5,
+  },
+  sortToggle: {
+    position: 'absolute',
+    left: Spacing.lg,
+    flexDirection: 'row',
+    borderRadius: 16,
+    overflow: 'hidden',
+    zIndex: 19,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  sortBtn: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 5,
+    borderRadius: 16,
   },
   feedBtn: {
     paddingHorizontal: Spacing.sm,

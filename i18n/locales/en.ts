@@ -184,6 +184,8 @@ export default {
     notificationNoon: 'Noon (12:00 PM)',
     notificationEvening: 'Evening (9:00 PM)',
     fontSizePreviewSample: 'A little better, every day.',
+    mySubmissions: 'My Submitted Quotes',
+    mySubmissionsDesc: 'View quotes you have submitted',
   },
   premium: {
     title: 'DailyGlow Glow+',
@@ -366,5 +368,9 @@ export default {
     xssBlocked: 'HTML tags and scripts are not allowed.',
     emptyFeed: 'No community quotes yet. Be the first to share one!',
     alreadyReported: 'You have already reported this quote.',
+    sortLatest: 'Latest',
+    sortLikes: 'Popular',
+    mySubmissionsEmpty: 'No submitted quotes yet.',
+    filterAll: 'All',
   },
 };

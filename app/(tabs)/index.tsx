@@ -428,7 +428,7 @@ export default function HomeScreen() {
       {/* FAB: Submit a quote (logged-in users only) */}
       {!isGuest && (
         <Pressable
-          style={[styles.fab, { backgroundColor: colors.primary, bottom: 65 + Math.max(20, insets.bottom) + 74 }]}
+          style={[styles.fab, { backgroundColor: colors.primary, bottom: 65 + Math.max(20, insets.bottom) + 16 }]}
           onPress={() => setSubmitVisible(true)}
         >
           <Image source={PENCIL_ICON} style={{ width: 26, height: 26, tintColor: '#fff' }} resizeMode="contain" />

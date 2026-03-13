@@ -244,6 +244,8 @@ export default function OnboardingScreen({ onComplete, isReplay = false }: Onboa
   const setCategories = useUserStore((s) => s.setCategories);
   const setDailyReminder = useUserStore((s) => s.setDailyReminder);
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
+  // Phase fade animation: fades out slides, then fades in setup steps
+  const phaseAnim = useRef(new Animated.Value(1)).current;
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
@@ -263,7 +265,10 @@ export default function OnboardingScreen({ onComplete, isReplay = false }: Onboa
     });
   };
 
-  const TOTAL_STEPS = isReplay ? TOTAL_STEPS_REPLAY : TOTAL_STEPS_FULL;
+  const isSetupPhase = step >= SLIDES_DATA.length;
+  // Dots: 4 in slide phase, 2 in setup phase
+  const dotsCount = isSetupPhase ? 2 : SLIDES_DATA.length;
+  const activeDotsIndex = isSetupPhase ? step - SLIDES_DATA.length : step;
 
   const goNext = async () => {
     if (step < SLIDES_DATA.length - 1) {
@@ -276,8 +281,12 @@ export default function OnboardingScreen({ onComplete, isReplay = false }: Onboa
         onComplete();
         return;
       }
-      // Leave FlatList, go to category step
-      setStep(SLIDES_DATA.length);
+      // Fade out slides, switch to setup phase, fade back in
+      Animated.timing(phaseAnim, { toValue: 0, duration: 280, useNativeDriver: true }).start(() => {
+        setStep(SLIDES_DATA.length);
+        Animated.timing(phaseAnim, { toValue: 1, duration: 280, useNativeDriver: true }).start();
+      });
+      return;
     } else if (step === SLIDES_DATA.length) {
       // Save selected categories and advance to notification step
       if (selectedCats.length > 0) {
@@ -393,35 +402,45 @@ export default function OnboardingScreen({ onComplete, isReplay = false }: Onboa
       </Pressable>
 
       {step < SLIDES_DATA.length ? (
-        <FlatList
-          ref={flatListRef}
-          data={SLIDES_DATA}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50 }}
-          renderItem={({ item }) => (
-            <LinearGradient colors={item.gradient as unknown as [string, string]} style={styles.slide}>
-              <SlideIcon slideKey={item.key} tintColor={colors.primary} />
-              <Text style={[styles.title, { color: colors.textPrimary }]}>{t(item.titleKey)}</Text>
-              <Text style={[styles.desc, { color: colors.textSecondary }]}>{t(item.descKey)}</Text>
-            </LinearGradient>
-          )}
-          keyExtractor={(item) => item.key}
-        />
+        <Animated.View style={{ opacity: phaseAnim }}>
+          <FlatList
+            ref={flatListRef}
+            data={SLIDES_DATA}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50 }}
+            renderItem={({ item }) => (
+              <LinearGradient colors={item.gradient as unknown as [string, string]} style={styles.slide}>
+                <SlideIcon slideKey={item.key} tintColor={colors.primary} />
+                <Text style={[styles.title, { color: colors.textPrimary }]}>{t(item.titleKey)}</Text>
+                <Text style={[styles.desc, { color: colors.textSecondary }]}>{t(item.descKey)}</Text>
+              </LinearGradient>
+            )}
+            keyExtractor={(item) => item.key}
+          />
+        </Animated.View>
       ) : (
-        renderExtraStep()
+        <Animated.View style={{ opacity: phaseAnim, flex: 1 }}>
+          {renderExtraStep()}
+        </Animated.View>
       )}
 
-      <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom + 8, Spacing.lg) }]}>
+      <Animated.View
+        style={[
+          styles.bottom,
+          { paddingBottom: Math.max(insets.bottom + 8, Spacing.lg), opacity: phaseAnim },
+          !isSetupPhase && { flex: 1 },
+        ]}
+      >
         <View style={styles.dots}>
-          {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+          {Array.from({ length: dotsCount }).map((_, i) => (
             <View
               key={i}
               style={[
                 styles.dot,
-                { backgroundColor: i === currentStepForDots ? colors.primary : colors.textMuted },
+                { backgroundColor: i === activeDotsIndex ? colors.primary : colors.textMuted },
               ]}
             />
           ))}
@@ -429,12 +448,10 @@ export default function OnboardingScreen({ onComplete, isReplay = false }: Onboa
 
         {step < SLIDES_DATA.length + 1 && (
           <Pressable style={[styles.nextButton, { backgroundColor: colors.primary }]} onPress={goNext}>
-            <Text style={styles.nextText}>
-              {step === SLIDES_DATA.length ? t('onboarding.next') : step === SLIDES_DATA.length - 1 ? t('onboarding.next') : t('onboarding.next')}
-            </Text>
+            <Text style={styles.nextText}>{t('onboarding.next')}</Text>
           </Pressable>
         )}
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -443,26 +460,26 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   skipButton: { position: 'absolute', top: 56, right: 20, zIndex: 10, padding: Spacing.sm },
   skipText: { ...Fonts.body, fontSize: FontSize.md },
-  slide: { width, height: height * 0.7, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.xl },
+  slide: { width, height: height * 0.72, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.xl },
   emoji: { fontSize: 80, marginBottom: Spacing.lg },
   title: { ...Fonts.heading, fontSize: FontSize.xl, textAlign: 'center', marginBottom: Spacing.md },
   desc: { ...Fonts.body, fontSize: FontSize.md, textAlign: 'center', lineHeight: 26 },
-  bottom: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: Spacing.lg },
+  bottom: { justifyContent: 'center', alignItems: 'center', gap: Spacing.md, paddingTop: Spacing.md },
   dots: { flexDirection: 'row', gap: Spacing.sm },
   dot: { width: 10, height: 10, borderRadius: 5 },
   nextButton: { paddingHorizontal: Spacing.xl + Spacing.md, paddingVertical: Spacing.md, borderRadius: BorderRadius.full },
   nextText: { ...Fonts.heading, fontSize: FontSize.md, color: '#fff' },
   // Extra steps
   extraStep: {
-    height: height * 0.7,
+    flex: 1,
     paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.xl,
     alignItems: 'center',
-    justifyContent: 'center',
   },
   extraEmoji: { fontSize: 64, marginBottom: Spacing.md },
   extraTitle: { ...Fonts.heading, fontSize: FontSize.xl, textAlign: 'center', marginBottom: Spacing.sm },
   extraDesc: { ...Fonts.body, fontSize: FontSize.md, textAlign: 'center', lineHeight: 24, marginBottom: Spacing.lg },
-  catsScroll: { width: '100%', maxHeight: height * 0.38 },
+  catsScroll: { width: '100%', maxHeight: height * 0.44 },
   catsContainer: { paddingBottom: Spacing.md },
   themeHeader: { ...Fonts.body, fontSize: FontSize.xs, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', marginTop: Spacing.md, marginBottom: Spacing.sm },
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },

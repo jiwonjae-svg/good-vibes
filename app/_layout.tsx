@@ -15,6 +15,10 @@ import OnboardingScreen from '../components/OnboardingScreen';
 import AnimatedSplash from '../components/AnimatedSplash';
 import ErrorBoundary from '../components/ErrorBoundary';
 
+// Module-level flag: ensures the splash plays only once per JS runtime session,
+// even if RootLayout somehow remounts (e.g. after settings onboarding replay).
+let _splashHasPlayed = false;
+
 export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
@@ -56,7 +60,7 @@ export default function RootLayout() {
   }, [colorScheme, followSystemDarkMode]);
   
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(!_splashHasPlayed);
 
   useEffect(() => {
     initSentry();
@@ -116,6 +120,7 @@ export default function RootLayout() {
   };
 
   const handleSplashComplete = useCallback(() => {
+    _splashHasPlayed = true;
     setShowSplash(false);
   }, []);
 

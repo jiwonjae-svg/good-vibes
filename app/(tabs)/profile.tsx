@@ -13,8 +13,11 @@ import { useUserStore } from '../../stores/useUserStore';
 import { useCommunityStore } from '../../stores/useCommunityStore';
 import { fetchMySubmissions, type CommunityQuote } from '../../services/communityService';
 import { fetchPublicUserProfile } from '../../services/firestoreUserService';
+import { signInWithGoogleNative } from '../../services/authService';
+import { appLog } from '../../services/logger';
 import MySubmissionsModal from '../../components/MySubmissionsModal';
-import LoginPromptModal from '../../components/LoginPromptModal';
+import GoogleSignInConfirmModal from '../../components/GoogleSignInConfirmModal';
+import ProfileSetupModal from '../../components/ProfileSetupModal';
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
@@ -24,13 +27,22 @@ export default function ProfileScreen() {
   const username = useUserStore((s) => s.username);
   const photoURL = useUserStore((s) => s.photoURL);
 
+  const setAuth = useUserStore((s) => s.setAuth);
+  const setAuthCompleted = useUserStore((s) => s.setAuthCompleted);
+  const setProfile = useUserStore((s) => s.setProfile);
+
   const { deleteQuote, updateQuote } = useCommunityStore();
 
   const [socialStats, setSocialStats] = useState({ followerCount: 0, followingCount: 0 });
   const [quotes, setQuotes] = useState<CommunityQuote[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [loginPromptVisible, setLoginPromptVisible] = useState(false);
+  // Guest sign-in state
+  const [signingIn, setSigningIn] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [profileSetupVisible, setProfileSetupVisible] = useState(false);
+  const [pendingUser, setPendingUser] = useState<{ uid: string; displayName: string | null; email: string | null; photoURL: string | null } | null>(null);
 
   const initial = (displayName || username || '?').charAt(0).toUpperCase();
 
@@ -59,6 +71,52 @@ export default function ProfileScreen() {
       loadQuotes();
     }, [loadQuotes]),
   );
+
+  const handleGuestSignIn = async () => {
+    setSignInError(null);
+    setSigningIn(true);
+    appLog.log('[profile] guest sign-in pressed');
+    try {
+      const user = await signInWithGoogleNative();
+      if (user) {
+        appLog.log('[profile] signed in', { uid: user.uid });
+        await setAuth({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
+        const currentUsername = useUserStore.getState().username;
+        if (!currentUsername) {
+          // New user — show info/consent modal first
+          setPendingUser({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
+          setConfirmVisible(true);
+        } else {
+          await setAuthCompleted();
+        }
+      }
+    } catch (err: any) {
+      appLog.error('[profile] sign-in failed', { err: err?.message });
+      setSignInError(t('login.signInFailed'));
+    } finally {
+      setSigningIn(false);
+    }
+  };
+
+  const handleConfirmAgree = () => {
+    setConfirmVisible(false);
+    setProfileSetupVisible(true);
+  };
+
+  const handleProfileComplete = async (displayName: string, username: string) => {
+    await setProfile(displayName, username);
+    await setAuthCompleted();
+    setProfileSetupVisible(false);
+  };
+
+  const handleProfileSkip = async () => {
+    const randomSuffix = Date.now().toString(36).slice(-6);
+    const randomUsername = `user_${randomSuffix}`;
+    const name = pendingUser?.displayName ?? 'User';
+    try { await setProfile(name, randomUsername); } catch { }
+    await setAuthCompleted();
+    setProfileSetupVisible(false);
+  };
 
   const handleDelete = (quoteId: string) => {
     Alert.alert(
@@ -92,15 +150,36 @@ export default function ProfileScreen() {
           <Ionicons name="person-circle-outline" size={80} color={colors.textMuted} />
           <Text style={[s.guestTitle, { color: colors.textPrimary }]}>{t('profile.guestTitle')}</Text>
           <Text style={[s.guestText, { color: colors.textSecondary }]}>{t('profile.guestDesc')}</Text>
+          {signInError && (
+            <Text style={[s.errorText, { color: colors.error }]}>{signInError}</Text>
+          )}
           <Pressable
-            style={[s.loginBtn, { backgroundColor: colors.primary }]}
-            onPress={() => setLoginPromptVisible(true)}
+            style={[s.loginBtn, { backgroundColor: colors.primary, opacity: signingIn ? 0.7 : 1 }]}
+            onPress={handleGuestSignIn}
+            disabled={signingIn}
           >
-            <Ionicons name="logo-google" size={18} color="#fff" style={{ marginRight: Spacing.sm }} />
-            <Text style={s.loginBtnText}>{t('login.signInWithGoogle')}</Text>
+            {signingIn ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Ionicons name="logo-google" size={18} color="#fff" style={{ marginRight: Spacing.sm }} />
+                <Text style={s.loginBtnText}>{t('login.signInWithGoogle')}</Text>
+              </>
+            )}
           </Pressable>
         </View>
-        <LoginPromptModal visible={loginPromptVisible} onClose={() => setLoginPromptVisible(false)} />
+        <GoogleSignInConfirmModal
+          visible={confirmVisible}
+          email={pendingUser?.email ?? null}
+          onConfirm={handleConfirmAgree}
+          onCancel={() => setConfirmVisible(false)}
+        />
+        <ProfileSetupModal
+          visible={profileSetupVisible}
+          initialDisplayName={pendingUser?.displayName}
+          onComplete={handleProfileComplete}
+          onSkip={handleProfileSkip}
+        />
       </SafeAreaView>
     );
   }
@@ -189,6 +268,7 @@ function makeStyles(colors: any) {
     guestText: { ...Fonts.body, fontSize: FontSize.md, textAlign: 'center', lineHeight: 22, marginBottom: Spacing.sm },
     loginBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.xl, paddingVertical: Spacing.sm + 2, borderRadius: BorderRadius.full, marginTop: Spacing.sm },
     loginBtnText: { ...Fonts.heading, fontSize: FontSize.sm, color: '#fff' },
+    errorText: { ...Fonts.body, fontSize: FontSize.sm, textAlign: 'center' },
     profileSection: { alignItems: 'center', paddingVertical: Spacing.xl, gap: Spacing.sm },
     avatar: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
     avatarImg: { width: 80, height: 80, borderRadius: 40 },

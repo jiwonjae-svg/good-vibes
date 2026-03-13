@@ -164,7 +164,7 @@ export async function scheduleSmartNotifications(options: SmartNotifOptions): Pr
   }
 }
 
-
+/**
  * Timezone changes or OS-level clearing can silently drop the scheduled notification.
  */
 export async function validateAndRescheduleDailyReminder(

@@ -5,7 +5,8 @@ import * as Localization from 'expo-localization';
 import type { LanguageCode } from '../i18n';
 import { clearQuoteCache } from '../services/quoteService';
 import { appLog } from '../services/logger';
-import { updatePremiumStatus, fetchPremiumStatus, logActivity, saveBookmarkedQuotes, fetchBookmarkedQuotes, logQuoteBookmarked, saveViewedQuotesForDate, fetchViewedQuotesForDate, saveStreakToFirestore, fetchStreakFromFirestore, saveUserSettings, fetchUserSettings, fetchUsername, saveUserProfile, saveUserBadges, saveQuoteRating } from '../services/firestoreUserService';
+import { scheduleSmartNotifications } from '../services/notificationService';
+import { updatePremiumStatus, fetchPremiumStatus, logActivity, saveBookmarkedQuotes, fetchBookmarkedQuotes, logQuoteBookmarked, saveViewedQuotesForDate, fetchViewedQuotesForDate, saveStreakToFirestore, fetchStreakFromFirestore, saveUserSettings, fetchUserSettings, fetchUsername, saveUserProfile, saveUserBadges, saveQuoteRating, fetchPublicUserProfile } from '../services/firestoreUserService';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -95,6 +96,16 @@ interface UserState {
   likedQuoteIds: string[];
   dislikedQuoteIds: string[];
 
+  // Community feed preference
+  showCommunityQuotes: boolean;
+
+  // Recent category views (ring buffer) — synced to Firestore for smart notifications
+  recentViewedCategories: string[];
+
+  // Social counts (synced from Firestore on login)
+  followerCount: number;
+  followingCount: number;
+
   loadUser: () => Promise<void>;
   persistUser: () => Promise<void>;
   incrementScroll: () => Promise<number>;
@@ -126,6 +137,9 @@ interface UserState {
   setNotificationHour: (hour: number) => Promise<void>;
   setTtsSpeed: (speed: number) => Promise<void>;
   rateQuote: (quoteId: string, rating: 'like' | 'dislike') => Promise<void>;
+  setShowCommunityQuotes: (show: boolean) => Promise<void>;
+  /** Track which quote category the user just viewed (ring buffer of last 30) */
+  trackCategoryView: (category: string) => void;
 }
 
 const USER_KEY = '@dailyglow_user_v1';
@@ -170,6 +184,10 @@ export const useUserStore = create<UserState>((set, get) => ({
   earnedBadgeDates: {},
   likedQuoteIds: [],
   dislikedQuoteIds: [],
+  showCommunityQuotes: true,
+  recentViewedCategories: [],
+  followerCount: 0,
+  followingCount: 0,
 
   loadUser: async () => {
     try {
@@ -218,6 +236,10 @@ export const useUserStore = create<UserState>((set, get) => ({
           earnedBadgeDates: d.earnedBadgeDates ?? {},
           likedQuoteIds: d.likedQuoteIds ?? [],
           dislikedQuoteIds: d.dislikedQuoteIds ?? [],
+          showCommunityQuotes: d.showCommunityQuotes ?? true,
+          recentViewedCategories: d.recentViewedCategories ?? [],
+          followerCount: d.followerCount ?? 0,
+          followingCount: d.followingCount ?? 0,
           isLoaded: true,
         });
       } else {
@@ -266,6 +288,10 @@ export const useUserStore = create<UserState>((set, get) => ({
         earnedBadgeDates: s.earnedBadgeDates,
         likedQuoteIds: s.likedQuoteIds,
         dislikedQuoteIds: s.dislikedQuoteIds,
+        showCommunityQuotes: s.showCommunityQuotes,
+        recentViewedCategories: s.recentViewedCategories,
+        followerCount: s.followerCount,
+        followingCount: s.followingCount,
       }));
     } catch { /* silent */ }
   },
@@ -390,13 +416,14 @@ export const useUserStore = create<UserState>((set, get) => ({
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-      const [premiumStatus, cloudBookmarks, cloudTodayViewed, cloudSettings, cloudStreak, cloudUsername] = await Promise.all([
+      const [premiumStatus, cloudBookmarks, cloudTodayViewed, cloudSettings, cloudStreak, cloudUsername, socialProfile] = await Promise.all([
         fetchPremiumStatus(user.uid),
         fetchBookmarkedQuotes(user.uid),
         fetchViewedQuotesForDate(user.uid, todayStr),
         fetchUserSettings(user.uid),
         fetchStreakFromFirestore(user.uid),
         fetchUsername(user.uid),
+        fetchPublicUserProfile(user.uid),
       ]);
       
       if (premiumStatus) {
@@ -405,6 +432,10 @@ export const useUserStore = create<UserState>((set, get) => ({
       
       if (cloudUsername) {
         set({ username: cloudUsername });
+      }
+
+      if (socialProfile) {
+        set({ followerCount: socialProfile.followerCount, followingCount: socialProfile.followingCount });
       }
       
       if (cloudBookmarks.length > 0) {
@@ -462,6 +493,8 @@ export const useUserStore = create<UserState>((set, get) => ({
       set({
         uid: null, displayName: null, email: null, photoURL: null, username: null,
         isPremium: false,
+        followerCount: 0,
+        followingCount: 0,
         bookmarkedQuoteIds: [],
         todayViewedQuoteIds: [],
         todayViewedDate: null,
@@ -524,6 +557,18 @@ export const useUserStore = create<UserState>((set, get) => ({
 
     await get().persistUser();
     if (uid) saveStreakToFirestore(uid, newStreak, todayStr).catch(() => {});
+
+    // Reschedule smart notifications so the near-milestone 08:30 slot is
+    // added or removed correctly based on the updated streak value.
+    const { dailyReminderEnabled, displayName } = get();
+    if (dailyReminderEnabled) {
+      scheduleSmartNotifications({
+        dailyReminderEnabled: true,
+        uid: uid ?? undefined,
+        userName: displayName ?? undefined,
+        currentStreak: newStreak,
+      }).catch(() => {});
+    }
   },
 
   startPremiumTrial: async () => {
@@ -643,5 +688,19 @@ export const useUserStore = create<UserState>((set, get) => ({
     set({ likedQuoteIds: newLiked, dislikedQuoteIds: newDisliked });
     await get().persistUser();
     if (uid) saveQuoteRating(uid, quoteId, rating).catch(() => {});
+  },
+
+  setShowCommunityQuotes: async (show) => {
+    set({ showCommunityQuotes: show });
+    await get().persistUser();
+  },
+
+  trackCategoryView: (category) => {
+    if (!category) return;
+    const { uid, recentViewedCategories } = get();
+    const updated = [...recentViewedCategories, category].slice(-30); // ring buffer capped at 30
+    set({ recentViewedCategories: updated });
+    // Fire-and-forget sync to Firestore (only when logged in)
+    if (uid) saveUserSettings(uid, { recentViewedCategories: updated }).catch(() => {});
   },
 }));

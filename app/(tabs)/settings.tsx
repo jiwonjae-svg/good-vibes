@@ -11,14 +11,11 @@ import { useUserStore } from '../../stores/useUserStore';
 import { LANGUAGES, type LanguageCode } from '../../i18n';
 import { signInWithGoogleNative, logOut, onAuthChange } from '../../services/authService';
 import { logActivity } from '../../services/firestoreUserService';
-import { scheduleDailyReminder, cancelDailyReminder, saveFCMToken } from '../../services/notificationService';
+import { scheduleSmartNotifications, cancelDailyReminder, saveFCMToken } from '../../services/notificationService';
 import { appLog } from '../../services/logger';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const clientQuotes: Array<{ quote: string }> = require('../../data/quotesClient.json');
 import LanguagePickerModal from '../../components/LanguagePickerModal';
 import CategoryPickerModal from '../../components/CategoryPickerModal';
 import LogStatusModal from '../../components/LogStatusModal';
-import MySubmissionsModal from '../../components/MySubmissionsModal';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
@@ -42,6 +39,7 @@ export default function SettingsScreen() {
     premiumTrialUsed,
     notificationHour, setNotificationHour,
     ttsSpeed, setTtsSpeed,
+    showCommunityQuotes, setShowCommunityQuotes,
   } = useUserStore();
 
   const FONT_SIZE_OPTIONS = [
@@ -57,13 +55,15 @@ export default function SettingsScreen() {
   const [premiumModalVisible, setPremiumModalVisible] = useState(false);
   const [logModalVisible, setLogModalVisible] = useState(false);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
-  const [mySubmissionsVisible, setMySubmissionsVisible] = useState(false);
   const [editName, setEditName] = useState('');
   const [editUsername, setEditUsername] = useState('');
 
   useEffect(() => {
     const unsub = onAuthChange((user) => {
-      if (user) setAuth({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
+      // Only clear store on sign-out; sign-in is fully handled by login.tsx
+      // (calling setAuth on sign-in here would overwrite the user-set displayName
+      //  with the Google account name)
+      if (!user) setAuth(null);
     });
     return unsub;
   }, []);
@@ -103,8 +103,7 @@ export default function SettingsScreen() {
     if (isGuest) return;
     appLog.log('[settings] notification toggle', { enabled, uid });
     if (enabled) {
-      const randomQuote = clientQuotes[Math.floor(Math.random() * clientQuotes.length)];
-      const granted = await scheduleDailyReminder(randomQuote?.quote, notificationHour);
+      const granted = await scheduleSmartNotifications({ dailyReminderEnabled: true, uid: uid ?? undefined, userName: displayName ?? undefined, currentStreak });
       appLog.log('[settings] notification scheduling result', { granted });
       setDailyReminder(granted);
       if (granted && uid) saveFCMToken(uid).catch(() => {});
@@ -117,8 +116,7 @@ export default function SettingsScreen() {
   const handleNotificationHour = async (hour: number) => {
     await setNotificationHour(hour);
     if (dailyReminderEnabled) {
-      const randomQuote = clientQuotes[Math.floor(Math.random() * clientQuotes.length)];
-      scheduleDailyReminder(randomQuote?.quote, hour).catch(() => {});
+      scheduleSmartNotifications({ dailyReminderEnabled: true, uid: uid ?? undefined, userName: displayName ?? undefined, currentStreak }).catch(() => {});
     }
   };
 
@@ -153,11 +151,6 @@ export default function SettingsScreen() {
         onClose={() => setCatModalVisible(false)}
       />
       <LogStatusModal visible={logModalVisible} onClose={() => setLogModalVisible(false)} />
-      <MySubmissionsModal
-        visible={mySubmissionsVisible}
-        onClose={() => setMySubmissionsVisible(false)}
-        uid={uid!}
-      />
 
       {/* Profile Edit Modal */}
       <Modal
@@ -295,17 +288,6 @@ export default function SettingsScreen() {
                   <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
                 </Pressable>
                 <View style={s.divider} />
-                <Pressable style={s.row} onPress={() => setMySubmissionsVisible(true)}>
-                  <View style={s.rowLeft}>
-                    <Ionicons name="document-text-outline" size={22} color={colors.textSecondary} />
-                    <View>
-                      <Text style={s.rowTitle}>{t('settings.mySubmissions')}</Text>
-                      <Text style={s.rowSubtitle}>{t('settings.mySubmissionsDesc')}</Text>
-                    </View>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-                </Pressable>
-                <View style={s.divider} />
                 <Pressable style={s.row} onPress={handleLogout}>
                   <View style={s.rowLeft}>
                     <Ionicons name="log-out-outline" size={22} color={colors.error} />
@@ -352,7 +334,7 @@ export default function SettingsScreen() {
           <View style={s.section}>
             <Text style={s.sectionTitle}>{t('settings.subscription')}</Text>
             <View style={s.card}>
-              {isPremium ? (
+              {isEffectivelyPremium() ? (
                 <View style={s.row}>
                   <View style={s.rowLeft}>
                     <Ionicons name="diamond" size={22} color={colors.primary} />
@@ -531,6 +513,23 @@ export default function SettingsScreen() {
                   </Pressable>
                 ))}
               </View>
+            </View>
+            <View style={s.divider} />
+            {/* Community quotes toggle */}
+            <View style={s.row}>
+              <View style={s.rowLeft}>
+                <Ionicons name="people-outline" size={22} color={colors.textSecondary} />
+                <View>
+                  <Text style={s.rowTitle}>{t('settings.showCommunityQuotes')}</Text>
+                  <Text style={s.rowSubtitle}>{t('settings.showCommunityQuotesDesc')}</Text>
+                </View>
+              </View>
+              <Switch
+                value={showCommunityQuotes}
+                onValueChange={(val) => setShowCommunityQuotes(val)}
+                trackColor={{ false: colors.grass0, true: colors.primaryLight }}
+                thumbColor={showCommunityQuotes ? colors.primary : '#f4f3f4'}
+              />
             </View>
           </View>
         </View>

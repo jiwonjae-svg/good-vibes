@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, Modal, Pressable, StyleSheet, TextInput, ScrollView,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Animated, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,10 +12,88 @@ import { useCommunityStore } from '../stores/useCommunityStore';
 import { useUserStore } from '../stores/useUserStore';
 import { CATEGORY_THEMES } from '../data/categories';
 
-// Subset of categories shown during submission (first 3 themes × first 8 each)
-const SUBMIT_CATEGORIES = CATEGORY_THEMES.slice(0, 3).flatMap((theme) =>
-  theme.categories.slice(0, 8),
-);
+// Fireworks particle colors
+const PARTICLE_COLORS = ['#FF6B6B', '#FFD93D', '#6BCB77', '#4D96FF', '#FF6FC8', '#B983FF'];
+const FIREWORKS_ICON = require('../assets/fireworks-elem-icon.png');
+
+interface ParticleProps {
+  color: string;
+  startX: number;
+  startY: number;
+  angle: number;
+}
+
+function FireworkParticle({ color, startX, startY, angle }: ParticleProps) {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  const dist = 70 + Math.random() * 40;
+  const dx = Math.cos(angle) * dist;
+  const dy = Math.sin(angle) * dist;
+
+  const translateX = anim.interpolate({ inputRange: [0, 1], outputRange: [startX, startX + dx] });
+  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [startY, startY + dy] });
+  const opacity = anim.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 1, 0] });
+  const scale = anim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 1, 0.5] });
+
+  return (
+    <Animated.View
+      style={{
+        position: 'absolute',
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: color,
+        transform: [{ translateX }, { translateY }, { scale }],
+        opacity,
+      }}
+    />
+  );
+}
+
+function FireworksDisplay() {
+  const bounce = useRef(new Animated.Value(0)).current;
+  const colors = useThemeColors();
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.spring(bounce, { toValue: 1, friction: 4, tension: 160, useNativeDriver: true }),
+      Animated.spring(bounce, { toValue: 0.9, friction: 6, tension: 200, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  const scale = bounce.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] });
+
+  const particles: React.ReactNode[] = [];
+  const count = 16;
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2;
+    const color = PARTICLE_COLORS[i % PARTICLE_COLORS.length];
+    particles.push(
+      <FireworkParticle key={i} color={color} startX={0} startY={0} angle={angle} />,
+    );
+  }
+
+  return (
+    <View style={{ alignItems: 'center', justifyContent: 'center', height: 100 }}>
+      <View style={{ position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
+        {particles}
+        <Animated.Image
+          source={FIREWORKS_ICON}
+          style={{ width: 80, height: 80, tintColor: colors.primary, transform: [{ scale }] }}
+          resizeMode="contain"
+        />
+      </View>
+    </View>
+  );
+}
 
 interface SubmitQuoteSheetProps {
   visible: boolean;
@@ -29,6 +107,7 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
   const uid = useUserStore((s) => s.uid);
   const displayName = useUserStore((s) => s.displayName);
   const language = useUserStore((s) => s.language);
+  const photoURL = useUserStore((s) => s.photoURL);
   const { submitQuote, canSubmit } = useCommunityStore();
 
   const [text, setText] = useState('');
@@ -82,6 +161,7 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
         author.trim(),
         language,
         selectedCats,
+        photoURL,
       );
       if (result.success) {
         setSubmitted(true);
@@ -107,21 +187,18 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
     <Modal
       transparent
       visible={visible}
-      animationType="slide"
+      animationType="fade"
       onRequestClose={onClose}
     >
       <Pressable style={styles.overlay} onPress={onClose}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.kavWrapper}
         >
           <Pressable
-            style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: Math.max(insets.bottom, Spacing.lg) }]}
+            style={[styles.sheet, { backgroundColor: colors.surface }]}
             onPress={(e) => e.stopPropagation()}
           >
-            {/* Handle */}
-            <View style={[styles.handle, { backgroundColor: colors.textMuted }]} />
-
             {/* Header */}
             <View style={styles.header}>
               <Text style={[styles.title, { color: colors.textPrimary }]}>
@@ -133,8 +210,8 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
             </View>
 
             {submitted ? (
-              <View style={styles.successContainer}>
-                <Text style={styles.successEmoji}>✅</Text>
+              <View style={[styles.successContainer, { paddingBottom: Spacing.lg }]}>
+                <FireworksDisplay />
                 <Text style={[styles.successText, { color: colors.textPrimary }]}>
                   {t('community.submitSuccess')}
                 </Text>
@@ -146,7 +223,12 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
                 </Pressable>
               </View>
             ) : (
-              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled
+                contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, Spacing.lg) }}
+              >
                 {/* Quote text */}
                 <Text style={[styles.label, { color: colors.textSecondary }]}>
                   {t('community.textLabel')} *
@@ -155,11 +237,12 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
                   <TextInput
                     style={[styles.textArea, { color: colors.textPrimary }]}
                     value={text}
-                    onChangeText={setText}
+                    onChangeText={(val) => setText(val.length > 500 ? val.slice(0, 500) : val)}
                     placeholder={t('community.textPlaceholder')}
                     placeholderTextColor={colors.textMuted}
                     multiline
-                    maxLength={500}
+                    autoCorrect={false}
+                    autoCapitalize="none"
                     textAlignVertical="top"
                   />
                   <Text style={[styles.charCount, { color: charCount > 450 ? colors.warning : colors.textMuted }]}>
@@ -184,28 +267,35 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
                 <Text style={[styles.label, { color: colors.textSecondary, marginTop: Spacing.md }]}>
                   {t('community.categories')}
                 </Text>
-                <View style={styles.chips}>
-                  {SUBMIT_CATEGORIES.map((cat) => {
-                    const selected = selectedCats.includes(cat.key);
-                    return (
-                      <Pressable
-                        key={cat.key}
-                        style={[
-                          styles.chip,
-                          {
-                            backgroundColor: selected ? colors.primary : colors.surfaceAlt,
-                            borderColor: selected ? colors.primary : colors.grass0,
-                          },
-                        ]}
-                        onPress={() => toggleCat(cat.key)}
-                      >
-                        <Text style={[styles.chipText, { color: selected ? '#fff' : colors.textSecondary }]}>
-                          {t(cat.labelKey)}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                {CATEGORY_THEMES.map((theme) => (
+                  <View key={theme.themeKey}>
+                    <Text style={[styles.submitThemeHeader, { color: colors.textMuted }]}>
+                      {t(theme.themeKey)}
+                    </Text>
+                    <View style={styles.chips}>
+                      {theme.categories.map((cat) => {
+                        const selected = selectedCats.includes(cat.key);
+                        return (
+                          <Pressable
+                            key={cat.key}
+                            style={[
+                              styles.chip,
+                              {
+                                backgroundColor: selected ? colors.primary : colors.surfaceAlt,
+                                borderColor: selected ? colors.primary : colors.grass0,
+                              },
+                            ]}
+                            onPress={() => toggleCat(cat.key)}
+                          >
+                            <Text style={[styles.chipText, { color: selected ? '#fff' : colors.textSecondary }]}>
+                              {t(cat.labelKey)}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))}
 
                 {/* Error */}
                 {error && (
@@ -228,7 +318,6 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
                   )}
                 </Pressable>
 
-                <View style={{ height: Spacing.xl }} />
               </ScrollView>
             )}
           </Pressable>
@@ -238,21 +327,23 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
   );
 }
 
+const { height: SCREEN_HEIGHT } = require('react-native').Dimensions.get('window');
+
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.lg,
   },
   kavWrapper: {
     width: '100%',
   },
   sheet: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: BorderRadius.xl,
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
-    maxHeight: '90%',
+    paddingTop: Spacing.lg,
+    maxHeight: SCREEN_HEIGHT * 0.85,
   },
   handle: {
     width: 36,
@@ -299,11 +390,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: Spacing.sm,
   },
+  submitThemeHeader: {
+    ...Fonts.body,
+    fontSize: FontSize.xs,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.xs,
-    marginTop: Spacing.xs,
+    marginBottom: Spacing.xs,
   },
   chip: {
     paddingHorizontal: Spacing.sm,
@@ -333,11 +433,8 @@ const styles = StyleSheet.create({
   },
   successContainer: {
     alignItems: 'center',
-    paddingVertical: Spacing.xl,
+    paddingTop: Spacing.lg,
     gap: Spacing.md,
-  },
-  successEmoji: {
-    fontSize: 48,
   },
   successText: {
     ...Fonts.body,

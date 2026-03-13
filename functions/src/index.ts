@@ -12,3 +12,4 @@ admin.initializeApp();
 export { onLikeWrite } from './onLikeWrite';
 export { autoApprove }  from './autoApprove';
 export { notifyStatus } from './notifyStatus';
+export { schedulePersonalizedPush } from './smartNotifications';

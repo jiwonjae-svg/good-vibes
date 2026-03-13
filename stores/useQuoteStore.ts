@@ -4,10 +4,14 @@ export interface Quote {
   id: string;
   text: string;
   author: string;
-  source?: string;   // 'quotable' | 'wikiquote' | 'gutenberg'
+  source?: string;   // 'quotable' | 'wikiquote' | 'gutenberg' | 'community'
   category?: string;
   createdAt: number;
   gradientIndex: number;
+  // Community-submitted quote fields
+  submitterId?: string;
+  submitterName?: string;
+  submitterPhotoURL?: string | null;
 }
 
 interface QuoteState {

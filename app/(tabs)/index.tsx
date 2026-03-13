@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react';
 import {
-  View, FlatList, StyleSheet, ActivityIndicator, Text, ViewToken, Pressable,
+  View, FlatList, StyleSheet, ActivityIndicator, Text, ViewToken, Pressable, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Audio } from 'expo-av';
@@ -28,12 +28,15 @@ import PraiseModal from '../../components/PraiseModal';
 import LoginPromptModal from '../../components/LoginPromptModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DailyQuoteModal, { getDailyQuote } from '../../components/DailyQuoteModal';
+
+const PENCIL_ICON = require('../../assets/pencil-elem-icon.png');
 import QuoteSearchModal from '../../components/QuoteSearchModal';
 import OfflineBanner from '../../components/OfflineBanner';
 import MilestoneBadgeModal from '../../components/MilestoneBadgeModal';
 import SubmitQuoteSheet from '../../components/SubmitQuoteSheet';
 import { useCommunityStore } from '../../stores/useCommunityStore';
 import { Ionicons } from '@expo/vector-icons';
+import UserProfileModal from '../../components/UserProfileModal';
 
 type SheetType = 'speak' | 'write' | 'type' | null;
 
@@ -44,6 +47,7 @@ export default function HomeScreen() {
   const { speak, stop, isSpeaking } = useTTS();
   const { quotes, isLoading, isGenerating, setQuotes, appendQuotes, setIsLoading, setIsGenerating } = useQuoteStore();
   const { incrementScroll, updateStreak, addViewedQuote, clearNewBadge } = useUserStore();
+  const trackCategoryView = useUserStore((s) => s.trackCategoryView);
   const newBadgeEarned = useUserStore((s) => s.newBadgeEarned);
   const language = useUserStore((s) => s.language);
   const autoReadEnabled = useUserStore((s) => s.autoReadEnabled);
@@ -61,29 +65,43 @@ export default function HomeScreen() {
   const [searchVisible, setSearchVisible] = useState(false);
   const [showDailyModal, setShowDailyModal] = useState(false);
   const [submitVisible, setSubmitVisible] = useState(false);
+  const [profileTarget, setProfileTarget] = useState<{ uid: string; name: string; photoURL?: string | null } | null>(null);
+
+  const showCommunityQuotes = useUserStore((s) => s.showCommunityQuotes);
 
   // Community feed
   const {
-    feedMode, setFeedMode,
-    sortBy, setSortBy,
     communityQuotes, isLoading: communityLoading,
     hasMore: communityHasMore,
     loadCommunityQuotes, loadMore: loadMoreCommunity,
     init: initCommunityStore,
   } = useCommunityStore();
 
-  // Map community quotes to Quote shape for reuse in FlatList
-  const communityAsFeedQuotes: Quote[] = communityQuotes.map((cq, i) => ({
-    id: cq.id,
-    text: cq.text,
-    author: cq.author,
-    source: 'community' as const,
-    category: cq.categories[0],
-    createdAt: cq.createdAt,
-    gradientIndex: i % 8,
-  }));
-
-  const displayedQuotes = feedMode === 'community' ? communityAsFeedQuotes : quotes;
+  // Interleave community quotes into the main feed (every 5th slot) when enabled
+  const displayedQuotes: Quote[] = React.useMemo(() => {
+    if (!showCommunityQuotes || communityQuotes.length === 0) return quotes;
+    const merged: Quote[] = [];
+    let ci = 0;
+    for (let i = 0; i < quotes.length; i++) {
+      merged.push(quotes[i]);
+      if ((i + 1) % 5 === 0 && ci < communityQuotes.length) {
+        const cq = communityQuotes[ci++];
+        merged.push({
+          id: cq.id,
+          text: cq.text,
+          author: cq.author,
+          source: 'community' as const,
+          category: cq.categories[0],
+          createdAt: cq.createdAt,
+          gradientIndex: i % 8,
+          submitterId: cq.submitterId,
+          submitterName: cq.submitterName,
+          submitterPhotoURL: cq.submitterPhotoURL,
+        });
+      }
+    }
+    return merged;
+  }, [quotes, communityQuotes, showCommunityQuotes]);
   const flatListRef = useRef<FlatList>(null);
   const lastViewedIndex = useRef(0);
   const loginPromptShown = useRef(false);
@@ -117,6 +135,12 @@ export default function HomeScreen() {
     loadQuotes();
     initCommunityStore();
   }, []);
+
+  useEffect(() => {
+    if (showCommunityQuotes && communityQuotes.length === 0) {
+      loadCommunityQuotes(language, uid ?? undefined, true);
+    }
+  }, [showCommunityQuotes]);
 
   const autoPlayIndexRef = useRef(0);
 
@@ -181,8 +205,7 @@ export default function HomeScreen() {
       return;
     }
     loadQuotes();
-    // Reset community feed on language change
-    if (feedMode === 'community') loadCommunityQuotes(language, uid ?? undefined, true);
+    if (showCommunityQuotes) loadCommunityQuotes(language, uid ?? undefined, true);
   }, [language]);
 
   useEffect(() => {
@@ -242,6 +265,7 @@ export default function HomeScreen() {
           }
           if (viewableItems.length === 1) {
             addViewedQuote(q.id, q.text, q.author, q.source ?? '', todayString());
+            if (q.category) trackCategoryView(q.category);
           }
 
           if (autoPlayChainRef.current) {
@@ -327,10 +351,11 @@ export default function HomeScreen() {
         onSpeakAlong={() => { setActiveQuoteIndex(index); setActiveSheet('speak'); }}
         onWriteAlong={() => { setActiveQuoteIndex(index); setActiveSheet('write'); }}
         onTypeAlong={() => { setActiveQuoteIndex(index); setActiveSheet('type'); }}
+        onSubmitterPress={(submitterId, submitterName, submitterPhotoURL) =>
+          setProfileTarget({ uid: submitterId, name: submitterName, photoURL: submitterPhotoURL })
+        }
       />
     ),
-    // No dependency on handleToggleAutoPlay — QuoteCard reads the store directly
-    // to avoid re-rendering all cards when autoPlay state changes.
     [],
   );
 
@@ -360,21 +385,17 @@ export default function HomeScreen() {
         viewabilityConfig={viewabilityConfig}
         getItemLayout={(_, index) => ({ length: CARD_HEIGHT, offset: CARD_HEIGHT * index, index })}
         onEndReached={() => {
-          if (feedMode === 'community' && communityHasMore) loadMoreCommunity(language, uid ?? undefined);
+          if (showCommunityQuotes && communityHasMore) loadMoreCommunity(language, uid ?? undefined);
         }}
         onEndReachedThreshold={0.5}
-        ListFooterComponent={(isGenerating || (feedMode === 'community' && communityLoading)) ? <View style={styles.footer}><ActivityIndicator size="small" color={colors.primary} /></View> : null}
-        ListEmptyComponent={!(isLoading || communityLoading) ? (
+        ListFooterComponent={(isGenerating || (showCommunityQuotes && communityLoading)) ? <View style={styles.footer}><ActivityIndicator size="small" color={colors.primary} /></View> : null}
+        ListEmptyComponent={!isLoading ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="book-outline" size={48} color={colors.textMuted} />
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              {feedMode === 'community' ? t('community.emptyFeed') : t('home.searchEmpty')}
-            </Text>
-            {feedMode !== 'community' && (
-              <Pressable onPress={loadQuotes} style={[styles.retryBtn, { backgroundColor: colors.primary }]}>
-                <Text style={styles.retryBtnText}>{t('common.ok')}</Text>
-              </Pressable>
-            )}
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{t('home.searchEmpty')}</Text>
+            <Pressable onPress={loadQuotes} style={[styles.retryBtn, { backgroundColor: colors.primary }]}>
+              <Text style={styles.retryBtnText}>{t('common.ok')}</Text>
+            </Pressable>
           </View>
         ) : null}
       />
@@ -404,72 +425,27 @@ export default function HomeScreen() {
         <Ionicons name="search-outline" size={22} color={colors.textPrimary} />
       </Pressable>
 
-      {/* Feed mode toggle: All Quotes / Community ★ */}
-      <View style={[styles.feedToggle, { top: insets.top + 8, backgroundColor: colors.surface }]}>
+      {/* FAB: Submit a quote (logged-in users only) */}
+      {!isGuest && (
         <Pressable
-          style={[styles.feedBtn, feedMode === 'all' && { backgroundColor: colors.primary }]}
-          onPress={() => setFeedMode('all')}
-        >
-          <Text style={[styles.feedBtnText, { color: feedMode === 'all' ? '#fff' : colors.textSecondary }]}>
-            {t('community.feedAll')}
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.feedBtn, feedMode === 'community' && { backgroundColor: colors.primary }]}
-          onPress={() => {
-            setFeedMode('community');
-            if (communityQuotes.length === 0) loadCommunityQuotes(language, uid ?? undefined, true);
-          }}
-        >
-          <Text style={[styles.feedBtnText, { color: feedMode === 'community' ? '#fff' : colors.textSecondary }]}>
-            {t('community.feedCommunity')}
-          </Text>
-        </Pressable>
-      </View>
-
-      {/* Sort toggle: visible only in community mode */}
-      {feedMode === 'community' && (
-        <View style={[styles.sortToggle, { top: insets.top + 54, backgroundColor: colors.surface }]}>
-          <Pressable
-            style={[styles.sortBtn, sortBy === 'latest' && { backgroundColor: colors.primary }]}
-            onPress={() => {
-              if (sortBy !== 'latest') {
-                setSortBy('latest');
-                loadCommunityQuotes(language, uid ?? undefined, true);
-              }
-            }}
-          >
-            <Text style={[styles.feedBtnText, { color: sortBy === 'latest' ? '#fff' : colors.textSecondary }]}>
-              {t('community.sortLatest')}
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.sortBtn, sortBy === 'likes' && { backgroundColor: colors.primary }]}
-            onPress={() => {
-              if (sortBy !== 'likes') {
-                setSortBy('likes');
-                loadCommunityQuotes(language, uid ?? undefined, true);
-              }
-            }}
-          >
-            <Text style={[styles.feedBtnText, { color: sortBy === 'likes' ? '#fff' : colors.textSecondary }]}>
-              {t('community.sortLikes')}
-            </Text>
-          </Pressable>
-        </View>
-      )}
-
-      {/* FAB: Submit a quote (community feed, logged-in users only) */}
-      {!isGuest && feedMode === 'community' && (
-        <Pressable
-          style={[styles.fab, { backgroundColor: colors.primary, bottom: insets.bottom + 80 }]}
+          style={[styles.fab, { backgroundColor: colors.primary, bottom: 65 + Math.max(20, insets.bottom) + 74 }]}
           onPress={() => setSubmitVisible(true)}
         >
-          <Ionicons name="add" size={28} color="#fff" />
+          <Image source={PENCIL_ICON} style={{ width: 26, height: 26, tintColor: '#fff' }} resizeMode="contain" />
         </Pressable>
       )}
 
       <SubmitQuoteSheet visible={submitVisible} onClose={() => setSubmitVisible(false)} />
+
+      {profileTarget && (
+        <UserProfileModal
+          visible={!!profileTarget}
+          onClose={() => setProfileTarget(null)}
+          targetUid={profileTarget.uid}
+          targetName={profileTarget.name}
+          targetPhotoURL={profileTarget.photoURL}
+        />
+      )}
 
       <QuoteSearchModal
         visible={searchVisible}
@@ -498,7 +474,7 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { ...Fonts.body, fontSize: FontSize.md, marginTop: Spacing.md },
   footer: { height: 60, justifyContent: 'center', alignItems: 'center' },
-  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 120, gap: Spacing.md },
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md },
   emptyText: { ...Fonts.body, fontSize: FontSize.md, textAlign: 'center' },
   retryBtn: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderRadius: 20 },
   retryBtnText: { ...Fonts.heading, fontSize: FontSize.sm, color: '#fff' },
@@ -517,47 +493,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 6,
     elevation: 5,
-  },
-  feedToggle: {
-    position: 'absolute',
-    left: Spacing.lg,
-    flexDirection: 'row',
-    borderRadius: 20,
-    overflow: 'hidden',
-    zIndex: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 5,
-  },
-  sortToggle: {
-    position: 'absolute',
-    left: Spacing.lg,
-    flexDirection: 'row',
-    borderRadius: 16,
-    overflow: 'hidden',
-    zIndex: 19,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  sortBtn: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 5,
-    borderRadius: 16,
-  },
-  feedBtn: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  feedBtnText: {
-    ...Fonts.body,
-    fontSize: FontSize.xs,
-    fontWeight: '600',
   },
   fab: {
     position: 'absolute',

@@ -83,6 +83,8 @@ export async function syncUserToFirestore(
 
     if (!existingDoc.exists()) {
       userData.createdAt = serverTimestamp() as Timestamp;
+      userData.followerCount = 0;
+      userData.followingCount = 0;
     }
 
     await setDoc(userRef, userData, { merge: true });
@@ -419,6 +421,8 @@ export interface UserSettings {
   selectedCategories: string[];
   autoReadEnabled: boolean;
   dailyReminderEnabled: boolean;
+  /** Ring buffer of the last 30 quote categories the user has viewed (for smart notifications) */
+  recentViewedCategories?: string[];
 }
 
 /**
@@ -476,12 +480,12 @@ export async function isUsernameAvailable(username: string): Promise<boolean> {
   try {
     initFirebase();
     const db = getDb();
-    if (!db) return false;
+    if (!db) return true; // assume available when offline/uninitialized
     const ref = doc(db, 'usernames', username.toLowerCase());
     const snap = await getDoc(ref);
     return !snap.exists();
   } catch {
-    return false;
+    return true; // assume available on error so new users aren't blocked
   }
 }
 
@@ -628,6 +632,99 @@ export async function saveQuoteRating(uid: string, quoteId: string, rating: 'lik
     appLog.log('[firestore] saveQuoteRating', { uid, quoteId, rating });
   } catch (err) {
     appLog.warn('[firestore] saveQuoteRating failed', { err: String(err) });
+  }
+}
+
+// =============================================================================
+// Social — Follow / Unfollow
+// Stored in `follows/{followerId}_{followedId}` collection.
+// followerCount / followingCount are stored denormalized on each user doc.
+// NOTE: Firestore security rules must allow:
+//   - `follows` read: authenticated users
+//   - `follows` write/delete: request.auth.uid == resource.data.followerId
+//   - `users/{uid}` update of followerCount/followingCount only
+// =============================================================================
+
+export interface PublicUserProfile {
+  uid: string;
+  displayName: string | null;
+  username: string | null;
+  photoURL: string | null;
+  followerCount: number;
+  followingCount: number;
+}
+
+export async function fetchPublicUserProfile(targetUid: string): Promise<PublicUserProfile | null> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return null;
+    const snap = await getDoc(doc(db, 'users', targetUid));
+    if (!snap.exists()) return null;
+    const d = snap.data() as any;
+    return {
+      uid: targetUid,
+      displayName: d.displayName ?? null,
+      username: d.username ?? null,
+      photoURL: d.photoURL ?? null,
+      followerCount: d.followerCount ?? 0,
+      followingCount: d.followingCount ?? 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function checkIsFollowing(myUid: string, targetUid: string): Promise<boolean> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return false;
+    const snap = await getDoc(doc(db, 'follows', `${myUid}_${targetUid}`));
+    return snap.exists();
+  } catch {
+    return false;
+  }
+}
+
+export async function followUser(myUid: string, targetUid: string): Promise<void> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return;
+    const { updateDoc, increment: inc } = await import('firebase/firestore');
+    await setDoc(doc(db, 'follows', `${myUid}_${targetUid}`), {
+      followerId: myUid,
+      followedId: targetUid,
+      createdAt: serverTimestamp(),
+    });
+    // Denormalize counts (best-effort; silently ignored if rules restrict)
+    try {
+      await updateDoc(doc(db, 'users', myUid), { followingCount: inc(1) });
+      await updateDoc(doc(db, 'users', targetUid), { followerCount: inc(1) });
+    } catch { /* non-critical */ }
+    appLog.log('[firestore] followUser', { myUid, targetUid });
+  } catch (err) {
+    appLog.warn('[firestore] followUser failed', { err: String(err) });
+    throw err;
+  }
+}
+
+export async function unfollowUser(myUid: string, targetUid: string): Promise<void> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return;
+    const { deleteDoc, updateDoc, increment: inc } = await import('firebase/firestore');
+    await deleteDoc(doc(db, 'follows', `${myUid}_${targetUid}`));
+    try {
+      await updateDoc(doc(db, 'users', myUid), { followingCount: inc(-1) });
+      await updateDoc(doc(db, 'users', targetUid), { followerCount: inc(-1) });
+    } catch { /* non-critical */ }
+    appLog.log('[firestore] unfollowUser', { myUid, targetUid });
+  } catch (err) {
+    appLog.warn('[firestore] unfollowUser failed', { err: String(err) });
+    throw err;
   }
 }
 

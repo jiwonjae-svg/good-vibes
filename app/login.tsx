@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, Pressable, StyleSheet, ActivityIndicator,
 } from 'react-native';
@@ -7,7 +7,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { FontSize, Spacing, BorderRadius, Fonts } from '../constants/theme';
 import { useUserStore } from '../stores/useUserStore';
@@ -30,7 +29,7 @@ export default function LoginScreen() {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  // Confirmation modal (shown before triggering Google sign-in)
+  // Confirmation modal (shown to NEW users after sign-in, before profile setup)
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [knownEmail, setKnownEmail] = useState<string | null>(null);
   // Profile setup modal (for new users)
@@ -38,23 +37,10 @@ export default function LoginScreen() {
   const [pendingUser, setPendingUser] = useState<{ uid: string; displayName: string | null; email: string | null; photoURL: string | null } | null>(null);
   const [isNewUser, setIsNewUser] = useState(false);
 
-  // Pre-fill the confirm modal with the last-used Google account if available
-  useEffect(() => {
-    try {
-      const current = GoogleSignin.getCurrentUser();
-      if (current?.user?.email) setKnownEmail(current.user.email);
-    } catch { /* no cached account */ }
-  }, []);
-
-  const handleGoogleButtonPress = () => {
+  const handleGoogleButtonPress = async () => {
     setErrorMsg(null);
-    setConfirmVisible(true);
-  };
-
-  const handleConfirmAgree = async () => {
-    setConfirmVisible(false);
     setLoading(true);
-    appLog.log('[login] Google sign-in confirmed');
+    appLog.log('[login] Google sign-in pressed');
     try {
       const user = await signInWithGoogleNative();
       if (user) {
@@ -69,10 +55,11 @@ export default function LoginScreen() {
         // Check if new user (no username in Firestore yet)
         const currentUsername = useUserStore.getState().username;
         if (!currentUsername) {
-          // New user — show profile setup
+          // New user — show info/consent modal first, then profile setup
           setPendingUser({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
           setIsNewUser(true);
-          setProfileVisible(true);
+          setKnownEmail(user.email);
+          setConfirmVisible(true);
         } else {
           await setAuthCompleted();
           appLog.log('[login] existing user, navigating');
@@ -92,6 +79,11 @@ export default function LoginScreen() {
     }
   };
 
+  const handleConfirmAgree = () => {
+    setConfirmVisible(false);
+    setProfileVisible(true);
+  };
+
   const handleProfileComplete = async (displayName: string, username: string) => {
     await setProfile(displayName, username);
     await setAuthCompleted();
@@ -101,6 +93,15 @@ export default function LoginScreen() {
   };
 
   const handleProfileSkip = async () => {
+    // Generate a random username so the user always has an @handle
+    const randomSuffix = Date.now().toString(36).slice(-6);
+    const randomUsername = `user_${randomSuffix}`;
+    const name = pendingUser?.displayName ?? 'User';
+    try {
+      await setProfile(name, randomUsername);
+    } catch {
+      // best-effort; proceed even if save fails
+    }
     await setAuthCompleted();
     setProfileVisible(false);
     if (hasSeenOnboarding) router.replace('/(tabs)');

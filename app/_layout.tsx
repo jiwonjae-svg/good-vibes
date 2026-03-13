@@ -36,8 +36,12 @@ export default function RootLayout() {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
-        const { dailyReminderEnabled } = useUserStore.getState();
-        validateAndRescheduleDailyReminder(dailyReminderEnabled).catch(() => {});
+        const { dailyReminderEnabled, uid, displayName, currentStreak } = useUserStore.getState();
+        validateAndRescheduleDailyReminder(dailyReminderEnabled, {
+          uid: uid ?? undefined,
+          userName: displayName ?? undefined,
+          currentStreak,
+        }).catch(() => {});
       }
       appStateRef.current = nextState;
     });

@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Dimensions, Pressable, Image, Modal, Alert, Linking } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, Dimensions, Pressable, Image, Modal, Alert, Linking, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import ViewShot, { captureRef } from 'react-native-view-shot';
@@ -40,6 +40,7 @@ interface QuoteCardProps {
   onSpeakAlong: () => void;
   onWriteAlong: () => void;
   onTypeAlong: () => void;
+  onSubmitterPress?: (submitterId: string, submitterName: string, submitterPhotoURL?: string | null) => void;
 }
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -50,7 +51,7 @@ interface QuoteCardPropsExtended extends QuoteCardProps {
   // via useAutoPlayStore to avoid FlatList re-renders when play state changes.
 }
 
-export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlong }: QuoteCardPropsExtended) {
+export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlong, onSubmitterPress }: QuoteCardPropsExtended) {
   const { t } = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
@@ -92,6 +93,43 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
   const communityReportQuote = useCommunityStore((s) => s.reportQuote);
   const isCommunityLiked = likedCommunityIds.includes(quote.id);
   const isCommunityReported = isCommunityQuote && reportedCommunityIds.includes(quote.id);
+
+  // Translation state (community quotes only)
+  const language = useUserStore((s) => s.language);
+  const [translatedText, setTranslatedText] = useState<string | null>(null);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [showTranslation, setShowTranslation] = useState(false);
+
+  // Reset translation when quote changes
+  useEffect(() => {
+    setTranslatedText(null);
+    setShowTranslation(false);
+  }, [quote.id]);
+
+  const TO_LANG_CODE: Record<string, string> = { ko: 'ko', en: 'en', ja: 'ja', zh: 'zh-CN', es: 'es' };
+
+  const handleTranslate = async () => {
+    if (showTranslation && translatedText) {
+      setShowTranslation(false);
+      return;
+    }
+    setShowTranslation(true);
+    if (translatedText) return;
+    setIsTranslating(true);
+    try {
+      const langCode = TO_LANG_CODE[language] ?? language;
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${langCode}&dt=t&q=${encodeURIComponent(quote.text)}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      const translated = (data[0] as [string, ...unknown[]][]).map((chunk) => chunk[0]).join('');
+      setTranslatedText(translated);
+    } catch {
+      setTranslatedText(null);
+      setShowTranslation(false);
+    } finally {
+      setIsTranslating(false);
+    }
+  };
 
   const handleCommunityLike = () => {
     if (isGuest) { setLoginPromptVisible(true); return; }
@@ -141,6 +179,10 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
       return;
     }
     toggleBookmark(quote.id);
+    // For community quotes, bookmark acts as the community like
+    if (isCommunityQuote && uid) {
+      toggleCommunityLike(uid, quote.id);
+    }
   };
   
   const handleAutoPlay = () => {
@@ -248,6 +290,30 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
           {wasViewed && (
             <View style={styles.viewedOverlay} pointerEvents="none" />
           )}
+
+          {/* Community submitter header */}
+          {isCommunityQuote && quote.submitterId && !isCapturing && (
+            <Pressable
+              style={[styles.submitterHeader, { top: insets.top + 12 }]}
+              onPress={() =>
+                onSubmitterPress && quote.submitterId
+                  ? onSubmitterPress(quote.submitterId, quote.submitterName ?? '', quote.submitterPhotoURL)
+                  : undefined
+              }
+              hitSlop={8}
+            >
+              <View style={styles.submitterAvatar}>
+                {quote.submitterPhotoURL ? (
+                  <Image source={{ uri: quote.submitterPhotoURL }} style={styles.submitterAvatarImg} />
+                ) : (
+                  <Text style={styles.submitterAvatarInitial}>
+                    {(quote.submitterName ?? '?').charAt(0).toUpperCase()}
+                  </Text>
+                )}
+              </View>
+              <Text style={styles.submitterName} numberOfLines={1}>{quote.submitterName ?? ''}</Text>
+            </Pressable>
+          )}
           <View style={styles.cardFrame}>
             <Pressable style={styles.quoteContent} onPress={handleDoubleTap}>
               <Image
@@ -266,11 +332,25 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
 
               {/* Author displayed below the closing quote mark */}
               {quote.author ? (
-                <Pressable onPress={handleAuthorWiki} hitSlop={8}>
-                  <Text style={[styles.authorText, { color: quoteTextColor, textDecorationLine: 'underline', textDecorationColor: 'rgba(0,0,0,0.25)' }]}>
+                isCommunityQuote ? (
+                  <Text style={[styles.authorText, { color: quoteTextColor }]}>
                     — {quote.author}
                   </Text>
-                </Pressable>
+                ) : (
+                  <Pressable onPress={handleAuthorWiki} hitSlop={8}>
+                    <Text style={[styles.authorText, { color: quoteTextColor, textDecorationLine: 'underline', textDecorationColor: 'rgba(0,0,0,0.25)' }]}>
+                      — {quote.author}
+                    </Text>
+                  </Pressable>
+                )
+              ) : null}
+
+              {/* Inline translation — shown when user taps the language button */}
+              {isCommunityQuote && showTranslation && translatedText ? (
+                <View style={[styles.translationBubble, { backgroundColor: 'rgba(255,255,255,0.22)' }]}>
+                  <Ionicons name="language-outline" size={11} color={quoteTextColor} style={{ opacity: 0.7, marginBottom: 2 }} />
+                  <Text style={[styles.translationText, { color: quoteTextColor }]}>{translatedText}</Text>
+                </View>
               ) : null}
             </Pressable>
 
@@ -301,7 +381,7 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
                     <Ionicons name={isSpeaking ? 'volume-high' : 'volume-medium-outline'} size={20} color={colors.textPrimary} />
                   </Pressable>
                   <Pressable onPress={handleBookmark} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
-                    <Ionicons name={bookmarked ? 'heart' : 'heart-outline'} size={20} color={bookmarked ? colors.error : colors.textPrimary} />
+                    <Ionicons name={(bookmarked || isCommunityLiked) ? 'heart' : 'heart-outline'} size={20} color={(bookmarked || isCommunityLiked) ? colors.error : colors.textPrimary} />
                   </Pressable>
                   <Pressable onPress={handleAutoPlay} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
                     <Ionicons
@@ -323,9 +403,15 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
                       <Ionicons name="image-outline" size={20} color={colors.textPrimary} />
                     </Pressable>
                     {isCommunityQuote ? (
-                      <Pressable onPress={handleCommunityLike} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
-                        <Ionicons name={isCommunityLiked ? 'heart' : 'heart-outline'} size={19} color={isCommunityLiked ? colors.error : colors.textPrimary} />
-                      </Pressable>
+                      <>
+                        <Pressable onPress={handleTranslate} style={[styles.iconBtn, { backgroundColor: actionBg }]} disabled={isTranslating}>
+                          {isTranslating ? (
+                            <ActivityIndicator size="small" color={colors.textPrimary} />
+                          ) : (
+                            <Ionicons name="language-outline" size={20} color={showTranslation ? colors.primary : colors.textPrimary} />
+                          )}
+                        </Pressable>
+                      </>
                     ) : (
                       <>
                         <Pressable onPress={() => handleRateQuote('like')} style={[styles.iconBtn, { backgroundColor: actionBg }]}>
@@ -418,6 +504,41 @@ function getQuoteFontSize(text: string): number {
 }
 
 const styles = StyleSheet.create({
+  submitterHeader: {
+    position: 'absolute',
+    left: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    zIndex: 30,
+  },
+  submitterAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.6)',
+  },
+  submitterAvatarImg: { width: 36, height: 36, borderRadius: 18 },
+  submitterAvatarInitial: {
+    ...Fonts.heading,
+    fontSize: FontSize.md,
+    color: 'rgba(255,255,255,0.9)',
+  },
+  submitterName: {
+    ...Fonts.body,
+    fontSize: FontSize.sm,
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: '600',
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+    maxWidth: 140,
+  },
   container: { height: CARD_HEIGHT, width: SCREEN_WIDTH },
   viewShotWrapper: { flex: 1 },
   gradient: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.lg },
@@ -468,6 +589,22 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     marginTop: Spacing.sm,
     opacity: 0.75,
+    fontStyle: 'italic',
+  },
+  translationBubble: {
+    alignSelf: 'stretch',
+    marginTop: Spacing.md,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.sm,
+    alignItems: 'center',
+    gap: 4,
+  },
+  translationText: {
+    ...Fonts.body,
+    fontSize: FontSize.sm,
+    textAlign: 'center',
+    lineHeight: 20,
+    opacity: 0.88,
     fontStyle: 'italic',
   },
   sourceLink: {

@@ -10,6 +10,8 @@ import {
   reportCommunityQuote,
   checkServerRateLimit,
   recordServerSubmission,
+  updateCommunityQuote,
+  deleteCommunityQuote,
   type CommunityQuote,
 } from '../services/communityService';
 import { appLog } from '../services/logger';
@@ -80,8 +82,11 @@ interface CommunityState {
     author: string,
     language: string,
     categories: string[],
+    submitterPhotoURL?: string | null,
   ) => Promise<{ success: boolean; error?: string }>;
   reportQuote: (uid: string, quoteId: string, reason: string) => Promise<void>;
+  deleteQuote: (uid: string, quoteId: string) => Promise<void>;
+  updateQuote: (uid: string, quoteId: string, text: string, author: string) => Promise<void>;
   canSubmit: () => boolean;
 }
 
@@ -210,14 +215,14 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
     }
   },
 
-  submitQuote: async (uid, submitterName, text, author, language, categories) => {
+  submitQuote: async (uid, submitterName, text, author, language, categories, submitterPhotoURL) => {
     // Server-side rate limit check (Firestore) takes priority over local AsyncStorage cache
     const serverBlocked = await checkServerRateLimit(uid);
     if (serverBlocked) {
       return { success: false, error: 'rateLimit' };
     }
 
-    const result = await submitCommunityQuote(uid, submitterName, text, author, language, categories);
+    const result = await submitCommunityQuote(uid, submitterName, text, author, language, categories, submitterPhotoURL);
     if (result.success) {
       // Record server-side submission timestamp
       await recordServerSubmission(uid);
@@ -234,6 +239,20 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
     const updated = [...get().reportedCommunityIds, quoteId];
     set({ reportedCommunityIds: updated });
     await saveReportedIds(updated);
+  },
+
+  deleteQuote: async (uid, quoteId) => {
+    await deleteCommunityQuote(uid, quoteId);
+    set((s) => ({ communityQuotes: s.communityQuotes.filter((q) => q.id !== quoteId) }));
+  },
+
+  updateQuote: async (uid, quoteId, text, author) => {
+    await updateCommunityQuote(uid, quoteId, text, author);
+    set((s) => ({
+      communityQuotes: s.communityQuotes.map((q) =>
+        q.id === quoteId ? { ...q, text, author } : q,
+      ),
+    }));
   },
 
   canSubmit: () => {

@@ -32,6 +32,7 @@ export interface CommunityQuote {
   author: string;
   submitterId: string;
   submitterName: string;
+  submitterPhotoURL?: string | null;
   language: string;
   status: 'pending' | 'approved' | 'rejected';
   likeCount: number;
@@ -91,6 +92,7 @@ export async function submitCommunityQuote(
   author: string,
   language: string,
   categories: string[],
+  submitterPhotoURL?: string | null,
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   const db = getDb();
   if (!db) return { success: false, error: 'offline' };
@@ -115,12 +117,11 @@ export async function submitCommunityQuote(
       author: trimmedAuthor || submitterName,
       submitterId: uid,
       submitterName,
+      submitterPhotoURL: submitterPhotoURL ?? null,
       language,
-      status: 'pending',
+      status: 'approved', // direct publish — no moderation queue
       likeCount: 0,
       createdAt: serverTimestamp(),
-      approvedAt: null,
-      rejectedReason: null,
       reportCount: 0,
       categories: categories.slice(0, 3),
     });
@@ -327,5 +328,101 @@ export async function reportCommunityQuote(
     appLog.log('[communityService] reported', { quoteId, reason });
   } catch (e) {
     appLog.error('[communityService] report failed', e);
+  }
+}
+
+// --------------------------------------------------------------------------
+// Edit / Delete own posts
+// --------------------------------------------------------------------------
+
+export async function updateCommunityQuote(
+  uid: string,
+  quoteId: string,
+  text: string,
+  author: string,
+): Promise<{ success: boolean; error?: string }> {
+  const db = getDb();
+  if (!db) return { success: false, error: 'offline' };
+
+  if (containsXss(text) || containsXss(author)) {
+    return { success: false, error: 'xssBlocked' };
+  }
+  const trimmedText = sanitizeText(text);
+  const trimmedAuthor = sanitizeText(author);
+  if (trimmedText.length < 10) return { success: false, error: 'tooShort' };
+  if (trimmedText.length > 500) return { success: false, error: 'tooLong' };
+  if (/https?:\/\//i.test(trimmedText)) return { success: false, error: 'noUrls' };
+
+  try {
+    // Security: only the submitter can update
+    const existing = await getDoc(doc(db, COMMUNITY_QUOTES, quoteId));
+    if (!existing.exists() || existing.data()?.submitterId !== uid) {
+      return { success: false, error: 'forbidden' };
+    }
+    await updateDoc(doc(db, COMMUNITY_QUOTES, quoteId), {
+      text: trimmedText,
+      author: trimmedAuthor,
+      updatedAt: serverTimestamp(),
+    });
+    appLog.log('[communityService] updated', { quoteId, uid });
+    return { success: true };
+  } catch (e) {
+    appLog.error('[communityService] update failed', e);
+    return { success: false, error: 'serverError' };
+  }
+}
+
+export async function deleteCommunityQuote(
+  uid: string,
+  quoteId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const db = getDb();
+  if (!db) return { success: false, error: 'offline' };
+
+  try {
+    const existing = await getDoc(doc(db, COMMUNITY_QUOTES, quoteId));
+    if (!existing.exists() || existing.data()?.submitterId !== uid) {
+      return { success: false, error: 'forbidden' };
+    }
+    // best-effort: 작성자 본인의 좋아요가 있으면 함께 삭제
+    try {
+      const myLikeRef = doc(db, COMMUNITY_LIKES, `${uid}_${quoteId}`);
+      const myLikeSnap = await getDoc(myLikeRef);
+      if (myLikeSnap.exists()) await deleteDoc(myLikeRef);
+    } catch { /* non-critical */ }
+    await deleteDoc(doc(db, COMMUNITY_QUOTES, quoteId));
+    appLog.log('[communityService] deleted', { quoteId, uid });
+    return { success: true };
+  } catch (e) {
+    appLog.error('[communityService] delete failed', e);
+    return { success: false, error: 'serverError' };
+  }
+}
+
+export async function fetchCommunityQuotesByUser(
+  uid: string,
+  pageLimit = 50,
+): Promise<CommunityQuote[]> {
+  const db = getDb();
+  if (!db) return [];
+
+  try {
+    const col = collection(db, COMMUNITY_QUOTES);
+    const q = query(
+      col,
+      where('submitterId', '==', uid),
+      where('status', '==', 'approved'),
+      orderBy('createdAt', 'desc'),
+      limit(pageLimit),
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as Omit<CommunityQuote, 'id' | 'createdAt'>),
+      createdAt: d.data().createdAt?.toMillis?.() ?? Date.now(),
+    }));
+  } catch (e) {
+    appLog.error('[communityService] fetchCommunityQuotesByUser failed', e);
+    return [];
   }
 }

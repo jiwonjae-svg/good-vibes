@@ -40,7 +40,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: t('tabs.quotes'),
+          title: t('tabs.feed'),
           tabBarIcon: ({ color, size }) => <Ionicons name="sparkles-outline" size={size} color={color} />,
         }}
       />
@@ -56,6 +56,13 @@ export default function TabLayout() {
         options={{
           title: t('tabs.my'),
           tabBarIcon: ({ color, size }) => <Ionicons name="heart-outline" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: t('tabs.profile'),
+          tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
         }}
       />
       <Tabs.Screen

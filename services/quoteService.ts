@@ -54,19 +54,22 @@ async function getServerQuotes(): Promise<CrawledQuote[]> {
 }
 
 function makeQuote(
-  item: { id: string; quote: string; author: string; source: string },
+  item: { id: string; quote: string; author: string; source: string; categories?: Record<string, number>; translations?: Record<string, string> },
   lang: string,
 ): Quote | null {
   if (!item?.id || !item?.quote) return null;
-  const text = (item as { translations?: Record<string, string> }).translations?.[lang]
-    ?? (item as { quote: string }).quote;
+  const text = item.translations?.[lang] ?? item.quote;
   if (!text) return null;
+  // Derive the top-weighted semantic category; fall back to source only when no categories exist.
+  const topCategory = item.categories && Object.keys(item.categories).length > 0
+    ? Object.entries(item.categories).sort((a, b) => b[1] - a[1])[0][0]
+    : item.source;
   return {
     id: item.id,
     text,
     author: item.author,
     source: item.source,
-    category: item.source,
+    category: topCategory,
     createdAt: Date.now(),
     gradientIndex: Math.floor(Math.random() * LightColors.cardGradients.length),
   };

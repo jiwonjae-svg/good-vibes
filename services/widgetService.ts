@@ -4,6 +4,7 @@ import { Platform, NativeModules } from 'react-native';
 const WIDGET_DATA_KEY = '@dailyglow_widget_data';
 
 export interface WidgetQuoteData {
+  id?: string;
   text: string;
   author?: string;
   category?: string;
@@ -16,10 +17,10 @@ export const widgetService = {
       await AsyncStorage.setItem(WIDGET_DATA_KEY, JSON.stringify(quote));
 
       if (Platform.OS === 'android' && NativeModules.WidgetModule) {
-        await NativeModules.WidgetModule.saveQuoteData(quote.text, quote.author ?? '');
+        await NativeModules.WidgetModule.saveQuoteData(quote.text, quote.author ?? '', quote.id ?? '');
         await NativeModules.WidgetModule.updateWidget();
       } else if (Platform.OS === 'ios' && NativeModules.WidgetModule) {
-        await NativeModules.WidgetModule.saveQuoteData(quote.text, quote.author ?? '');
+        await NativeModules.WidgetModule.saveQuoteData(quote.text, quote.author ?? '', quote.id ?? '');
         await NativeModules.WidgetModule.reloadAllTimelines();
       }
     } catch (error) {
@@ -48,9 +49,11 @@ export const widgetService = {
 export async function saveQuoteForWidget(
   text: string,
   author?: string,
-  category?: string
+  category?: string,
+  id?: string,
 ): Promise<void> {
   await widgetService.updateWidgetQuote({
+    id,
     text,
     author,
     category,

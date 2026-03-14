@@ -116,6 +116,7 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [textTouched, setTextTouched] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -124,6 +125,7 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
       setSelectedCats([]);
       setSubmitted(false);
       setError(null);
+      setTextTouched(false);
     }
   }, [visible]);
 
@@ -165,6 +167,14 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
       );
       if (result.success) {
         setSubmitted(true);
+        // Award first-community-quote badge
+        const store = useUserStore.getState();
+        if (!store.earnedBadges.includes('community_1')) {
+          const todayStr = new Date().toISOString().split('T')[0];
+          const newBadges = [...store.earnedBadges, 'community_1'];
+          const newDates = { ...store.earnedBadgeDates, community_1: todayStr };
+          useUserStore.setState({ earnedBadges: newBadges, newBadgeEarned: 'community_1', earnedBadgeDates: newDates });
+        }
       } else if (result.error === 'xssBlocked') {
         setError(t('community.xssBlocked'));
       } else if (result.error === 'tooShort') {
@@ -190,9 +200,10 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
       animationType="fade"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <View style={styles.overlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior="padding"
           style={styles.kavWrapper}
         >
           <Pressable
@@ -233,16 +244,16 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
                 <Text style={[styles.label, { color: colors.textSecondary }]}>
                   {t('community.textLabel')} *
                 </Text>
-                <View style={[styles.inputWrapper, { borderColor: charCount > 0 && charCount < 10 ? colors.error : colors.grass0, backgroundColor: colors.surfaceAlt }]}>
+                <View style={[styles.inputWrapper, { borderColor: textTouched && charCount > 0 && charCount < 10 ? colors.error : colors.grass0, backgroundColor: colors.surfaceAlt }]}>
                   <TextInput
                     style={[styles.textArea, { color: colors.textPrimary }]}
                     value={text}
                     onChangeText={(val) => setText(val.length > 500 ? val.slice(0, 500) : val)}
+                    onBlur={() => setTextTouched(true)}
                     placeholder={t('community.textPlaceholder')}
                     placeholderTextColor={colors.textMuted}
                     multiline
                     autoCorrect={false}
-                    autoCapitalize="none"
                     textAlignVertical="top"
                   />
                   <Text style={[styles.charCount, { color: charCount > 450 ? colors.warning : colors.textMuted }]}>
@@ -322,7 +333,7 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
             )}
           </Pressable>
         </KeyboardAvoidingView>
-      </Pressable>
+      </View>
     </Modal>
   );
 }

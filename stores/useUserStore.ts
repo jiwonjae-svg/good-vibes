@@ -33,6 +33,8 @@ function dateDiffInDays(a: string | null, b: string): number {
 
 export const STREAK_BADGE_THRESHOLDS = [7, 30, 100, 365] as const;
 export type BadgeId = `streak_${typeof STREAK_BADGE_THRESHOLDS[number]}`;
+export const QUOTE_BADGE_THRESHOLDS = [50, 200] as const;
+export const BOOKMARK_BADGE_THRESHOLD = 5;
 
 interface UserState {
   isPremium: boolean;
@@ -84,7 +86,8 @@ interface UserState {
   guestTrialCount: number;
 
   // Notification
-  notificationHour: number; // 8 | 12 | 21
+  notificationHour: number; // 8 | 12 | 21 — legacy single-slot
+  notificationHours: number[]; // multi-slot, e.g. [8, 21]
 
   // TTS speed
   ttsSpeed: number; // 0.6 | 0.9 | 1.2
@@ -135,6 +138,7 @@ interface UserState {
   incrementGuestTrial: () => number;
   setShowOnboardingFlag: (show: boolean) => void;
   setNotificationHour: (hour: number) => Promise<void>;
+  setNotificationHours: (hours: number[]) => Promise<void>;
   setTtsSpeed: (speed: number) => Promise<void>;
   rateQuote: (quoteId: string, rating: 'like' | 'dislike') => Promise<void>;
   setShowCommunityQuotes: (show: boolean) => Promise<void>;
@@ -180,6 +184,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   followSystemDarkMode: false,
   guestTrialCount: 0,
   notificationHour: 9,
+  notificationHours: [8],
   ttsSpeed: 0.9,
   earnedBadgeDates: {},
   likedQuoteIds: [],
@@ -232,6 +237,7 @@ export const useUserStore = create<UserState>((set, get) => ({
           quoteFontSizeMultiplier: d.quoteFontSizeMultiplier ?? 1.0,
           followSystemDarkMode: d.followSystemDarkMode ?? false,
           notificationHour: d.notificationHour ?? 9,
+          notificationHours: d.notificationHours ?? (d.notificationHour ? [d.notificationHour] : [8]),
           ttsSpeed: d.ttsSpeed ?? 0.9,
           earnedBadgeDates: d.earnedBadgeDates ?? {},
           likedQuoteIds: d.likedQuoteIds ?? [],
@@ -284,6 +290,7 @@ export const useUserStore = create<UserState>((set, get) => ({
         quoteFontSizeMultiplier: s.quoteFontSizeMultiplier,
         followSystemDarkMode: s.followSystemDarkMode,
         notificationHour: s.notificationHour,
+        notificationHours: s.notificationHours,
         ttsSpeed: s.ttsSpeed,
         earnedBadgeDates: s.earnedBadgeDates,
         likedQuoteIds: s.likedQuoteIds,
@@ -300,6 +307,21 @@ export const useUserStore = create<UserState>((set, get) => ({
     const n = get().scrollCount + 1;
     const t = get().totalQuotesViewed + 1;
     set({ scrollCount: n, totalQuotesViewed: t });
+    // Award quotes-viewed badges
+    const todayStr = new Date().toISOString().split('T')[0];
+    const currentBadges = get().earnedBadges;
+    const uid = get().uid;
+    for (const threshold of QUOTE_BADGE_THRESHOLDS) {
+      const badgeId = `quotes_${threshold}`;
+      if (t >= threshold && !currentBadges.includes(badgeId)) {
+        const next = [...get().earnedBadges, badgeId];
+        const newDates = { ...get().earnedBadgeDates, [badgeId]: todayStr };
+        appLog.log('[badge] quotes milestone earned', { uid, badgeId, total: t });
+        set({ earnedBadges: next, newBadgeEarned: badgeId, earnedBadgeDates: newDates });
+        if (uid) saveUserBadges(uid, next).catch(() => {});
+        break;
+      }
+    }
     await get().persistUser();
     return n;
   },
@@ -400,7 +422,19 @@ export const useUserStore = create<UserState>((set, get) => ({
       : [...ids, quoteId];
     set({ bookmarkedQuoteIds: next });
     await get().persistUser();
-    
+    // Award bookmark badge
+    if (!isCurrentlyBookmarked && next.length >= BOOKMARK_BADGE_THRESHOLD) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const currentBadges = get().earnedBadges;
+      const badgeId = 'bookmark_5';
+      if (!currentBadges.includes(badgeId)) {
+        const newBadges = [...currentBadges, badgeId];
+        const newDates = { ...get().earnedBadgeDates, [badgeId]: todayStr };
+        appLog.log('[badge] bookmark badge earned', { uid, badgeId });
+        set({ earnedBadges: newBadges, newBadgeEarned: badgeId, earnedBadgeDates: newDates });
+        if (uid) saveUserBadges(uid, newBadges).catch(() => {});
+      }
+    }
     if (uid) {
       saveBookmarkedQuotes(uid, next);
       logQuoteBookmarked(uid, quoteId, !isCurrentlyBookmarked);
@@ -662,6 +696,11 @@ export const useUserStore = create<UserState>((set, get) => ({
 
   setNotificationHour: async (hour) => {
     set({ notificationHour: hour });
+    await get().persistUser();
+  },
+
+  setNotificationHours: async (hours) => {
+    set({ notificationHours: hours, notificationHour: hours[0] ?? 8 });
     await get().persistUser();
   },
 

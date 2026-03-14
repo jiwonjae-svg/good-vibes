@@ -146,13 +146,16 @@ export default function SettingsScreen() {
   const catLabel = catCount === 0 ? t('settings.allCategories') : t('settings.categoriesSelected', { count: catCount });
 
   const BADGE_DISPLAY: Record<string, { emoji: string; titleKey: string; descKey: string }> = {
+    streak_3:    { emoji: '🌟', titleKey: 'badge.streak3Title',    descKey: 'badge.streak3Desc' },
     streak_7:    { emoji: '🔥', titleKey: 'badge.streak7Title',    descKey: 'badge.streak7Desc' },
     streak_30:   { emoji: '⭐', titleKey: 'badge.streak30Title',   descKey: 'badge.streak30Desc' },
     streak_100:  { emoji: '👑', titleKey: 'badge.streak100Title',  descKey: 'badge.streak100Desc' },
     streak_365:  { emoji: '🏆', titleKey: 'badge.streak365Title',  descKey: 'badge.streak365Desc' },
     quotes_50:   { emoji: '📖', titleKey: 'badge.quotes50Title',   descKey: 'badge.quotes50Desc' },
     quotes_200:  { emoji: '📚', titleKey: 'badge.quotes200Title',  descKey: 'badge.quotes200Desc' },
+    quotes_500:  { emoji: '🎯', titleKey: 'badge.quotes500Title',  descKey: 'badge.quotes500Desc' },
     bookmark_5:  { emoji: '💛', titleKey: 'badge.bookmark5Title',  descKey: 'badge.bookmark5Desc' },
+    bookmark_20: { emoji: '🌟', titleKey: 'badge.bookmark20Title', descKey: 'badge.bookmark20Desc' },
     community_1: { emoji: '✍️',  titleKey: 'badge.community1Title', descKey: 'badge.community1Desc' },
   };
 

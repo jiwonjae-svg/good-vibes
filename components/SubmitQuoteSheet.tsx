@@ -110,9 +110,13 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
   const photoURL = useUserStore((s) => s.photoURL);
   const { submitQuote, canSubmit } = useCommunityStore();
 
-  const [text, setText] = useState('');
+  // Use ref-based text tracking to avoid Korean IME issues on Android
+  const textInputRef = useRef<TextInput>(null);
+  const textValueRef = useRef('');
+  const [charCount, setCharCount] = useState(0);
   const [author, setAuthor] = useState('');
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
+  const [expandedThemes, setExpandedThemes] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -120,14 +124,23 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
 
   useEffect(() => {
     if (visible) {
-      setText('');
+      textInputRef.current?.clear();
+      textValueRef.current = '';
+      setCharCount(0);
       setAuthor('');
       setSelectedCats([]);
+      setExpandedThemes([]);
       setSubmitted(false);
       setError(null);
       setTextTouched(false);
     }
   }, [visible]);
+
+  const toggleTheme = (key: string) => {
+    setExpandedThemes((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
+  };
 
   const toggleCat = (key: string) => {
     setSelectedCats((prev) =>
@@ -147,7 +160,7 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
       return;
     }
 
-    const trimmed = text.trim();
+    const trimmed = textValueRef.current.trim();
     if (trimmed.length < 10) {
       setError(t('community.tooShort'));
       return;
@@ -167,10 +180,10 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
       );
       if (result.success) {
         setSubmitted(true);
-        // Award first-community-quote badge
+        // Award community submission badges
         const store = useUserStore.getState();
+        const todayStr = new Date().toISOString().split('T')[0];
         if (!store.earnedBadges.includes('community_1')) {
-          const todayStr = new Date().toISOString().split('T')[0];
           const newBadges = [...store.earnedBadges, 'community_1'];
           const newDates = { ...store.earnedBadgeDates, community_1: todayStr };
           useUserStore.setState({ earnedBadges: newBadges, newBadgeEarned: 'community_1', earnedBadgeDates: newDates });
@@ -191,8 +204,6 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
     }
   };
 
-  const charCount = text.length;
-
   return (
     <Modal
       transparent
@@ -200,8 +211,7 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+      <Pressable style={styles.overlay} onPress={onClose}>
         <KeyboardAvoidingView
           behavior="padding"
           style={styles.kavWrapper}
@@ -246,9 +256,13 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
                 </Text>
                 <View style={[styles.inputWrapper, { borderColor: textTouched && charCount > 0 && charCount < 10 ? colors.error : colors.grass0, backgroundColor: colors.surfaceAlt }]}>
                   <TextInput
+                    ref={textInputRef}
                     style={[styles.textArea, { color: colors.textPrimary }]}
-                    value={text}
-                    onChangeText={(val) => setText(val.length > 500 ? val.slice(0, 500) : val)}
+                    onChangeText={(val) => {
+                      const limited = val.length > 500 ? val.slice(0, 500) : val;
+                      textValueRef.current = limited;
+                      setCharCount(limited.length);
+                    }}
                     onBlur={() => setTextTouched(true)}
                     placeholder={t('community.textPlaceholder')}
                     placeholderTextColor={colors.textMuted}
@@ -274,39 +288,61 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
                   maxLength={100}
                 />
 
-                {/* Category chips */}
+                {/* Category chips — collapsible by theme */}
                 <Text style={[styles.label, { color: colors.textSecondary, marginTop: Spacing.md }]}>
                   {t('community.categories')}
                 </Text>
-                {CATEGORY_THEMES.map((theme) => (
-                  <View key={theme.themeKey}>
-                    <Text style={[styles.submitThemeHeader, { color: colors.textMuted }]}>
-                      {t(theme.themeKey)}
-                    </Text>
-                    <View style={styles.chips}>
-                      {theme.categories.map((cat) => {
-                        const selected = selectedCats.includes(cat.key);
-                        return (
-                          <Pressable
-                            key={cat.key}
-                            style={[
-                              styles.chip,
-                              {
-                                backgroundColor: selected ? colors.primary : colors.surfaceAlt,
-                                borderColor: selected ? colors.primary : colors.grass0,
-                              },
-                            ]}
-                            onPress={() => toggleCat(cat.key)}
-                          >
-                            <Text style={[styles.chipText, { color: selected ? '#fff' : colors.textSecondary }]}>
-                              {t(cat.labelKey)}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
+                {CATEGORY_THEMES.map((theme) => {
+                  const isExpanded = expandedThemes.includes(theme.themeKey);
+                  const selectedCount = theme.categories.filter((c) => selectedCats.includes(c.key)).length;
+                  return (
+                    <View key={theme.themeKey}>
+                      <Pressable
+                        style={styles.themeToggleRow}
+                        onPress={() => toggleTheme(theme.themeKey)}
+                        hitSlop={4}
+                      >
+                        <Text style={[styles.submitThemeHeader, { color: colors.textMuted, marginTop: 0, marginBottom: 0, flex: 1 }]}>
+                          {t(theme.themeKey)}
+                        </Text>
+                        {selectedCount > 0 && (
+                          <Text style={[styles.chipText, { color: colors.primary, marginRight: 6 }]}>
+                            ({selectedCount})
+                          </Text>
+                        )}
+                        <Ionicons
+                          name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                          size={14}
+                          color={colors.textMuted}
+                        />
+                      </Pressable>
+                      {isExpanded && (
+                        <View style={[styles.chips, { marginBottom: Spacing.xs }]}>
+                          {theme.categories.map((cat) => {
+                            const selected = selectedCats.includes(cat.key);
+                            return (
+                              <Pressable
+                                key={cat.key}
+                                style={[
+                                  styles.chip,
+                                  {
+                                    backgroundColor: selected ? colors.primary : colors.surfaceAlt,
+                                    borderColor: selected ? colors.primary : colors.grass0,
+                                  },
+                                ]}
+                                onPress={() => toggleCat(cat.key)}
+                              >
+                                <Text style={[styles.chipText, { color: selected ? '#fff' : colors.textSecondary }]}>
+                                  {t(cat.labelKey)}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      )}
                     </View>
-                  </View>
-                ))}
+                  );
+                })}
 
                 {/* Error */}
                 {error && (
@@ -333,7 +369,7 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
             )}
           </Pressable>
         </KeyboardAvoidingView>
-      </View>
+      </Pressable>
     </Modal>
   );
 }
@@ -409,6 +445,12 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: Spacing.md,
     marginBottom: Spacing.sm,
+  },
+  themeToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    marginTop: Spacing.xs,
   },
   chips: {
     flexDirection: 'row',

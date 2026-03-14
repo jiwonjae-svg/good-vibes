@@ -114,7 +114,7 @@ export async function submitCommunityQuote(
   try {
     const docRef = await addDoc(collection(db, COMMUNITY_QUOTES), {
       text: trimmedText,
-      author: trimmedAuthor || submitterName,
+      author: trimmedAuthor,
       submitterId: uid,
       submitterName,
       submitterPhotoURL: submitterPhotoURL ?? null,

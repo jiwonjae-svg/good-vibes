@@ -188,6 +188,8 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
           const newDates = { ...store.earnedBadgeDates, community_1: todayStr };
           useUserStore.setState({ earnedBadges: newBadges, newBadgeEarned: 'community_1', earnedBadgeDates: newDates });
         }
+        // Increment submission count (awards community_5 badge at 5 total)
+        useUserStore.getState().incrementCommunitySubmitCount();
       } else if (result.error === 'xssBlocked') {
         setError(t('community.xssBlocked'));
       } else if (result.error === 'tooShort') {

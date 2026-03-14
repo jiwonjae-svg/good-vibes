@@ -339,6 +339,8 @@ export default {
     bookmark20Desc: "20 bookmarks collected! Excellent taste!",
     community1Title: '✍️ First Post!',
     community1Desc: "You've posted your first quote to the community!",
+    community5Title: '📣 5 Posts!',
+    community5Desc: "You've submitted 5 quotes to the community!",
     newBadge: 'New badge earned!',
   },
   report: {

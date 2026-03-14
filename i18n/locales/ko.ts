@@ -337,6 +337,8 @@ export default {
     bookmark20Desc: '묵려 20개나 저장! 탈월한 취향이네요!',
     community1Title: '✍️ 첫 번째 글 작성!',
     community1Desc: '커뮤니티에 첫 번째 명언을 작성했어요!',
+    community5Title: '📣 글 5개 작성!',
+    community5Desc: '커뮤니티에 명언을 5개나 작성했어요!',
     newBadge: '새 뱃지 획득!',
   },
   report: {

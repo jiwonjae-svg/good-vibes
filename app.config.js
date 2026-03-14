@@ -72,6 +72,7 @@ export default {
       "@react-native-google-signin/google-signin",
       ["expo-navigation-bar", { visibility: "visible" }],
       "@react-native-firebase/app",
+      './plugins/withWidget',
       [
         "react-native-google-mobile-ads",
         {

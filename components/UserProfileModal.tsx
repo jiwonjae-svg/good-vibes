@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { Fonts, FontSize, Spacing, BorderRadius, Shadows } from '../constants/theme';
@@ -31,6 +32,7 @@ export default function UserProfileModal({
 }: UserProfileModalProps) {
   const { t } = useTranslation();
   const colors = useThemeColors();
+  const router = useRouter();
   const myUid = useUserStore((s) => s.uid);
 
   const [profile, setProfile] = useState<PublicUserProfile | null>(null);
@@ -136,11 +138,22 @@ export default function UserProfileModal({
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* Profile section */}
             <View style={s.profileSection}>
-              <View style={[s.avatar, { backgroundColor: colors.primary + '40' }]}>
-                {photoURL ? (
-                  <Image source={{ uri: photoURL }} style={s.avatarImg} />
-                ) : (
-                  <Text style={[s.avatarInitial, { color: colors.primary }]}>{initial}</Text>
+              <View style={{ position: 'relative' }}>
+                <View style={[s.avatar, { backgroundColor: colors.primary + '40' }]}>
+                  {photoURL ? (
+                    <Image source={{ uri: photoURL }} style={s.avatarImg} />
+                  ) : (
+                    <Text style={[s.avatarInitial, { color: colors.primary }]}>{initial}</Text>
+                  )}
+                </View>
+                {isOwnProfile && (
+                  <Pressable
+                    style={[s.editAvatarBtn, { backgroundColor: colors.primary }]}
+                    onPress={() => { onClose(); router.push('/(tabs)/settings'); }}
+                    hitSlop={8}
+                  >
+                    <Ionicons name="pencil" size={12} color="#fff" />
+                  </Pressable>
                 )}
               </View>
               <Text style={[s.displayName, { color: colors.textPrimary }]}>{displayName}</Text>
@@ -252,6 +265,21 @@ function makeStyles(colors: any) {
     },
     avatarImg: { width: 80, height: 80, borderRadius: 40 },
     avatarInitial: { ...Fonts.heading, fontSize: 32 },
+    editAvatarBtn: {
+      position: 'absolute',
+      bottom: 0,
+      right: 0,
+      width: 26,
+      height: 26,
+      borderRadius: 13,
+      alignItems: 'center',
+      justifyContent: 'center',
+      elevation: 3,
+      shadowColor: '#000',
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 1 },
+    },
     displayName: { ...Fonts.heading, fontSize: FontSize.xl, marginTop: Spacing.sm },
     username: { ...Fonts.body, fontSize: FontSize.sm },
     statsRow: {

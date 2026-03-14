@@ -333,7 +333,7 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
               {/* Author displayed below the closing quote mark */}
               {quote.author ? (
                 isCommunityQuote ? (
-                  <Text style={[styles.authorText, { color: quoteTextColor }]}>
+                  <Text style={[styles.authorText, { color: quoteTextColor, textAlign: 'center', alignSelf: 'center' }]}>
                     — {quote.author}
                   </Text>
                 ) : (
@@ -590,6 +590,8 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     opacity: 0.75,
     fontStyle: 'italic',
+    maxWidth: '80%',
+    textAlign: 'right',
   },
   translationBubble: {
     alignSelf: 'stretch',

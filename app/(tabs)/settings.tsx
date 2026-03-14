@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, Switch, Modal, TextInput, Alert,
+  View, Text, StyleSheet, ScrollView, Pressable, Switch, Modal, TextInput, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,9 +37,11 @@ export default function SettingsScreen() {
     isEffectivelyPremium,
     startPremiumTrial,
     premiumTrialUsed,
-    notificationHour, setNotificationHour,
+    notificationHours, setNotificationHours,
     ttsSpeed, setTtsSpeed,
     showCommunityQuotes, setShowCommunityQuotes,
+    earnedBadges, earnedBadgeDates,
+    photoURL,
   } = useUserStore();
 
   const FONT_SIZE_OPTIONS = [
@@ -57,6 +59,7 @@ export default function SettingsScreen() {
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [editName, setEditName] = useState('');
   const [editUsername, setEditUsername] = useState('');
+  const [badgeModalVisible, setBadgeModalVisible] = useState(false);
 
   useEffect(() => {
     const unsub = onAuthChange((user) => {
@@ -103,7 +106,7 @@ export default function SettingsScreen() {
     if (isGuest) return;
     appLog.log('[settings] notification toggle', { enabled, uid });
     if (enabled) {
-      const granted = await scheduleSmartNotifications({ dailyReminderEnabled: true, uid: uid ?? undefined, userName: displayName ?? undefined, currentStreak });
+      const granted = await scheduleSmartNotifications({ dailyReminderEnabled: true, uid: uid ?? undefined, userName: displayName ?? undefined, currentStreak, notificationHours: notificationHours ?? [8] });
       appLog.log('[settings] notification scheduling result', { granted });
       setDailyReminder(granted);
       if (granted && uid) saveFCMToken(uid).catch(() => {});
@@ -114,9 +117,15 @@ export default function SettingsScreen() {
   };
 
   const handleNotificationHour = async (hour: number) => {
-    await setNotificationHour(hour);
+    const current = notificationHours ?? [8];
+    const next = current.includes(hour)
+      ? current.filter((h) => h !== hour).length > 0
+        ? current.filter((h) => h !== hour)
+        : current // keep at least one
+      : [...current, hour];
+    await setNotificationHours(next);
     if (dailyReminderEnabled) {
-      scheduleSmartNotifications({ dailyReminderEnabled: true, uid: uid ?? undefined, userName: displayName ?? undefined, currentStreak }).catch(() => {});
+      scheduleSmartNotifications({ dailyReminderEnabled: true, uid: uid ?? undefined, userName: displayName ?? undefined, currentStreak, notificationHours: next }).catch(() => {});
     }
   };
 
@@ -136,6 +145,17 @@ export default function SettingsScreen() {
   const catCount = selectedCategories.length;
   const catLabel = catCount === 0 ? t('settings.allCategories') : t('settings.categoriesSelected', { count: catCount });
 
+  const BADGE_DISPLAY: Record<string, { emoji: string; titleKey: string; descKey: string }> = {
+    streak_7:    { emoji: '🔥', titleKey: 'badge.streak7Title',    descKey: 'badge.streak7Desc' },
+    streak_30:   { emoji: '⭐', titleKey: 'badge.streak30Title',   descKey: 'badge.streak30Desc' },
+    streak_100:  { emoji: '👑', titleKey: 'badge.streak100Title',  descKey: 'badge.streak100Desc' },
+    streak_365:  { emoji: '🏆', titleKey: 'badge.streak365Title',  descKey: 'badge.streak365Desc' },
+    quotes_50:   { emoji: '📖', titleKey: 'badge.quotes50Title',   descKey: 'badge.quotes50Desc' },
+    quotes_200:  { emoji: '📚', titleKey: 'badge.quotes200Title',  descKey: 'badge.quotes200Desc' },
+    bookmark_5:  { emoji: '💛', titleKey: 'badge.bookmark5Title',  descKey: 'badge.bookmark5Desc' },
+    community_1: { emoji: '✍️',  titleKey: 'badge.community1Title', descKey: 'badge.community1Desc' },
+  };
+
   return (
     <SafeAreaView style={[s.safe]} edges={['top']}>
       <LanguagePickerModal
@@ -151,6 +171,37 @@ export default function SettingsScreen() {
         onClose={() => setCatModalVisible(false)}
       />
       <LogStatusModal visible={logModalVisible} onClose={() => setLogModalVisible(false)} />
+
+      {/* Badge Modal */}
+      <Modal transparent visible={badgeModalVisible} animationType="slide" onRequestClose={() => setBadgeModalVisible(false)}>
+        <Pressable style={s.modalOverlay} onPress={() => setBadgeModalVisible(false)}>
+          <Pressable style={[s.modalSheet, { backgroundColor: colors.surface, maxHeight: '80%', width: '100%', maxWidth: 400 }]} onPress={(e) => e.stopPropagation()}>
+            <Text style={[s.premiumModalTitle, { color: colors.textPrimary, marginBottom: Spacing.lg }]}>{t('settings.myBadges')}</Text>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
+              {Object.entries(BADGE_DISPLAY).map(([id, badge]) => {
+                const earned = earnedBadges.includes(id);
+                return (
+                  <View key={id} style={[{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.xs, opacity: earned ? 1 : 0.45 }]}>
+                    <View style={[{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: earned ? colors.primaryLight + '30' : colors.grass0 }]}>
+                      <Text style={{ fontSize: 24 }}>{badge.emoji}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.rowTitle, { color: earned ? colors.textPrimary : colors.textMuted }]}>{t(badge.titleKey)}</Text>
+                      <Text style={[s.rowSubtitle, { color: colors.textMuted }]}>{t(badge.descKey)}</Text>
+                      {earned && earnedBadgeDates[id] && (
+                        <Text style={[s.rowSubtitle, { color: colors.primary, marginTop: 2 }]}>{t('grass.badgeEarned', { date: earnedBadgeDates[id] })}</Text>
+                      )}
+                    </View>
+                    {!earned && <Ionicons name="lock-closed" size={16} color={colors.textMuted} />}
+                    {earned && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+                  </View>
+                );
+              })}
+              <View style={{ height: Spacing.lg }} />
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Profile Edit Modal */}
       <Modal
@@ -264,10 +315,14 @@ export default function SettingsScreen() {
               <>
                 <View style={s.row}>
                   <View style={s.rowLeft}>
-                    <View style={[s.avatar, { backgroundColor: colors.primary + '30' }]}>
-                      <Text style={[s.avatarText, { color: colors.primary }]}>
-                        {(displayName ?? email ?? 'G').charAt(0).toUpperCase()}
-                      </Text>
+                    <View style={[s.avatar, { backgroundColor: colors.primary + '30', overflow: 'hidden' }]}>
+                      {photoURL ? (
+                        <Image source={{ uri: photoURL }} style={{ width: 44, height: 44, borderRadius: 22 }} />
+                      ) : (
+                        <Text style={[s.avatarText, { color: colors.primary }]}>
+                          {(displayName ?? email ?? 'G').charAt(0).toUpperCase()}
+                        </Text>
+                      )}
                     </View>
                     <View>
                       <Text style={s.rowTitle}>{displayName ?? email ?? t('settings.googleUser')}</Text>
@@ -284,6 +339,17 @@ export default function SettingsScreen() {
                   <View style={s.rowLeft}>
                     <Ionicons name="pencil-outline" size={22} color={colors.textSecondary} />
                     <Text style={s.rowTitle}>{t('settings.editProfile')}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                </Pressable>
+                <View style={s.divider} />
+                <Pressable style={s.row} onPress={() => setBadgeModalVisible(true)}>
+                  <View style={s.rowLeft}>
+                    <Ionicons name="ribbon-outline" size={22} color={colors.textSecondary} />
+                    <View>
+                      <Text style={s.rowTitle}>{t('settings.myBadges')}</Text>
+                      <Text style={s.rowSubtitle}>{t('settings.myBadgesDesc', { count: earnedBadges.length })}</Text>
+                    </View>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
                 </Pressable>
@@ -584,21 +650,24 @@ export default function SettingsScreen() {
                   </View>
                   <View style={{ paddingLeft: Spacing.xxl + Spacing.xs, gap: Spacing.sm, width: '100%' }}>
                     {[
-                      { label: t('settings.notificationMorning'), hour: 8 },
-                      { label: t('settings.notificationNoon'),    hour: 12 },
-                      { label: t('settings.notificationEvening'), hour: 21 },
-                    ].map((opt) => (
-                      <Pressable
-                        key={opt.hour}
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: 4 }}
-                        onPress={() => handleNotificationHour(opt.hour)}
-                      >
-                        <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: notificationHour === opt.hour ? colors.primary : colors.textMuted, alignItems: 'center', justifyContent: 'center' }}>
-                          {notificationHour === opt.hour && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary }} />}
-                        </View>
-                        <Text style={[s.rowTitle, { fontWeight: notificationHour === opt.hour ? '600' : '400' }]}>{opt.label}</Text>
-                      </Pressable>
-                    ))}
+                      { labelKey: 'settings.notificationMorning', hour: 8 },
+                      { labelKey: 'settings.notificationNoon',    hour: 12 },
+                      { labelKey: 'settings.notificationEvening', hour: 21 },
+                    ].map((opt) => {
+                      const checked = (notificationHours ?? [8]).includes(opt.hour);
+                      return (
+                        <Pressable
+                          key={opt.hour}
+                          style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: 4 }}
+                          onPress={() => handleNotificationHour(opt.hour)}
+                        >
+                          <View style={{ width: 20, height: 20, borderRadius: 4, borderWidth: 2, borderColor: checked ? colors.primary : colors.textMuted, backgroundColor: checked ? colors.primary : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                            {checked && <Ionicons name="checkmark" size={13} color="#fff" />}
+                          </View>
+                          <Text style={[s.rowTitle, { fontWeight: checked ? '600' : '400' }]}>{t(opt.labelKey)}</Text>
+                        </Pressable>
+                      );
+                    })}
                   </View>
                 </View>
               </>

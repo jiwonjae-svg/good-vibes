@@ -241,6 +241,7 @@ export default function OnboardingScreen({ onComplete, isReplay = false }: Onboa
   const [slideIndex, setSlideIndex] = useState(0);
   const [step, setStep] = useState(0); // 0-3: slides, 4: categories, 5: notification
   const flatListRef = useRef<FlatList>(null);
+  const extraPagerRef = useRef<FlatList>(null);
   const setCategories = useUserStore((s) => s.setCategories);
   const setDailyReminder = useUserStore((s) => s.setDailyReminder);
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
@@ -253,6 +254,15 @@ export default function OnboardingScreen({ onComplete, isReplay = false }: Onboa
         const idx = viewableItems[0].index ?? 0;
         setSlideIndex(idx);
         setStep(idx);
+      }
+    }
+  ).current;
+
+  const onExtraViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      if (viewableItems.length > 0) {
+        const idx = viewableItems[0].index ?? 0;
+        setStep(SLIDES_DATA.length + idx);
       }
     }
   ).current;
@@ -288,12 +298,12 @@ export default function OnboardingScreen({ onComplete, isReplay = false }: Onboa
       });
       return;
     } else if (step === SLIDES_DATA.length) {
-      // Save selected categories and advance to notification step
+      // Save selected categories and scroll to notification step
       if (selectedCats.length > 0) {
         appLog.log('[onboarding] categories saved', { categories: selectedCats });
         await setCategories(selectedCats);
       }
-      setStep(SLIDES_DATA.length + 1);
+      extraPagerRef.current?.scrollToIndex({ index: 1, animated: true });
     } else {
       // Notification step — user pressed "Skip"
       appLog.log('[onboarding] notification skipped');
@@ -314,86 +324,76 @@ export default function OnboardingScreen({ onComplete, isReplay = false }: Onboa
 
   const currentStepForDots = step;
 
-  const renderExtraStep = () => {
-    if (step === SLIDES_DATA.length) {
-      // Category picker
-      return (
-        <View style={[styles.extraStep, { backgroundColor: colors.background }]}>
-          <AnimatedTargetIcon tintColor={colors.primary} />
-          <Text style={[styles.extraTitle, { color: colors.textPrimary }]}>
-            {t('onboarding.categoryTitle')}
-          </Text>
-          <Text style={[styles.extraDesc, { color: colors.textSecondary }]}>
-            {t('onboarding.categorySubtitle')}
-          </Text>
-          <ScrollView
-            style={styles.catsScroll}
-            contentContainerStyle={styles.catsContainer}
-            showsVerticalScrollIndicator={false}
-          >
-            {CATEGORY_THEMES.map((theme) => (
-              <View key={theme.themeKey}>
-                <Text style={[styles.themeHeader, { color: colors.textMuted }]}>
-                  {t(theme.themeKey)}
-                </Text>
-                <View style={styles.chipsRow}>
-                  {theme.categories.map((cat) => {
-                    const selected = selectedCats.includes(cat.key);
-                    return (
-                      <Pressable
-                        key={cat.key}
-                        style={[
-                          styles.catChip,
-                          {
-                            backgroundColor: selected ? colors.primary : colors.surfaceAlt,
-                            borderColor: selected ? colors.primary : 'transparent',
-                          },
-                        ]}
-                        onPress={() => toggleCategory(cat.key)}
-                      >
-                        <Text style={[styles.catChipText, { color: selected ? '#fff' : colors.textPrimary }]}>
-                          {t(cat.labelKey)}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-      );
-    }
-
-    if (step === SLIDES_DATA.length + 1) {
-      // Notification step
-      return (
-        <View style={[styles.extraStep, { backgroundColor: colors.background }]}>
-          <AnimatedBellIcon tintColor={colors.primary} />
-          <Text style={[styles.extraTitle, { color: colors.textPrimary }]}>
-            {t('onboarding.notifTitle')}
-          </Text>
-          <Text style={[styles.extraDesc, { color: colors.textSecondary }]}>
-            {t('onboarding.notifSubtitle')}
-          </Text>
-          <Pressable
-            style={[styles.notifButton, { backgroundColor: colors.primary }]}
-            onPress={handleEnableNotifications}
-          >
-            <Ionicons name="notifications-outline" size={20} color="#fff" />
-            <Text style={styles.notifButtonText}>{t('onboarding.notifEnable')}</Text>
-          </Pressable>
-          <Pressable style={styles.notifSkipBtn} onPress={onComplete}>
-            <Text style={[styles.notifSkipText, { color: colors.textMuted }]}>
-              {t('onboarding.notifSkip')}
+  const renderCategoryStep = () => (
+    <View style={[styles.extraStep, { backgroundColor: colors.background }]}>
+      <AnimatedTargetIcon tintColor={colors.primary} />
+      <Text style={[styles.extraTitle, { color: colors.textPrimary }]}>
+        {t('onboarding.categoryTitle')}
+      </Text>
+      <Text style={[styles.extraDesc, { color: colors.textSecondary }]}>
+        {t('onboarding.categorySubtitle')}
+      </Text>
+      <ScrollView
+        style={styles.catsScroll}
+        contentContainerStyle={styles.catsContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {CATEGORY_THEMES.map((theme) => (
+          <View key={theme.themeKey}>
+            <Text style={[styles.themeHeader, { color: colors.textMuted }]}>
+              {t(theme.themeKey)}
             </Text>
-          </Pressable>
-        </View>
-      );
-    }
+            <View style={styles.chipsRow}>
+              {theme.categories.map((cat) => {
+                const selected = selectedCats.includes(cat.key);
+                return (
+                  <Pressable
+                    key={cat.key}
+                    style={[
+                      styles.catChip,
+                      {
+                        backgroundColor: selected ? colors.primary : colors.surfaceAlt,
+                        borderColor: selected ? colors.primary : 'transparent',
+                      },
+                    ]}
+                    onPress={() => toggleCategory(cat.key)}
+                  >
+                    <Text style={[styles.catChipText, { color: selected ? '#fff' : colors.textPrimary }]}>
+                      {t(cat.labelKey)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
 
-    return null;
-  };
+  const renderNotificationStep = () => (
+    <View style={[styles.extraStep, { backgroundColor: colors.background, justifyContent: 'center', paddingTop: 0 }]}>
+      <AnimatedBellIcon tintColor={colors.primary} />
+      <Text style={[styles.extraTitle, { color: colors.textPrimary }]}>
+        {t('onboarding.notifTitle')}
+      </Text>
+      <Text style={[styles.extraDesc, { color: colors.textSecondary }]}>
+        {t('onboarding.notifSubtitle')}
+      </Text>
+      <Pressable
+        style={[styles.notifButton, { backgroundColor: colors.primary }]}
+        onPress={handleEnableNotifications}
+      >
+        <Ionicons name="notifications-outline" size={20} color="#fff" />
+        <Text style={styles.notifButtonText}>{t('onboarding.notifEnable')}</Text>
+      </Pressable>
+      <Pressable style={styles.notifSkipBtn} onPress={onComplete}>
+        <Text style={[styles.notifSkipText, { color: colors.textMuted }]}>
+          {t('onboarding.notifSkip')}
+        </Text>
+      </Pressable>
+    </View>
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -423,7 +423,24 @@ export default function OnboardingScreen({ onComplete, isReplay = false }: Onboa
         </Animated.View>
       ) : (
         <Animated.View style={{ opacity: phaseAnim, flex: 1 }}>
-          {renderExtraStep()}
+          <FlatList
+            ref={extraPagerRef}
+            data={[{ key: 'cats' }, { key: 'notif' }]}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            scrollEnabled
+            onViewableItemsChanged={onExtraViewableItemsChanged}
+            viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50 }}
+            getItemLayout={(_data, index) => ({ length: width, offset: width * index, index })}
+            renderItem={({ item }) => (
+              <View style={{ width, height: '100%' }}>
+                {item.key === 'cats' ? renderCategoryStep() : renderNotificationStep()}
+              </View>
+            )}
+            keyExtractor={(item) => item.key}
+            style={{ flex: 1 }}
+          />
         </Animated.View>
       )}
 
@@ -473,13 +490,13 @@ const styles = StyleSheet.create({
   extraStep: {
     flex: 1,
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xl,
+    paddingTop: Spacing.md,
     alignItems: 'center',
   },
   extraEmoji: { fontSize: 64, marginBottom: Spacing.md },
   extraTitle: { ...Fonts.heading, fontSize: FontSize.xl, textAlign: 'center', marginBottom: Spacing.sm },
   extraDesc: { ...Fonts.body, fontSize: FontSize.md, textAlign: 'center', lineHeight: 24, marginBottom: Spacing.lg },
-  catsScroll: { width: '100%', maxHeight: height * 0.44 },
+  catsScroll: { width: '100%', flex: 1 },
   catsContainer: { paddingBottom: Spacing.md },
   themeHeader: { ...Fonts.body, fontSize: FontSize.xs, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', marginTop: Spacing.md, marginBottom: Spacing.sm },
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },

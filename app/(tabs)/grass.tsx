@@ -23,17 +23,8 @@ export default function GrassScreen() {
   const colors = useThemeColors();
   const { loadGrassData, isLoaded, getGrassDay, getActivityQuotes, grassData } = useGrassStore();
   const currentStreak = useUserStore((s) => s.currentStreak);
-  const earnedBadges = useUserStore((s) => s.earnedBadges);
-  const earnedBadgeDates = useUserStore((s) => s.earnedBadgeDates);
   const uid = useUserStore((s) => s.uid);
   const isGuest = !uid;
-
-  const BADGE_DISPLAY: Record<string, { emoji: string; titleKey: string }> = {
-    streak_7:   { emoji: '\uD83D\uDD25', titleKey: 'badge.streak7Title' },
-    streak_30:  { emoji: '\u2B50', titleKey: 'badge.streak30Title' },
-    streak_100: { emoji: '\uD83D\uDC51', titleKey: 'badge.streak100Title' },
-    streak_365: { emoji: '\uD83C\uDFC6', titleKey: 'badge.streak365Title' },
-  };
 
   const [loginPromptVisible, setLoginPromptVisible] = useState(false);
   const [activityModalVisible, setActivityModalVisible] = useState(false);
@@ -114,7 +105,7 @@ export default function GrassScreen() {
   if (isGuest) {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top']}>
-        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
           <Text style={[styles.header, { color: colors.textPrimary }]}>{t('grass.title')}</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('grass.subtitle')}</Text>
 
@@ -154,7 +145,7 @@ export default function GrassScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top']}>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
         <Text style={[styles.header, { color: colors.textPrimary }]}>{t('grass.title')}</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('grass.subtitle')}</Text>
 
@@ -225,35 +216,6 @@ export default function GrassScreen() {
           )}
         </View>
 
-        {/* Milestone Badges */}
-        <View style={[styles.badgesCard, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.badgesTitle, { color: colors.textPrimary }]}>{t('grass.badges')}</Text>
-          <View style={styles.badgesGrid}>
-            {Object.entries(BADGE_DISPLAY).map(([id, badge]) => {
-              const earned = earnedBadges.includes(id);
-              return (
-                <View
-                  key={id}
-                  style={[
-                    styles.badgeChip,
-                    { backgroundColor: earned ? colors.primaryLight + '22' : colors.grass0, opacity: earned ? 1 : 0.55 },
-                  ]}
-                >
-                  {!earned && <Ionicons name="lock-closed" size={12} color={colors.textMuted} />}
-                  <Text style={styles.badgeEmoji}>{badge.emoji}</Text>
-                  <View>
-                    <Text style={[styles.badgeName, { color: earned ? colors.textPrimary : colors.textMuted }]}>
-                      {t(badge.titleKey)}
-                    </Text>
-                    {earned && earnedBadgeDates[id] && (
-                      <Text style={[styles.badgeDate, { color: colors.textMuted }]}>{t('grass.badgeEarned', { date: earnedBadgeDates[id] })}</Text>
-                    )}
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        </View>
       </ScrollView>
 
       <Modal

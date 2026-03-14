@@ -89,6 +89,8 @@ export interface SmartNotifOptions {
   userName?: string;
   /** User's current streak (used to detect near-milestone) */
   currentStreak?: number;
+  /** Which hour(s) to schedule (8=morning, 12=noon, 21=evening). Defaults to [8, 21]. */
+  notificationHours?: number[];
 }
 
 /**
@@ -119,32 +121,26 @@ export async function scheduleSmartNotifications(options: SmartNotifOptions): Pr
 
     const { SchedulableTriggerInputTypes } = Notifications;
     const name = options.userName;
+    const hours = options.notificationHours?.length ? options.notificationHours : [8, 21];
 
-    // ── Morning (08:00) — challenge / energy / success
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: name
-          ? i18n.t('notification.morningTitlePersonal', { name })
-          : i18n.t('notification.morningTitle'),
-        body: i18n.t('notification.morningBody'),
-        sound: true,
-      },
-      trigger: { type: SchedulableTriggerInputTypes.DAILY, hour: 8, minute: 0 },
-    });
+    for (const hour of hours) {
+      const isMorning = hour < 12;
+      const isEvening = hour >= 17;
+      const titleKey = isMorning
+        ? (name ? 'notification.morningTitlePersonal' : 'notification.morningTitle')
+        : (isEvening ? (name ? 'notification.eveningTitlePersonal' : 'notification.eveningTitle') : 'notification.morningTitle');
+      const bodyKey = isMorning ? 'notification.morningBody' : (isEvening ? 'notification.eveningBody' : 'notification.morningBody');
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: name ? i18n.t(titleKey, { name }) : i18n.t(titleKey),
+          body: i18n.t(bodyKey),
+          sound: true,
+        },
+        trigger: { type: SchedulableTriggerInputTypes.DAILY, hour, minute: 0 },
+      });
+    }
 
-    // ── Evening (22:00) — comfort / healing / love
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: name
-          ? i18n.t('notification.eveningTitlePersonal', { name })
-          : i18n.t('notification.eveningTitle'),
-        body: i18n.t('notification.eveningBody'),
-        sound: true,
-      },
-      trigger: { type: SchedulableTriggerInputTypes.DAILY, hour: 22, minute: 0 },
-    });
-
-    // ── Near-milestone (08:30) — motivational boost
+    // ── Near-milestone — motivational boost (always at 08:30)
     const streak = options.currentStreak ?? 0;
     const nearMilestone = STREAK_MILESTONES.find((m) => m - streak === 1);
     if (nearMilestone) {

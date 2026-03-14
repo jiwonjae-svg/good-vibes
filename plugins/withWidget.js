@@ -1,18 +1,19 @@
 /**
  * plugins/withWidget.js
  *
- * Expo config plugin that wires the DailyGlow home-screen widget into the
- * native project during `npx expo prebuild`.
+ * Self-contained Expo config plugin — all native source files are written
+ * inline so the plugin works even when plugins/android/ and plugins/ios/
+ * are gitignored (as android/ and ios/ rules typically exclude them).
  *
  * Android — fully automated:
- *   • Copies Kotlin source files into the app package directory
- *   • Copies res/layout, res/xml, res/drawable resource files
+ *   • Writes Kotlin source files into the app package directory
+ *   • Writes res/layout, res/xml, res/drawable resource files
  *   • Adds the AppWidgetProvider <receiver> to AndroidManifest.xml
  *   • Injects WidgetPackage into MainApplication.kt
  *
  * iOS — partially automated:
  *   • Adds com.apple.security.application-groups to the main app entitlements
- *   • Copies WidgetModule.m + WidgetModule.swift into the main iOS project dir
+ *   • Writes WidgetModule.m + WidgetModule.swift into the main iOS project dir
  *     and registers them in the Xcode project (PBXSourcesBuildPhase)
  *   • Creates the DailyGlowWidget extension directory with Swift source files,
  *     Info.plist, and entitlements, then adds the extension target to the
@@ -32,9 +33,178 @@ const fs   = require('fs');
 
 function ensureDir(p) { fs.mkdirSync(p, { recursive: true }); }
 
-function copyIfExists(src, dst) {
-  if (fs.existsSync(src)) fs.copyFileSync(src, dst);
+// ─── Inline Android source content ──────────────────────────────────────────
+
+function dailyGlowWidgetKt(packageId) {
+  return `package ${packageId}.widget
+
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProvider
+import android.content.Context
+import android.view.View
+import android.widget.RemoteViews
+import ${packageId}.R
+
+class DailyGlowWidget : AppWidgetProvider() {
+
+    companion object {
+        const val PREFS_NAME = "DailyGlowWidget"
+        const val KEY_TEXT   = "quoteText"
+        const val KEY_AUTHOR = "quoteAuthor"
+    }
+
+    override fun onUpdate(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetIds: IntArray
+    ) {
+        for (id in appWidgetIds) updateWidget(context, appWidgetManager, id)
+    }
+
+    fun updateWidget(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int) {
+        val prefs  = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val text   = prefs.getString(KEY_TEXT,   context.getString(R.string.widget_default_quote)) ?: ""
+        val author = prefs.getString(KEY_AUTHOR, "") ?: ""
+
+        val views = RemoteViews(context.packageName, R.layout.widget_layout)
+        views.setTextViewText(R.id.widget_quote, text)
+        if (author.isNotEmpty()) {
+            views.setTextViewText(R.id.widget_author, "— $author")
+            views.setViewVisibility(R.id.widget_author, View.VISIBLE)
+        } else {
+            views.setViewVisibility(R.id.widget_author, View.GONE)
+        }
+        appWidgetManager.updateAppWidget(appWidgetId, views)
+    }
 }
+`;
+}
+
+function widgetModuleKt(packageId) {
+  return `package ${packageId}.widget
+
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
+import android.content.Context
+import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.ReactContextBaseJavaModule
+import com.facebook.react.bridge.ReactMethod
+
+class WidgetModule(private val reactContext: ReactApplicationContext) :
+    ReactContextBaseJavaModule(reactContext) {
+
+    override fun getName() = "WidgetModule"
+
+    @ReactMethod
+    fun saveQuoteData(text: String, author: String, id: String, promise: Promise) {
+        try {
+            reactContext
+                .getSharedPreferences(DailyGlowWidget.PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(DailyGlowWidget.KEY_TEXT,   text)
+                .putString(DailyGlowWidget.KEY_AUTHOR, author)
+                .putString(DailyGlowWidget.KEY_ID,     id)
+                .apply()
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject("WIDGET_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun updateWidget(promise: Promise) {
+        try {
+            val prefs  = reactContext.getSharedPreferences(DailyGlowWidget.PREFS_NAME, Context.MODE_PRIVATE)
+            val text   = prefs.getString(DailyGlowWidget.KEY_TEXT, "") ?: ""
+            val author = prefs.getString(DailyGlowWidget.KEY_AUTHOR, "") ?: ""
+
+            val manager = AppWidgetManager.getInstance(reactContext)
+            val ids = manager.getAppWidgetIds(ComponentName(reactContext, DailyGlowWidget::class.java))
+            for (id in ids) DailyGlowWidget().updateWidget(reactContext, manager, id)
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject("WIDGET_ERROR", e.message)
+        }
+    }
+}
+`;
+}
+
+function widgetPackageKt(packageId) {
+  return `package ${packageId}.widget
+
+import com.facebook.react.ReactPackage
+import com.facebook.react.bridge.NativeModule
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.uimanager.ViewManager
+
+class WidgetPackage : ReactPackage {
+    override fun createNativeModules(context: ReactApplicationContext): List<NativeModule> =
+        listOf(WidgetModule(context))
+    override fun createViewManagers(context: ReactApplicationContext): List<ViewManager<*, *>> =
+        emptyList()
+}
+`;
+}
+
+const WIDGET_LAYOUT_XML = `<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="16dp"
+    android:background="@drawable/widget_background">
+
+    <TextView
+        android:id="@+id/widget_quote"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/widget_default_quote"
+        android:textSize="14sp"
+        android:textColor="#FF4A2A"
+        android:textStyle="italic"
+        android:gravity="center"
+        android:maxLines="5"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/widget_author"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textSize="12sp"
+        android:textColor="#99FF4A2A"
+        android:gravity="end"
+        android:visibility="gone" />
+
+</LinearLayout>
+`;
+
+const WIDGET_INFO_XML = `<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="3600000"
+    android:initialLayout="@layout/widget_layout"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen" />
+`;
+
+const WIDGET_BACKGROUND_XML = `<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFFF8F0" />
+    <corners android:radius="16dp" />
+    <stroke android:width="1dp" android:color="#1AFF9F7E" />
+</shape>
+`;
 
 // ─── Android ─────────────────────────────────────────────────────────────────
 
@@ -75,14 +245,13 @@ function withAndroidWidget(config) {
     return mod;
   });
 
-  // 2. Copy Kotlin source files + resource files
+  // 2. Write Kotlin source files + resource files inline
   config = withDangerousMod(config, [
     'android',
     (mod) => {
       const androidRoot = mod.modRequest.platformProjectRoot;
-      const pluginDir   = path.join(mod.modRequest.projectRoot, 'plugins/android');
 
-      // Kotlin source files
+      // Kotlin source files — written inline (not copied) so they're always present
       const widgetPkgDir = path.join(
         androidRoot,
         'app/src/main/java',
@@ -90,29 +259,20 @@ function withAndroidWidget(config) {
         'widget',
       );
       ensureDir(widgetPkgDir);
-      for (const f of ['DailyGlowWidget.kt', 'WidgetModule.kt', 'WidgetPackage.kt']) {
-        copyIfExists(path.join(pluginDir, f), path.join(widgetPkgDir, f));
-      }
+      fs.writeFileSync(path.join(widgetPkgDir, 'DailyGlowWidget.kt'), dailyGlowWidgetKt(packageId));
+      fs.writeFileSync(path.join(widgetPkgDir, 'WidgetModule.kt'),    widgetModuleKt(packageId));
+      fs.writeFileSync(path.join(widgetPkgDir, 'WidgetPackage.kt'),   widgetPackageKt(packageId));
 
-      // Resource files
+      // Resource files — written inline
       const resBase = path.join(androidRoot, 'app/src/main/res');
       ensureDir(path.join(resBase, 'layout'));
       ensureDir(path.join(resBase, 'xml'));
       ensureDir(path.join(resBase, 'drawable'));
-      copyIfExists(
-        path.join(pluginDir, 'res/layout/widget_layout.xml'),
-        path.join(resBase, 'layout/widget_layout.xml'),
-      );
-      copyIfExists(
-        path.join(pluginDir, 'res/xml/widget_info.xml'),
-        path.join(resBase, 'xml/widget_info.xml'),
-      );
-      copyIfExists(
-        path.join(pluginDir, 'res/drawable/widget_background.xml'),
-        path.join(resBase, 'drawable/widget_background.xml'),
-      );
+      fs.writeFileSync(path.join(resBase, 'layout/widget_layout.xml'),   WIDGET_LAYOUT_XML);
+      fs.writeFileSync(path.join(resBase, 'xml/widget_info.xml'),        WIDGET_INFO_XML);
+      fs.writeFileSync(path.join(resBase, 'drawable/widget_background.xml'), WIDGET_BACKGROUND_XML);
 
-      // String resources (widget_default_quote, widget_description)
+      // String resources
       const stringsPath = path.join(resBase, 'values/strings.xml');
       if (fs.existsSync(stringsPath)) {
         let xml = fs.readFileSync(stringsPath, 'utf8');
@@ -120,7 +280,6 @@ function withAndroidWidget(config) {
           xml = xml.replace(
             '</resources>',
             '    <string name="widget_default_quote">A little better, every day.</string>\n' +
-            '    <string name="widget_description">Shows the latest DailyGlow quote</string>\n' +
             '</resources>',
           );
           fs.writeFileSync(stringsPath, xml);
@@ -215,6 +374,139 @@ function iosWidgetEntitlements(appGroup) {
 </plist>`;
 }
 
+function iosDailyGlowWidgetSwift(appGroup) {
+  return `import WidgetKit
+import SwiftUI
+
+private let keyText    = "quoteText"
+private let keyAuthor  = "quoteAuthor"
+private let keyQuoteId = "quoteId"
+
+struct QuoteEntry: TimelineEntry {
+    let date: Date
+    let quoteText: String
+    let quoteAuthor: String
+    let quoteId: String
+}
+
+struct QuoteProvider: TimelineProvider {
+    func placeholder(in context: Context) -> QuoteEntry {
+        QuoteEntry(date: .now, quoteText: "A little better, every day.", quoteAuthor: "DailyGlow", quoteId: "")
+    }
+    func getSnapshot(in context: Context, completion: @escaping (QuoteEntry) -> Void) {
+        completion(entry())
+    }
+    func getTimeline(in context: Context, completion: @escaping (Timeline<QuoteEntry>) -> Void) {
+        let e = entry()
+        let next = Calendar.current.date(byAdding: .hour, value: 1, to: e.date) ?? e.date
+        completion(Timeline(entries: [e], policy: .after(next)))
+    }
+    private func entry() -> QuoteEntry {
+        let defaults = UserDefaults(suiteName: "${appGroup}")
+        let text    = defaults?.string(forKey: keyText)    ?? "A little better, every day."
+        let author  = defaults?.string(forKey: keyAuthor)  ?? ""
+        let quoteId = defaults?.string(forKey: keyQuoteId) ?? ""
+        return QuoteEntry(date: .now, quoteText: text, quoteAuthor: author, quoteId: quoteId)
+    }
+}
+
+struct DailyGlowWidgetEntryView: View {
+    var entry: QuoteEntry
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(entry.quoteText)
+                .font(.system(size: 13, weight: .regular, design: .serif))
+                .italic()
+                .foregroundColor(Color(red: 1.0, green: 0.29, blue: 0.17))
+                .multilineTextAlignment(.leading)
+                .lineLimit(5)
+            if !entry.quoteAuthor.isEmpty {
+                Text("\u2014 \\(entry.quoteAuthor)")
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundColor(Color(red: 1.0, green: 0.29, blue: 0.17).opacity(0.65))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+        .padding(14)
+        .containerBackground(Color(red: 1.0, green: 0.97, blue: 0.94), for: .widget)
+        .widgetURL(URL(string: "com.jiwonjae.dailyglow://quote?id=\\(entry.quoteId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? \"\")"))
+    }
+}
+
+struct DailyGlowWidget: Widget {
+    let kind = "DailyGlowWidget"
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: QuoteProvider()) { entry in
+            DailyGlowWidgetEntryView(entry: entry)
+        }
+        .configurationDisplayName("DailyGlow")
+        .description("Today's quote on your home screen.")
+        .supportedFamilies([.systemSmall, .systemMedium])
+    }
+}
+`;
+}
+
+function iosWidgetBundleSwift(widgetName) {
+  return `import WidgetKit
+
+@main
+struct DailyGlowWidgetBundle: WidgetBundle {
+    var body: some Widget {
+        DailyGlowWidget()
+    }
+}
+`;
+}
+
+function iosWidgetModuleSwift(appGroup) {
+  return `import Foundation
+import WidgetKit
+
+@objc(WidgetModule)
+class WidgetModule: NSObject {
+    @objc static func requiresMainQueueSetup() -> Bool { false }
+
+    @objc func saveQuoteData(_ text: String, author: String, quoteId: String,
+                             resolve: @escaping RCTPromiseResolveBlock,
+                             reject: @escaping RCTPromiseRejectBlock) {
+        guard let defaults = UserDefaults(suiteName: "${appGroup}") else {
+            reject("WIDGET_ERROR", "App Group UserDefaults unavailable", nil); return
+        }
+        defaults.set(text,    forKey: "quoteText")
+        defaults.set(author,  forKey: "quoteAuthor")
+        defaults.set(quoteId, forKey: "quoteId")
+        defaults.synchronize()
+        resolve(nil)
+    }
+
+    @objc func reloadAllTimelines(_ resolve: @escaping RCTPromiseResolveBlock,
+                                  reject: @escaping RCTPromiseRejectBlock) {
+        WidgetCenter.shared.reloadAllTimelines()
+        resolve(nil)
+    }
+}
+`;
+}
+
+function iosWidgetModuleM() {
+  return `#import <React/RCTBridgeModule.h>
+
+@interface RCT_EXTERN_MODULE(WidgetModule, NSObject)
+
+RCT_EXTERN_METHOD(saveQuoteData:(NSString *)text
+                  author:(NSString *)author
+                  quoteId:(NSString *)quoteId
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(reloadAllTimelines:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
+
+@end
+`;
+}
+
 function withIOSWidget(config) {
   const bundleId    = config.ios?.bundleIdentifier ?? 'com.jiwonjae.dailyglow';
   const appGroup    = `group.${bundleId}`;
@@ -231,28 +523,26 @@ function withIOSWidget(config) {
     return mod;
   });
 
-  // 2. Copy source files into the iOS directory
+  // 2. Write source files into the iOS directory inline
   config = withDangerousMod(config, [
     'ios',
     (mod) => {
-      const iosRoot   = mod.modRequest.platformProjectRoot;
-      const pluginDir = path.join(mod.modRequest.projectRoot, 'plugins/ios');
-      const projName  = mod.modRequest.projectName ?? 'DailyGlow';
+      const iosRoot  = mod.modRequest.platformProjectRoot;
+      const projName = mod.modRequest.projectName ?? 'DailyGlow';
 
-      // Widget extension directory
+      // Widget extension directory — all files written inline
       const extDir = path.join(iosRoot, widgetName);
       ensureDir(extDir);
-      for (const f of [`${widgetName}.swift`, `${widgetName}Bundle.swift`]) {
-        copyIfExists(path.join(pluginDir, f), path.join(extDir, f));
-      }
-      fs.writeFileSync(path.join(extDir, 'Info.plist'), iosWidgetInfoPlist(widgetBundleId));
+      fs.writeFileSync(path.join(extDir, `${widgetName}.swift`),       iosDailyGlowWidgetSwift(appGroup));
+      fs.writeFileSync(path.join(extDir, `${widgetName}Bundle.swift`), iosWidgetBundleSwift(widgetName));
+      fs.writeFileSync(path.join(extDir, 'Info.plist'),                iosWidgetInfoPlist(widgetBundleId));
       fs.writeFileSync(path.join(extDir, `${widgetName}.entitlements`), iosWidgetEntitlements(appGroup));
 
-      // WidgetModule into main project directory
+      // WidgetModule into main project directory — written inline
       const mainProjDir = path.join(iosRoot, projName);
-      for (const f of ['WidgetModule.m', 'WidgetModule.swift']) {
-        copyIfExists(path.join(pluginDir, f), path.join(mainProjDir, f));
-      }
+      ensureDir(mainProjDir);
+      fs.writeFileSync(path.join(mainProjDir, 'WidgetModule.m'),     iosWidgetModuleM());
+      fs.writeFileSync(path.join(mainProjDir, 'WidgetModule.swift'), iosWidgetModuleSwift(appGroup));
 
       return mod;
     },

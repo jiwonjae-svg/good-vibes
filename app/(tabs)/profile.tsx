@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  ActivityIndicator, Image, Alert,
+  ActivityIndicator, Image, Alert, Modal, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
@@ -15,7 +15,6 @@ import { fetchMySubmissions, type CommunityQuote } from '../../services/communit
 import { fetchPublicUserProfile } from '../../services/firestoreUserService';
 import { signInWithGoogleNative } from '../../services/authService';
 import { appLog } from '../../services/logger';
-import MySubmissionsModal from '../../components/MySubmissionsModal';
 import GoogleSignInConfirmModal from '../../components/GoogleSignInConfirmModal';
 import ProfileSetupModal from '../../components/ProfileSetupModal';
 
@@ -43,6 +42,12 @@ export default function ProfileScreen() {
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [profileSetupVisible, setProfileSetupVisible] = useState(false);
   const [pendingUser, setPendingUser] = useState<{ uid: string; displayName: string | null; email: string | null; photoURL: string | null } | null>(null);
+  // Edit profile state
+  const [editProfileVisible, setEditProfileVisible] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editUsername, setEditUsername] = useState('');
+  // Quote detail modal
+  const [selectedQuote, setSelectedQuote] = useState<CommunityQuote | null>(null);
 
   const initial = (displayName || username || '?').charAt(0).toUpperCase();
 
@@ -118,6 +123,22 @@ export default function ProfileScreen() {
     setProfileSetupVisible(false);
   };
 
+  const handleOpenEditProfile = () => {
+    setEditName(displayName ?? '');
+    setEditUsername(username ?? '');
+    setEditProfileVisible(true);
+  };
+
+  const handleSaveProfile = async () => {
+    const trimmedName = editName.trim();
+    if (!trimmedName) {
+      Alert.alert(t('profile.nameRequired'));
+      return;
+    }
+    await setProfile(trimmedName, editUsername.trim());
+    setEditProfileVisible(false);
+  };
+
   const handleDelete = (quoteId: string) => {
     Alert.alert(
       t('community.delete'),
@@ -186,16 +207,93 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={[s.container, { backgroundColor: colors.background }]} edges={['top']}>
+      {/* Edit Profile Modal */}
+      <Modal
+        transparent
+        visible={editProfileVisible}
+        animationType="slide"
+        onRequestClose={() => setEditProfileVisible(false)}
+      >
+        <Pressable style={s.modalOverlay} onPress={() => setEditProfileVisible(false)}>
+          <Pressable style={[s.modalSheet, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
+            <Text style={[s.modalTitle, { color: colors.textPrimary }]}>{t('settings.editProfile')}</Text>
+            <View style={{ width: '100%', gap: Spacing.md }}>
+              <View>
+                <Text style={[s.inputLabel, { color: colors.textSecondary }]}>{t('settings.editProfileName')}</Text>
+                <TextInput
+                  value={editName}
+                  onChangeText={setEditName}
+                  placeholder={t('profile.namePlaceholder')}
+                  placeholderTextColor={colors.textMuted}
+                  style={[s.textInput, { color: colors.textPrimary, borderColor: colors.grass0, backgroundColor: colors.surfaceAlt }]}
+                />
+              </View>
+              <View>
+                <Text style={[s.inputLabel, { color: colors.textSecondary }]}>{t('settings.editProfileUsername')}</Text>
+                <TextInput
+                  value={editUsername}
+                  onChangeText={setEditUsername}
+                  placeholder={t('profile.usernamePlaceholder')}
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="none"
+                  style={[s.textInput, { color: colors.textPrimary, borderColor: colors.grass0, backgroundColor: colors.surfaceAlt }]}
+                />
+              </View>
+            </View>
+            <Pressable
+              style={[s.saveBtn, { backgroundColor: colors.primary }]}
+              onPress={handleSaveProfile}
+            >
+              <Text style={s.saveBtnText}>{t('settings.editProfileSave')}</Text>
+            </Pressable>
+            <Pressable style={s.cancelBtn} onPress={() => setEditProfileVisible(false)}>
+              <Text style={[s.cancelBtnText, { color: colors.textMuted }]}>{t('common.cancel')}</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Quote detail modal */}
+      <Modal
+        transparent
+        visible={!!selectedQuote}
+        animationType="fade"
+        onRequestClose={() => setSelectedQuote(null)}
+      >
+        <Pressable style={s.modalOverlay} onPress={() => setSelectedQuote(null)}>
+          <Pressable style={[s.quoteDetailSheet, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
+            <Pressable style={s.closeBtn} onPress={() => setSelectedQuote(null)}>
+              <Ionicons name="close" size={22} color={colors.textMuted} />
+            </Pressable>
+            <Text style={[s.quoteDetailText, { color: colors.textPrimary }]}>
+              "{selectedQuote?.text}"
+            </Text>
+            {selectedQuote?.author ? (
+              <Text style={[s.quoteDetailAuthor, { color: colors.textSecondary }]}>— {selectedQuote.author}</Text>
+            ) : null}
+            <View style={s.quoteDetailFooter}>
+              <Ionicons name="heart" size={14} color={colors.error} />
+              <Text style={[s.quoteDetailLikes, { color: colors.textMuted }]}>{selectedQuote?.likeCount ?? 0}</Text>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile header */}
         <View style={s.profileSection}>
-          <View style={[s.avatar, { backgroundColor: colors.primary + '40' }]}>
-            {photoURL ? (
-              <Image source={{ uri: photoURL }} style={s.avatarImg} />
-            ) : (
-              <Text style={[s.avatarInitial, { color: colors.primary }]}>{initial}</Text>
-            )}
-          </View>
+          <Pressable onPress={handleOpenEditProfile} style={s.avatarWrapper}>
+            <View style={[s.avatar, { backgroundColor: colors.primary + '40' }]}>
+              {photoURL ? (
+                <Image source={{ uri: photoURL }} style={s.avatarImg} />
+              ) : (
+                <Text style={[s.avatarInitial, { color: colors.primary }]}>{initial}</Text>
+              )}
+            </View>
+            <View style={[s.editBadge, { backgroundColor: colors.primary }]}>
+              <Ionicons name="pencil" size={12} color="#fff" />
+            </View>
+          </Pressable>
           <Text style={[s.displayName, { color: colors.textPrimary }]}>{displayName || username}</Text>
           {username ? (
             <Text style={[s.username, { color: colors.textSecondary }]}>@{username}</Text>
@@ -233,7 +331,7 @@ export default function ProfileScreen() {
             </View>
           ) : (
             quotes.map((q) => (
-              <View key={q.id} style={[s.quoteCard, { backgroundColor: colors.surface }]}>
+              <Pressable key={q.id} style={[s.quoteCard, { backgroundColor: colors.surface }]} onPress={() => setSelectedQuote(q)}>
                 <Text style={[s.quoteText, { color: colors.textPrimary }]} numberOfLines={4}>
                   "{q.text}"
                 </Text>
@@ -246,12 +344,12 @@ export default function ProfileScreen() {
                     <Text style={[s.footerText, { color: colors.textMuted }]}>{q.likeCount}</Text>
                   </View>
                   <View style={s.cardActions}>
-                    <Pressable onPress={() => handleDelete(q.id)} hitSlop={8} style={s.actionBtn}>
+                    <Pressable onPress={(e) => { e.stopPropagation(); handleDelete(q.id); }} hitSlop={8} style={s.actionBtn}>
                       <Ionicons name="trash-outline" size={16} color={colors.error} />
                     </Pressable>
                   </View>
                 </View>
-              </View>
+              </Pressable>
             ))
           )}
         </View>
@@ -270,9 +368,11 @@ function makeStyles(colors: any) {
     loginBtnText: { ...Fonts.heading, fontSize: FontSize.sm, color: '#fff' },
     errorText: { ...Fonts.body, fontSize: FontSize.sm, textAlign: 'center' },
     profileSection: { alignItems: 'center', paddingVertical: Spacing.xl, gap: Spacing.sm },
+    avatarWrapper: { position: 'relative' },
     avatar: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
     avatarImg: { width: 80, height: 80, borderRadius: 40 },
     avatarInitial: { ...Fonts.heading, fontSize: 32 },
+    editBadge: { position: 'absolute', bottom: 2, right: 2, width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
     displayName: { ...Fonts.heading, fontSize: FontSize.xl, marginTop: Spacing.sm },
     username: { ...Fonts.body, fontSize: FontSize.sm },
     statsRow: { flexDirection: 'row', alignItems: 'center', marginVertical: Spacing.md, gap: Spacing.lg },
@@ -292,5 +392,21 @@ function makeStyles(colors: any) {
     footerText: { ...Fonts.body, fontSize: FontSize.xs },
     cardActions: { flexDirection: 'row', gap: Spacing.sm },
     actionBtn: { padding: 4 },
+    // Modals
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', alignItems: 'center' },
+    modalSheet: { width: '100%', maxWidth: 440, borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, padding: Spacing.xl, gap: Spacing.sm, alignItems: 'center' },
+    modalTitle: { ...Fonts.heading, fontSize: FontSize.lg, marginBottom: Spacing.sm },
+    inputLabel: { ...Fonts.body, fontSize: FontSize.sm, marginBottom: 4 },
+    textInput: { width: '100%', borderWidth: 1, borderRadius: BorderRadius.md, padding: Spacing.sm, ...Fonts.body, fontSize: FontSize.md },
+    saveBtn: { width: '100%', paddingVertical: Spacing.sm + 2, borderRadius: BorderRadius.full, alignItems: 'center', marginTop: Spacing.md },
+    saveBtnText: { ...Fonts.heading, fontSize: FontSize.md, color: '#fff' },
+    cancelBtn: { paddingVertical: Spacing.sm },
+    cancelBtnText: { ...Fonts.body, fontSize: FontSize.sm },
+    quoteDetailSheet: { width: '100%', maxWidth: 440, borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, padding: Spacing.xl, gap: Spacing.md },
+    closeBtn: { alignSelf: 'flex-end', padding: 4 },
+    quoteDetailText: { ...Fonts.quote, fontSize: FontSize.lg, lineHeight: 28, textAlign: 'center' },
+    quoteDetailAuthor: { ...Fonts.body, fontSize: FontSize.sm, fontStyle: 'italic', textAlign: 'right' },
+    quoteDetailFooter: { flexDirection: 'row', alignItems: 'center', gap: 4, justifyContent: 'center', marginTop: Spacing.xs },
+    quoteDetailLikes: { ...Fonts.body, fontSize: FontSize.sm },
   });
 }

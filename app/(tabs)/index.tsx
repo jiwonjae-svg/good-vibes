@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react';
 import {
-  View, FlatList, StyleSheet, ActivityIndicator, Text, ViewToken, Pressable, Image,
+  View, FlatList, StyleSheet, ActivityIndicator, Text, ViewToken, Pressable, Image, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Audio } from 'expo-av';
@@ -109,15 +109,57 @@ export default function HomeScreen() {
   const autoPlayChainRef = useRef(false);
   const quotesRef = useRef(quotes);
   quotesRef.current = quotes;
+  // Tracks displayedQuotes (native + community) for view-event handling
+  const displayedQuotesRef = useRef(displayedQuotes);
+  displayedQuotesRef.current = displayedQuotes;
   const activeQuoteIndexRef = useRef(0);
   activeQuoteIndexRef.current = activeQuoteIndex;
   const isProgrammaticScrollRef = useRef(false);
+  const pendingQuoteIdRef = useRef<string | null>(null);
 
   const isInitialMount = useRef(true);
   const dailyModalShownRef = useRef(false);
+  const widgetSavedRef = useRef(false);
   const uid = useUserStore((s) => s.uid);
   const isGuest = !uid;
   const selectedCategories = useUserStore((s) => s.selectedCategories);
+
+  // Save today's daily quote to widget when quotes first load (all users)
+  useEffect(() => {
+    if (quotes.length === 0 || widgetSavedRef.current) return;
+    widgetSavedRef.current = true;
+    const daily = getDailyQuote(quotes);
+    if (daily) saveQuoteForWidget(daily.text, daily.author, daily.category, daily.id);
+  }, [quotes.length]);
+
+  // Handle deep links from widget tap: com.jiwonjae.dailyglow://quote?id=<id>
+  useEffect(() => {
+    const navigate = (url: string) => {
+      const match = url.match(/[?&]id=([^&]+)/);
+      if (!match) return;
+      const id = decodeURIComponent(match[1]);
+      const idx = displayedQuotesRef.current.findIndex((q) => q.id === id);
+      if (idx >= 0) {
+        flatListRef.current?.scrollToIndex({ index: idx, animated: false });
+      } else {
+        pendingQuoteIdRef.current = id; // quotes not loaded yet — will retry below
+      }
+    };
+    Linking.getInitialURL().then((url) => { if (url) navigate(url); });
+    const sub = Linking.addEventListener('url', ({ url }) => navigate(url));
+    return () => sub.remove();
+  }, []);
+
+  // Once quotes are loaded, scroll to any pending deep-link quote
+  useEffect(() => {
+    const id = pendingQuoteIdRef.current;
+    if (!id || displayedQuotes.length === 0) return;
+    const idx = displayedQuotes.findIndex((q) => q.id === id);
+    if (idx >= 0) {
+      pendingQuoteIdRef.current = null;
+      setTimeout(() => flatListRef.current?.scrollToIndex({ index: idx, animated: false }), 400);
+    }
+  }, [displayedQuotes.length]);
 
   useEffect(() => {
     const setupAudio = async () => {
@@ -257,14 +299,14 @@ export default function HomeScreen() {
         lastViewedIndex.current = idx;
         setActiveQuoteIndex(idx);
         activeQuoteIndexRef.current = idx;
-        const qs = quotesRef.current;
+        const qs = displayedQuotesRef.current;
         const q = qs[idx];
         if (q) {
           if (isPremium) {
-            saveQuoteForWidget(q.text, q.author, q.category);
+            saveQuoteForWidget(q.text, q.author, q.category, q.id);
           }
           if (viewableItems.length === 1) {
-            addViewedQuote(q.id, q.text, q.author, q.source ?? '', todayString());
+            addViewedQuote(q.id, q.text, q.author ?? '', q.source ?? '', todayString());
             if (q.category) trackCategoryView(q.category);
           }
 
@@ -302,10 +344,10 @@ export default function HomeScreen() {
   const onMomentumScrollEnd = useCallback(
     (e: { nativeEvent: { contentOffset: { y: number } } }) => {
       const idx = Math.round(e.nativeEvent.contentOffset.y / CARD_HEIGHT);
-      const qs = quotesRef.current;
+      const qs = displayedQuotesRef.current;
       const q = qs[idx];
       if (q) {
-        addViewedQuote(q.id, q.text, q.author, q.source ?? '', todayString());
+        addViewedQuote(q.id, q.text, q.author ?? '', q.source ?? '', todayString());
       }
     },
     [addViewedQuote],

@@ -9,7 +9,7 @@ import { useThemeColors } from '../../hooks/useThemeColors';
 import { Fonts, FontSize, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { useUserStore } from '../../stores/useUserStore';
 import { LANGUAGES, type LanguageCode } from '../../i18n';
-import { signInWithGoogleNative, logOut, onAuthChange } from '../../services/authService';
+import { signInWithGoogleNative, logOut } from '../../services/authService';
 import { logActivity } from '../../services/firestoreUserService';
 import { scheduleSmartNotifications, cancelDailyReminder, saveFCMToken } from '../../services/notificationService';
 import { appLog } from '../../services/logger';
@@ -60,16 +60,6 @@ export default function SettingsScreen() {
   const [editName, setEditName] = useState('');
   const [editUsername, setEditUsername] = useState('');
   const [badgeModalVisible, setBadgeModalVisible] = useState(false);
-
-  useEffect(() => {
-    const unsub = onAuthChange((user) => {
-      // Only clear store on sign-out; sign-in is fully handled by login.tsx
-      // (calling setAuth on sign-in here would overwrite the user-set displayName
-      //  with the Google account name)
-      if (!user) setAuth(null);
-    });
-    return unsub;
-  }, []);
 
   const handlePremiumPurchase = () => {
     // TODO: Replace with real IAP via RevenueCat or Google Play Billing.

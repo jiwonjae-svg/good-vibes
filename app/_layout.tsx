@@ -7,7 +7,7 @@ import * as NavigationBar from 'expo-navigation-bar';
 import '../i18n';
 import { initFirebase } from '../services/firebaseConfig';
 import { initSentry } from '../services/sentryService';
-import { configureGoogleSignIn } from '../services/authService';
+import { configureGoogleSignIn, onAuthChange } from '../services/authService';
 import { initNotificationHandler, validateAndRescheduleDailyReminder } from '../services/notificationService';
 import { useGrassStore } from '../stores/useGrassStore';
 import { useUserStore } from '../stores/useUserStore';
@@ -32,6 +32,7 @@ export default function RootLayout() {
   const hasCompletedAuth = useUserStore((s) => s.hasCompletedAuth);
   const hasSeenOnboarding = useUserStore((s) => s.hasSeenOnboarding);
   const setOnboardingSeen = useUserStore((s) => s.setOnboardingSeen);
+  const setAuth = useUserStore((s) => s.setAuth);
   const showOnboardingFlag = useUserStore((s) => s.showOnboardingFlag);
   const setShowOnboardingFlag = useUserStore((s) => s.setShowOnboardingFlag);
 
@@ -61,6 +62,24 @@ export default function RootLayout() {
   
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showSplash, setShowSplash] = useState(!_splashHasPlayed);
+
+  // Single global auth listener — set up only after the user store has loaded
+  // from AsyncStorage. Skips the first emission to avoid false sign-outs caused
+  // by Firebase taking a moment to restore its session (race condition).
+  useEffect(() => {
+    if (!isLoaded) return;
+    let firstEmission = true;
+    const unsub = onAuthChange((user) => {
+      if (firstEmission) {
+        firstEmission = false;
+        return; // Ignore – may be null while Firebase restores session
+      }
+      if (!user && useUserStore.getState().uid) {
+        setAuth(null);
+      }
+    });
+    return unsub;
+  }, [isLoaded]);
 
   useEffect(() => {
     initSentry();

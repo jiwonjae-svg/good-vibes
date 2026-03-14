@@ -14,11 +14,13 @@ export const widgetService = {
   async updateWidgetQuote(quote: WidgetQuoteData): Promise<void> {
     try {
       await AsyncStorage.setItem(WIDGET_DATA_KEY, JSON.stringify(quote));
-      
-      if (Platform.OS === 'ios' && NativeModules.WidgetModule) {
-        await NativeModules.WidgetModule.reloadAllTimelines();
-      } else if (Platform.OS === 'android' && NativeModules.WidgetModule) {
+
+      if (Platform.OS === 'android' && NativeModules.WidgetModule) {
+        await NativeModules.WidgetModule.saveQuoteData(quote.text, quote.author ?? '');
         await NativeModules.WidgetModule.updateWidget();
+      } else if (Platform.OS === 'ios' && NativeModules.WidgetModule) {
+        await NativeModules.WidgetModule.saveQuoteData(quote.text, quote.author ?? '');
+        await NativeModules.WidgetModule.reloadAllTimelines();
       }
     } catch (error) {
       console.error('[widgetService] Failed to update widget:', error);

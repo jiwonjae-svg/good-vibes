@@ -157,6 +157,7 @@ export default function SettingsScreen() {
     bookmark_5:  { emoji: '💛', titleKey: 'badge.bookmark5Title',  descKey: 'badge.bookmark5Desc' },
     bookmark_20: { emoji: '🌟', titleKey: 'badge.bookmark20Title', descKey: 'badge.bookmark20Desc' },
     community_1: { emoji: '✍️',  titleKey: 'badge.community1Title', descKey: 'badge.community1Desc' },
+    community_5: { emoji: '📣',  titleKey: 'badge.community5Title', descKey: 'badge.community5Desc' },
   };
 
   return (

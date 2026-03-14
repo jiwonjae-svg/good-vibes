@@ -102,6 +102,9 @@ interface UserState {
   // Community feed preference
   showCommunityQuotes: boolean;
 
+  // Total community submissions (for community_5 badge)
+  communitySubmitCount: number;
+
   // Recent category views (ring buffer) — synced to Firestore for smart notifications
   recentViewedCategories: string[];
 
@@ -142,6 +145,7 @@ interface UserState {
   setTtsSpeed: (speed: number) => Promise<void>;
   rateQuote: (quoteId: string, rating: 'like' | 'dislike') => Promise<void>;
   setShowCommunityQuotes: (show: boolean) => Promise<void>;
+  incrementCommunitySubmitCount: () => Promise<void>;
   /** Track which quote category the user just viewed (ring buffer of last 30) */
   trackCategoryView: (category: string) => void;
 }
@@ -190,6 +194,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   likedQuoteIds: [],
   dislikedQuoteIds: [],
   showCommunityQuotes: true,
+  communitySubmitCount: 0,
   recentViewedCategories: [],
   followerCount: 0,
   followingCount: 0,
@@ -243,6 +248,7 @@ export const useUserStore = create<UserState>((set, get) => ({
           likedQuoteIds: d.likedQuoteIds ?? [],
           dislikedQuoteIds: d.dislikedQuoteIds ?? [],
           showCommunityQuotes: d.showCommunityQuotes ?? true,
+          communitySubmitCount: d.communitySubmitCount ?? 0,
           recentViewedCategories: d.recentViewedCategories ?? [],
           followerCount: d.followerCount ?? 0,
           followingCount: d.followingCount ?? 0,
@@ -296,6 +302,7 @@ export const useUserStore = create<UserState>((set, get) => ({
         likedQuoteIds: s.likedQuoteIds,
         dislikedQuoteIds: s.dislikedQuoteIds,
         showCommunityQuotes: s.showCommunityQuotes,
+        communitySubmitCount: s.communitySubmitCount,
         recentViewedCategories: s.recentViewedCategories,
         followerCount: s.followerCount,
         followingCount: s.followingCount,
@@ -734,6 +741,22 @@ export const useUserStore = create<UserState>((set, get) => ({
 
   setShowCommunityQuotes: async (show) => {
     set({ showCommunityQuotes: show });
+    await get().persistUser();
+  },
+
+  incrementCommunitySubmitCount: async () => {
+    const newCount = get().communitySubmitCount + 1;
+    set({ communitySubmitCount: newCount });
+    const todayStr = new Date().toISOString().split('T')[0];
+    const currentBadges = get().earnedBadges;
+    const uid = get().uid;
+    if (newCount >= 5 && !currentBadges.includes('community_5')) {
+      const newBadges = [...get().earnedBadges, 'community_5'];
+      const newDates = { ...get().earnedBadgeDates, community_5: todayStr };
+      appLog.log('[badge] community_5 earned', { uid, total: newCount });
+      set({ earnedBadges: newBadges, newBadgeEarned: 'community_5', earnedBadgeDates: newDates });
+      if (uid) saveUserBadges(uid, newBadges).catch(() => {});
+    }
     await get().persistUser();
   },
 

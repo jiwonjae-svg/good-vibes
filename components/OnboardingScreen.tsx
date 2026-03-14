@@ -434,7 +434,7 @@ export default function OnboardingScreen({ onComplete, isReplay = false }: Onboa
             viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50 }}
             getItemLayout={(_data, index) => ({ length: width, offset: width * index, index })}
             renderItem={({ item }) => (
-              <View style={{ width, height: '100%' }}>
+              <View style={{ width, height }}>
                 {item.key === 'cats' ? renderCategoryStep() : renderNotificationStep()}
               </View>
             )}

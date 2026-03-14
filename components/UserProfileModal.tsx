@@ -34,6 +34,10 @@ export default function UserProfileModal({
   const colors = useThemeColors();
   const router = useRouter();
   const myUid = useUserStore((s) => s.uid);
+  const myDisplayName = useUserStore((s) => s.displayName);
+  const myUsername = useUserStore((s) => s.username);
+  const myStorePhotoURL = useUserStore((s) => s.photoURL);
+  const myFollowerCount = useUserStore((s) => s.followerCount);
 
   const [profile, setProfile] = useState<PublicUserProfile | null>(null);
   const [quotes, setQuotes] = useState<CommunityQuote[]>([]);
@@ -55,17 +59,36 @@ export default function UserProfileModal({
           fetchCommunityQuotesByUser(targetUid, 20),
           myUid && !isOwnProfile ? checkIsFollowing(myUid, targetUid) : Promise.resolve(false),
         ]);
-        // For guests, prof may be null (Firestore user reads require auth).
-        // We still show the modal using targetName/targetPhotoURL from props.
-        if (myUid && !prof) {
+        // For own profile: don't require Firestore doc — use local store as fallback
+        if (myUid && !prof && !isOwnProfile) {
           setLoadError(true);
           return;
         }
-        setProfile(prof);
+        // Use Firestore data if available; otherwise fall back to local store for own profile
+        setProfile(prof ?? (isOwnProfile ? {
+          uid: myUid,
+          displayName: myDisplayName,
+          username: myUsername,
+          photoURL: myStorePhotoURL,
+          followerCount: myFollowerCount ?? 0,
+          followingCount: 0,
+        } : null));
         setQuotes(qs);
         setIsFollowing(following);
       } catch {
-        setLoadError(true);
+        if (!isOwnProfile) {
+          setLoadError(true);
+        } else {
+          // Own profile: show local data even if Firestore fails
+          setProfile({
+            uid: myUid!,
+            displayName: myDisplayName,
+            username: myUsername,
+            photoURL: myStorePhotoURL,
+            followerCount: myFollowerCount ?? 0,
+            followingCount: 0,
+          });
+        }
       } finally {
         setLoading(false);
       }

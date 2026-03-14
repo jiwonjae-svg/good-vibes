@@ -337,7 +337,7 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
                     — {quote.author}
                   </Text>
                 ) : (
-                  <Pressable onPress={handleAuthorWiki} hitSlop={8}>
+                  <Pressable onPress={handleAuthorWiki} hitSlop={8} style={{ alignSelf: 'stretch' }}>
                     <Text style={[styles.authorText, { color: quoteTextColor, textDecorationLine: 'underline', textDecorationColor: 'rgba(0,0,0,0.25)' }]}>
                       — {quote.author}
                     </Text>
@@ -586,11 +586,9 @@ const styles = StyleSheet.create({
   authorText: {
     ...Fonts.body,
     fontSize: FontSize.sm,
-    alignSelf: 'flex-end',
     marginTop: Spacing.sm,
     opacity: 0.75,
     fontStyle: 'italic',
-    maxWidth: '80%',
     textAlign: 'right',
   },
   translationBubble: {

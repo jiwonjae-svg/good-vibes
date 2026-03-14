@@ -31,10 +31,10 @@ function dateDiffInDays(a: string | null, b: string): number {
   return isNaN(diff) ? 999 : diff;
 }
 
-export const STREAK_BADGE_THRESHOLDS = [7, 30, 100, 365] as const;
+export const STREAK_BADGE_THRESHOLDS = [3, 7, 30, 100, 365] as const;
 export type BadgeId = `streak_${typeof STREAK_BADGE_THRESHOLDS[number]}`;
-export const QUOTE_BADGE_THRESHOLDS = [50, 200] as const;
-export const BOOKMARK_BADGE_THRESHOLD = 5;
+export const QUOTE_BADGE_THRESHOLDS = [50, 200, 500] as const;
+export const BOOKMARK_BADGE_THRESHOLDS = [5, 20] as const;
 
 interface UserState {
   isPremium: boolean;
@@ -422,17 +422,20 @@ export const useUserStore = create<UserState>((set, get) => ({
       : [...ids, quoteId];
     set({ bookmarkedQuoteIds: next });
     await get().persistUser();
-    // Award bookmark badge
-    if (!isCurrentlyBookmarked && next.length >= BOOKMARK_BADGE_THRESHOLD) {
+    // Award bookmark badges
+    if (!isCurrentlyBookmarked) {
       const todayStr = new Date().toISOString().split('T')[0];
       const currentBadges = get().earnedBadges;
-      const badgeId = 'bookmark_5';
-      if (!currentBadges.includes(badgeId)) {
-        const newBadges = [...currentBadges, badgeId];
-        const newDates = { ...get().earnedBadgeDates, [badgeId]: todayStr };
-        appLog.log('[badge] bookmark badge earned', { uid, badgeId });
-        set({ earnedBadges: newBadges, newBadgeEarned: badgeId, earnedBadgeDates: newDates });
-        if (uid) saveUserBadges(uid, newBadges).catch(() => {});
+      for (const threshold of BOOKMARK_BADGE_THRESHOLDS) {
+        const badgeId = `bookmark_${threshold}`;
+        if (next.length >= threshold && !currentBadges.includes(badgeId)) {
+          const newBadges = [...get().earnedBadges, badgeId];
+          const newDates = { ...get().earnedBadgeDates, [badgeId]: todayStr };
+          appLog.log('[badge] bookmark badge earned', { uid, badgeId });
+          set({ earnedBadges: newBadges, newBadgeEarned: badgeId, earnedBadgeDates: newDates });
+          if (uid) saveUserBadges(uid, newBadges).catch(() => {});
+          break;
+        }
       }
     }
     if (uid) {

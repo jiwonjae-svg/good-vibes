@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  ActivityIndicator, Image, Alert, Modal,
+  ActivityIndicator, Alert, Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,12 +13,13 @@ import { Fonts, FontSize, Spacing, BorderRadius, Shadows } from '../../constants
 import { useUserStore } from '../../stores/useUserStore';
 import { useCommunityStore } from '../../stores/useCommunityStore';
 import { fetchMySubmissions, type CommunityQuote } from '../../services/communityService';
-import { fetchPublicUserProfile } from '../../services/firestoreUserService';
+import { fetchPublicUserProfile, fetchFollowerList, fetchFollowingList, type FollowUser } from '../../services/firestoreUserService';
 import { signInWithGoogleNative } from '../../services/authService';
 import { appLog } from '../../services/logger';
 import GoogleSignInConfirmModal from '../../components/GoogleSignInConfirmModal';
 import ProfileSetupModal from '../../components/ProfileSetupModal';
 import EditProfileModal from '../../components/EditProfileModal';
+import ProfileAvatar from '../../components/ProfileAvatar';
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
@@ -47,6 +48,10 @@ export default function ProfileScreen() {
   const [pendingUser, setPendingUser] = useState<{ uid: string; displayName: string | null; email: string | null; photoURL: string | null } | null>(null);
   // Edit profile state
   const [editProfileVisible, setEditProfileVisible] = useState(false);
+  // Follow list modal state
+  const [followListType, setFollowListType] = useState<'followers' | 'following' | null>(null);
+  const [followList, setFollowList] = useState<FollowUser[]>([]);
+  const [followListLoading, setFollowListLoading] = useState(false);
   // Quote detail modal
   const [selectedQuote, setSelectedQuote] = useState<CommunityQuote | null>(null);
 
@@ -132,6 +137,21 @@ export default function ProfileScreen() {
     await setProfile(name, uname, photo);
   };
 
+  const handleOpenFollowList = async (type: 'followers' | 'following') => {
+    if (!uid) return;
+    setFollowListType(type);
+    setFollowList([]);
+    setFollowListLoading(true);
+    try {
+      const list = type === 'followers'
+        ? await fetchFollowerList(uid)
+        : await fetchFollowingList(uid);
+      setFollowList(list);
+    } catch { /* silently fail */ } finally {
+      setFollowListLoading(false);
+    }
+  };
+
   const handleDelete = (quoteId: string) => {
     Alert.alert(
       t('community.delete'),
@@ -210,6 +230,62 @@ export default function ProfileScreen() {
         onSave={handleSaveProfile}
       />
 
+      {/* Follow list modal */}
+      <Modal
+        visible={followListType !== null}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setFollowListType(null)}
+      >
+        <SafeAreaView style={[s.container, { backgroundColor: colors.background }]} edges={['top']}>
+          <View style={[s.followModalHeader, { borderBottomColor: colors.grass0 }]}>
+            <Pressable onPress={() => setFollowListType(null)} hitSlop={12}>
+              <Ionicons name="close" size={24} color={colors.textSecondary} />
+            </Pressable>
+            <Text style={[s.followModalTitle, { color: colors.textPrimary }]}>
+              {followListType === 'followers' ? t('profile.followerList') : t('profile.followingList')}
+            </Text>
+            <View style={{ width: 24 }} />
+          </View>
+          {followListLoading ? (
+            <View style={s.centered}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : followList.length === 0 ? (
+            <View style={s.centered}>
+              <Ionicons name="people-outline" size={48} color={colors.textMuted} />
+              <Text style={[s.guestText, { color: colors.textMuted }]}>
+                {followListType === 'followers' ? t('profile.noFollowers') : t('profile.noFollowing')}
+              </Text>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={{ paddingVertical: Spacing.sm }}>
+              {followList.map((user) => (
+                <View key={user.uid} style={[s.followUserRow, { borderBottomColor: colors.grass0 }]}>
+                  <ProfileAvatar
+                    photoURL={user.photoURL}
+                    displayName={user.displayName}
+                    size={40}
+                    backgroundColor={colors.primary + '40'}
+                    textColor={colors.primary}
+                  />
+                  <View style={s.followUserInfo}>
+                    <Text style={[s.followUserName, { color: colors.textPrimary }]} numberOfLines={1}>
+                      {user.displayName ?? user.uid}
+                    </Text>
+                    {user.username ? (
+                      <Text style={[s.followUserHandle, { color: colors.textSecondary }]} numberOfLines={1}>
+                        @{user.username}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
+
       {/* Quote detail modal — DailyQuoteModal style */}
       <Modal
         transparent
@@ -258,13 +334,14 @@ export default function ProfileScreen() {
         {/* Profile header */}
         <View style={s.profileSection}>
           <Pressable onPress={handleOpenEditProfile} style={s.avatarWrapper}>
-            <View style={[s.avatar, { backgroundColor: colors.primary + '40' }]}>
-              {photoURL ? (
-                <Image source={{ uri: photoURL }} style={s.avatarImg} />
-              ) : (
-                <Text style={[s.avatarInitial, { color: colors.primary }]}>{initial}</Text>
-              )}
-            </View>
+            <ProfileAvatar
+              photoURL={photoURL}
+              displayName={displayName ?? username}
+              size={80}
+              backgroundColor={colors.primary + '40'}
+              textColor={colors.primary}
+              style={s.avatar}
+            />
             <View style={[s.editBadge, { backgroundColor: colors.primary }]}>
               <Ionicons name="pencil" size={12} color="#fff" />
             </View>
@@ -275,15 +352,15 @@ export default function ProfileScreen() {
           ) : null}
 
           <View style={s.statsRow}>
-            <View style={s.statItem}>
+            <Pressable style={s.statItem} onPress={() => handleOpenFollowList('followers')} hitSlop={8}>
               <Text style={[s.statCount, { color: colors.textPrimary }]}>{socialStats.followerCount}</Text>
               <Text style={[s.statLabel, { color: colors.textSecondary }]}>{t('profile.followers')}</Text>
-            </View>
+            </Pressable>
             <View style={[s.statDivider, { backgroundColor: colors.grass0 }]} />
-            <View style={s.statItem}>
+            <Pressable style={s.statItem} onPress={() => handleOpenFollowList('following')} hitSlop={8}>
               <Text style={[s.statCount, { color: colors.textPrimary }]}>{socialStats.followingCount}</Text>
               <Text style={[s.statLabel, { color: colors.textSecondary }]}>{t('profile.following')}</Text>
-            </View>
+            </Pressable>
             <View style={[s.statDivider, { backgroundColor: colors.grass0 }]} />
             <View style={s.statItem}>
               <Text style={[s.statCount, { color: colors.textPrimary }]}>{quotes.length}</Text>
@@ -367,6 +444,13 @@ function makeStyles(colors: any) {
     footerText: { ...Fonts.body, fontSize: FontSize.xs },
     cardActions: { flexDirection: 'row', gap: Spacing.sm },
     actionBtn: { padding: 4 },
+    // Follow list modal
+    followModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderBottomWidth: 1 },
+    followModalTitle: { ...Fonts.heading, fontSize: FontSize.md },
+    followUserRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth },
+    followUserInfo: { flex: 1 },
+    followUserName: { ...Fonts.heading, fontSize: FontSize.sm },
+    followUserHandle: { ...Fonts.body, fontSize: FontSize.xs },
     // Quote detail modal (DailyQuoteModal style)
     qModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', padding: Spacing.xl },
     qModalSheet: { width: '100%', maxWidth: 360, borderRadius: BorderRadius.xl, padding: Spacing.xl, ...Shadows.card },

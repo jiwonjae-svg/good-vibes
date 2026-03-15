@@ -150,7 +150,10 @@ export default function SettingsScreen() {
       {/* Badge Modal */}
       <Modal transparent visible={badgeModalVisible} animationType="slide" onRequestClose={() => setBadgeModalVisible(false)}>
         <Pressable style={s.modalOverlay} onPress={() => setBadgeModalVisible(false)}>
-          <Pressable style={[s.modalSheet, { backgroundColor: colors.surface, height: '78%', width: '100%', maxWidth: 400 }]} onPress={(e) => e.stopPropagation()}>
+          <View
+            style={[s.modalSheet, { backgroundColor: colors.surface, height: '78%', width: '100%', maxWidth: 400 }]}
+            onStartShouldSetResponder={() => true}
+          >
             <Text style={[s.premiumModalTitle, { color: colors.textPrimary, marginBottom: Spacing.lg }]}>{t('settings.myBadges')}</Text>
             <ScrollView showsVerticalScrollIndicator={true} nestedScrollEnabled style={{ width: '100%', flex: 1 }}>
               {Object.entries(BADGE_DISPLAY)
@@ -176,7 +179,7 @@ export default function SettingsScreen() {
               })}
               <View style={{ height: Spacing.lg }} />
             </ScrollView>
-          </Pressable>
+          </View>
         </Pressable>
       </Modal>
 

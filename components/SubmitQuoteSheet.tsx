@@ -10,6 +10,7 @@ import { useThemeColors } from '../hooks/useThemeColors';
 import { FontSize, Spacing, BorderRadius, Fonts } from '../constants/theme';
 import { useCommunityStore } from '../stores/useCommunityStore';
 import { useUserStore } from '../stores/useUserStore';
+import { saveUserBadges } from '../services/firestoreUserService';
 import { CATEGORY_THEMES } from '../data/categories';
 
 // Fireworks particle colors
@@ -187,6 +188,8 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
           const newBadges = [...store.earnedBadges, 'community_1'];
           const newDates = { ...store.earnedBadgeDates, community_1: todayStr };
           useUserStore.setState({ earnedBadges: newBadges, newBadgeEarned: 'community_1', earnedBadgeDates: newDates });
+          // Save to Firestore so the badge persists across logout/login
+          if (store.uid) saveUserBadges(store.uid, newBadges, newDates).catch(() => {});
         }
         // Increment submission count (awards community_5 badge at 5 total)
         useUserStore.getState().incrementCommunitySubmitCount();

@@ -467,13 +467,31 @@ function withAndroidWidget(config) {
         `$1\n\nimport ${packageId}.widget.WidgetPackage\n`,
       );
 
-      // Inject add(WidgetPackage()) inside the .apply { } block of getPackages()
-      src = src.replace(
-        /(PackageList\(this\)\.packages\.apply\s*\{)([\s\S]*?)(\s*\})/,
-        (match, open, inner, close) => {
-          return `${open}${inner}            add(WidgetPackage())\n        ${close.trimStart()}`;
-        },
-      );
+      // Pattern 1: PackageList(this).packages.apply { ... }
+      if (src.includes('PackageList(this).packages.apply')) {
+        src = src.replace(
+          /(PackageList\(this\)\.packages\.apply\s*\{)([\s\S]*?)(\s*\})/,
+          (match, open, inner, close) => {
+            return `${open}${inner}            add(WidgetPackage())\n        ${close.trimStart()}`;
+          },
+        );
+      // Pattern 2: override fun getPackages(): List<ReactPackage> { return mutableListOf(... }
+      } else if (src.includes('getPackages()')) {
+        src = src.replace(
+          /(override fun getPackages\(\)[\s\S]*?return\s+(?:mutableListOf|listOf)\()([\s\S]*?)(\))/,
+          (match, open, inner, close) => {
+            const sep = inner.trim() ? ',\n                ' : '\n                ';
+            return `${open}${inner}${sep}WidgetPackage()${close}`;
+          },
+        );
+      // Pattern 3: add(PackageList(this).getPackages()) style
+      } else {
+        // Fallback: append before the closing brace of the class
+        src = src.replace(
+          /(override fun getPackages\(\)[^}]*\{)/,
+          `$1\n        val packages = PackageList(this).packages\n        packages.add(WidgetPackage())\n        return packages\n    }\n\n    // WIDGET_PACKAGE_ADDED — original getPackages:\n    fun _originalGetPackages_unused() {`,
+        );
+      }
 
       fs.writeFileSync(mainAppPath, src);
       return mod;

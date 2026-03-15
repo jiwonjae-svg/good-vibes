@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  ActivityIndicator, Image, Alert, Modal, TextInput,
+  ActivityIndicator, Image, Alert, Modal,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,7 @@ import { signInWithGoogleNative } from '../../services/authService';
 import { appLog } from '../../services/logger';
 import GoogleSignInConfirmModal from '../../components/GoogleSignInConfirmModal';
 import ProfileSetupModal from '../../components/ProfileSetupModal';
+import EditProfileModal from '../../components/EditProfileModal';
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
@@ -25,6 +27,7 @@ export default function ProfileScreen() {
   const displayName = useUserStore((s) => s.displayName);
   const username = useUserStore((s) => s.username);
   const photoURL = useUserStore((s) => s.photoURL);
+  const isDark = useUserStore((s) => s.isDarkMode);
 
   const setAuth = useUserStore((s) => s.setAuth);
   const setAuthCompleted = useUserStore((s) => s.setAuthCompleted);
@@ -44,8 +47,6 @@ export default function ProfileScreen() {
   const [pendingUser, setPendingUser] = useState<{ uid: string; displayName: string | null; email: string | null; photoURL: string | null } | null>(null);
   // Edit profile state
   const [editProfileVisible, setEditProfileVisible] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editUsername, setEditUsername] = useState('');
   // Quote detail modal
   const [selectedQuote, setSelectedQuote] = useState<CommunityQuote | null>(null);
 
@@ -124,19 +125,11 @@ export default function ProfileScreen() {
   };
 
   const handleOpenEditProfile = () => {
-    setEditName(displayName ?? '');
-    setEditUsername(username ?? '');
     setEditProfileVisible(true);
   };
 
-  const handleSaveProfile = async () => {
-    const trimmedName = editName.trim();
-    if (!trimmedName) {
-      Alert.alert(t('profile.nameRequired'));
-      return;
-    }
-    await setProfile(trimmedName, editUsername.trim());
-    setEditProfileVisible(false);
+  const handleSaveProfile = async (name: string, uname: string, photo?: string) => {
+    await setProfile(name, uname, photo);
   };
 
   const handleDelete = (quoteId: string) => {
@@ -208,73 +201,55 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={[s.container, { backgroundColor: colors.background }]} edges={['top']}>
       {/* Edit Profile Modal */}
-      <Modal
-        transparent
+      <EditProfileModal
         visible={editProfileVisible}
-        animationType="slide"
-        onRequestClose={() => setEditProfileVisible(false)}
-      >
-        <Pressable style={s.modalOverlay} onPress={() => setEditProfileVisible(false)}>
-          <Pressable style={[s.modalSheet, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
-            <Text style={[s.modalTitle, { color: colors.textPrimary }]}>{t('settings.editProfile')}</Text>
-            <View style={{ width: '100%', gap: Spacing.md }}>
-              <View>
-                <Text style={[s.inputLabel, { color: colors.textSecondary }]}>{t('settings.editProfileName')}</Text>
-                <TextInput
-                  value={editName}
-                  onChangeText={setEditName}
-                  placeholder={t('profile.namePlaceholder')}
-                  placeholderTextColor={colors.textMuted}
-                  style={[s.textInput, { color: colors.textPrimary, borderColor: colors.grass0, backgroundColor: colors.surfaceAlt }]}
-                />
-              </View>
-              <View>
-                <Text style={[s.inputLabel, { color: colors.textSecondary }]}>{t('settings.editProfileUsername')}</Text>
-                <TextInput
-                  value={editUsername}
-                  onChangeText={setEditUsername}
-                  placeholder={t('profile.usernamePlaceholder')}
-                  placeholderTextColor={colors.textMuted}
-                  autoCapitalize="none"
-                  style={[s.textInput, { color: colors.textPrimary, borderColor: colors.grass0, backgroundColor: colors.surfaceAlt }]}
-                />
-              </View>
-            </View>
-            <Pressable
-              style={[s.saveBtn, { backgroundColor: colors.primary }]}
-              onPress={handleSaveProfile}
-            >
-              <Text style={s.saveBtnText}>{t('settings.editProfileSave')}</Text>
-            </Pressable>
-            <Pressable style={s.cancelBtn} onPress={() => setEditProfileVisible(false)}>
-              <Text style={[s.cancelBtnText, { color: colors.textMuted }]}>{t('common.cancel')}</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        onClose={() => setEditProfileVisible(false)}
+        displayName={displayName ?? ''}
+        username={username ?? ''}
+        photoURL={photoURL}
+        onSave={handleSaveProfile}
+      />
 
-      {/* Quote detail modal */}
+      {/* Quote detail modal — DailyQuoteModal style */}
       <Modal
         transparent
         visible={!!selectedQuote}
         animationType="fade"
         onRequestClose={() => setSelectedQuote(null)}
       >
-        <Pressable style={s.modalOverlay} onPress={() => setSelectedQuote(null)}>
-          <Pressable style={[s.quoteDetailSheet, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
-            <Pressable style={s.closeBtn} onPress={() => setSelectedQuote(null)}>
-              <Ionicons name="close" size={22} color={colors.textMuted} />
-            </Pressable>
-            <Text style={[s.quoteDetailText, { color: colors.textPrimary }]}>
-              "{selectedQuote?.text}"
-            </Text>
-            {selectedQuote?.author ? (
-              <Text style={[s.quoteDetailAuthor, { color: colors.textSecondary }]}>— {selectedQuote.author}</Text>
-            ) : null}
-            <View style={s.quoteDetailFooter}>
-              <Ionicons name="heart" size={14} color={colors.error} />
-              <Text style={[s.quoteDetailLikes, { color: colors.textMuted }]}>{selectedQuote?.likeCount ?? 0}</Text>
+        <Pressable style={s.qModalOverlay} onPress={() => setSelectedQuote(null)}>
+          <Pressable style={[s.qModalSheet, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <View style={s.qModalHeader}>
+              <View style={s.qModalTitleRow}>
+                <Ionicons name="create-outline" size={18} color={colors.primary} />
+                <Text style={[s.qModalTitle, { color: colors.textPrimary }]}>{t('community.myQuotes')}</Text>
+              </View>
+              <Pressable onPress={() => setSelectedQuote(null)} hitSlop={12}>
+                <Ionicons name="close" size={24} color={colors.textSecondary} />
+              </Pressable>
             </View>
+            {/* Gradient quote card */}
+            <LinearGradient
+              colors={isDark ? ['#1a1a3a', '#2d1b69'] : ['#FFE5D9', '#E8D4FF']}
+              style={s.qModalCard}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={[s.qModalText, { color: colors.textPrimary }]}>{selectedQuote?.text}</Text>
+              {selectedQuote?.author ? (
+                <Text style={[s.qModalAuthor, { color: colors.textSecondary }]}>— {selectedQuote.author}</Text>
+              ) : null}
+            </LinearGradient>
+            {/* Likes */}
+            <View style={s.qModalLikesRow}>
+              <Ionicons name="heart" size={16} color={colors.error} />
+              <Text style={[s.qModalLikesText, { color: colors.textMuted }]}>{selectedQuote?.likeCount ?? 0}</Text>
+            </View>
+            {/* Close */}
+            <Pressable onPress={() => setSelectedQuote(null)} style={s.qModalCloseBtn}>
+              <Text style={[s.qModalCloseBtnText, { color: colors.textMuted }]}>{t('common.cancel')}</Text>
+            </Pressable>
           </Pressable>
         </Pressable>
       </Modal>
@@ -392,21 +367,18 @@ function makeStyles(colors: any) {
     footerText: { ...Fonts.body, fontSize: FontSize.xs },
     cardActions: { flexDirection: 'row', gap: Spacing.sm },
     actionBtn: { padding: 4 },
-    // Modals
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', alignItems: 'center' },
-    modalSheet: { width: '100%', maxWidth: 440, borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, padding: Spacing.xl, gap: Spacing.sm, alignItems: 'center' },
-    modalTitle: { ...Fonts.heading, fontSize: FontSize.lg, marginBottom: Spacing.sm },
-    inputLabel: { ...Fonts.body, fontSize: FontSize.sm, marginBottom: 4 },
-    textInput: { width: '100%', borderWidth: 1, borderRadius: BorderRadius.md, padding: Spacing.sm, ...Fonts.body, fontSize: FontSize.md },
-    saveBtn: { width: '100%', paddingVertical: Spacing.sm + 2, borderRadius: BorderRadius.full, alignItems: 'center', marginTop: Spacing.md },
-    saveBtnText: { ...Fonts.heading, fontSize: FontSize.md, color: '#fff' },
-    cancelBtn: { paddingVertical: Spacing.sm },
-    cancelBtnText: { ...Fonts.body, fontSize: FontSize.sm },
-    quoteDetailSheet: { width: '100%', maxWidth: 440, borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, padding: Spacing.xl, gap: Spacing.md },
-    closeBtn: { alignSelf: 'flex-end', padding: 4 },
-    quoteDetailText: { ...Fonts.quote, fontSize: FontSize.lg, lineHeight: 28, textAlign: 'center' },
-    quoteDetailAuthor: { ...Fonts.body, fontSize: FontSize.sm, fontStyle: 'italic', textAlign: 'right' },
-    quoteDetailFooter: { flexDirection: 'row', alignItems: 'center', gap: 4, justifyContent: 'center', marginTop: Spacing.xs },
-    quoteDetailLikes: { ...Fonts.body, fontSize: FontSize.sm },
+    // Quote detail modal (DailyQuoteModal style)
+    qModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', padding: Spacing.xl },
+    qModalSheet: { width: '100%', maxWidth: 360, borderRadius: BorderRadius.xl, padding: Spacing.xl, ...Shadows.card },
+    qModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.lg },
+    qModalTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+    qModalTitle: { ...Fonts.heading, fontSize: FontSize.lg },
+    qModalCard: { borderRadius: BorderRadius.lg, padding: Spacing.lg, gap: Spacing.sm, marginBottom: Spacing.lg },
+    qModalText: { ...Fonts.quote, fontSize: FontSize.md, lineHeight: 26, letterSpacing: 0.2 },
+    qModalAuthor: { ...Fonts.body, fontSize: FontSize.sm, fontStyle: 'italic', textAlign: 'right', marginTop: 4 },
+    qModalLikesRow: { flexDirection: 'row', alignItems: 'center', gap: 4, justifyContent: 'center', marginBottom: Spacing.md },
+    qModalLikesText: { ...Fonts.body, fontSize: FontSize.sm },
+    qModalCloseBtn: { alignItems: 'center', paddingVertical: Spacing.sm },
+    qModalCloseBtnText: { ...Fonts.body, fontSize: FontSize.sm },
   });
 }

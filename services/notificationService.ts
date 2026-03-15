@@ -1,6 +1,6 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import i18n from '../i18n';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { getDb } from './firebaseConfig';
 
 const isExpoGo =
@@ -218,4 +218,51 @@ export async function saveFCMToken(uid: string): Promise<void> {
   } catch {
     // Non-critical — silently ignore if token retrieval or Firestore write fails
   }
+}
+
+/**
+ * Checks `users/{myUid}/notifications` for unread follow notifications and
+ * fires a local push notification for each one, then marks them as read.
+ *
+ * Called when the app returns to the foreground (see _layout.tsx AppState handler).
+ * For true background delivery, a Cloud Function is required (see docs/FOLLOW-FEED-ALGORITHM.md).
+ */
+export async function checkFollowNotifications(myUid: string): Promise<void> {
+  const db = getDb();
+  if (!db || !myUid) return;
+
+  try {
+    const q = query(
+      collection(db, 'users', myUid, 'notifications'),
+      where('read', '==', false),
+      where('type', '==', 'follow'),
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) return;
+
+    const Notifications = getNotifications();
+    const batch = writeBatch(db);
+
+    for (const notifDoc of snap.docs) {
+      const data = notifDoc.data();
+      // Mark as read (batch write for efficiency)
+      batch.update(notifDoc.ref, { read: true });
+
+      // Schedule an immediate local notification
+      if (Notifications) {
+        try {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: i18n.t('notification.newFollower'),
+              body: i18n.t('notification.newFollowerBody', { name: data.fromName ?? '누군가' }),
+              sound: true,
+            },
+            trigger: null, // fire immediately
+          });
+        } catch { /* non-critical */ }
+      }
+    }
+
+    await batch.commit();
+  } catch { /* non-critical — notification check should never crash the app */ }
 }

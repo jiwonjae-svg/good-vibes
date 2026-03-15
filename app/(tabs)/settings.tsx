@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, Switch, Modal, TextInput, Alert, Image,
+  View, Text, StyleSheet, ScrollView, Pressable, Switch, Modal, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +16,9 @@ import { appLog } from '../../services/logger';
 import LanguagePickerModal from '../../components/LanguagePickerModal';
 import CategoryPickerModal from '../../components/CategoryPickerModal';
 import LogStatusModal from '../../components/LogStatusModal';
+import EditProfileModal from '../../components/EditProfileModal';
+import { BADGE_CONFIG } from '../../constants/badges';
+import ProfileAvatar from '../../components/ProfileAvatar';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
@@ -42,6 +45,8 @@ export default function SettingsScreen() {
     showCommunityQuotes, setShowCommunityQuotes,
     earnedBadges, earnedBadgeDates,
     photoURL,
+    setAuthCompleted,
+    setPendingNewUserSignIn,
   } = useUserStore();
 
   const FONT_SIZE_OPTIONS = [
@@ -57,8 +62,6 @@ export default function SettingsScreen() {
   const [premiumModalVisible, setPremiumModalVisible] = useState(false);
   const [logModalVisible, setLogModalVisible] = useState(false);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editUsername, setEditUsername] = useState('');
   const [badgeModalVisible, setBadgeModalVisible] = useState(false);
 
   const handlePremiumPurchase = () => {
@@ -71,20 +74,11 @@ export default function SettingsScreen() {
   };
 
   const handleOpenEditProfile = () => {
-    setEditName(displayName ?? '');
-    setEditUsername(username ?? '');
     setEditProfileVisible(true);
   };
 
-  const handleSaveProfile = async () => {
-    const trimmedName = editName.trim();
-    const trimmedUsername = editUsername.trim();
-    if (!trimmedName) {
-      Alert.alert(t('profile.nameRequired'));
-      return;
-    }
-    await setProfile(trimmedName, trimmedUsername);
-    setEditProfileVisible(false);
+  const handleSaveProfile = async (name: string, uname: string, photo?: string) => {
+    await setProfile(name, uname, photo);
   };
 
   const handleLanguage = () => setLangModalVisible(true);
@@ -135,20 +129,7 @@ export default function SettingsScreen() {
   const catCount = selectedCategories.length;
   const catLabel = catCount === 0 ? t('settings.allCategories') : t('settings.categoriesSelected', { count: catCount });
 
-  const BADGE_DISPLAY: Record<string, { emoji: string; titleKey: string; descKey: string }> = {
-    streak_3:    { emoji: '🌟', titleKey: 'badge.streak3Title',    descKey: 'badge.streak3Desc' },
-    streak_7:    { emoji: '🔥', titleKey: 'badge.streak7Title',    descKey: 'badge.streak7Desc' },
-    streak_30:   { emoji: '⭐', titleKey: 'badge.streak30Title',   descKey: 'badge.streak30Desc' },
-    streak_100:  { emoji: '👑', titleKey: 'badge.streak100Title',  descKey: 'badge.streak100Desc' },
-    streak_365:  { emoji: '🏆', titleKey: 'badge.streak365Title',  descKey: 'badge.streak365Desc' },
-    quotes_50:   { emoji: '📖', titleKey: 'badge.quotes50Title',   descKey: 'badge.quotes50Desc' },
-    quotes_200:  { emoji: '📚', titleKey: 'badge.quotes200Title',  descKey: 'badge.quotes200Desc' },
-    quotes_500:  { emoji: '🎯', titleKey: 'badge.quotes500Title',  descKey: 'badge.quotes500Desc' },
-    bookmark_5:  { emoji: '💛', titleKey: 'badge.bookmark5Title',  descKey: 'badge.bookmark5Desc' },
-    bookmark_20: { emoji: '🌟', titleKey: 'badge.bookmark20Title', descKey: 'badge.bookmark20Desc' },
-    community_1: { emoji: '✍️',  titleKey: 'badge.community1Title', descKey: 'badge.community1Desc' },
-    community_5: { emoji: '📣',  titleKey: 'badge.community5Title', descKey: 'badge.community5Desc' },
-  };
+  const BADGE_DISPLAY = BADGE_CONFIG;
 
   return (
     <SafeAreaView style={[s.safe]} edges={['top']}>
@@ -169,15 +150,17 @@ export default function SettingsScreen() {
       {/* Badge Modal */}
       <Modal transparent visible={badgeModalVisible} animationType="slide" onRequestClose={() => setBadgeModalVisible(false)}>
         <Pressable style={s.modalOverlay} onPress={() => setBadgeModalVisible(false)}>
-          <Pressable style={[s.modalSheet, { backgroundColor: colors.surface, maxHeight: '80%', width: '100%', maxWidth: 400 }]} onPress={(e) => e.stopPropagation()}>
+          <Pressable style={[s.modalSheet, { backgroundColor: colors.surface, height: '78%', width: '100%', maxWidth: 400 }]} onPress={(e) => e.stopPropagation()}>
             <Text style={[s.premiumModalTitle, { color: colors.textPrimary, marginBottom: Spacing.lg }]}>{t('settings.myBadges')}</Text>
-            <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
-              {Object.entries(BADGE_DISPLAY).map(([id, badge]) => {
+            <ScrollView showsVerticalScrollIndicator={true} nestedScrollEnabled style={{ width: '100%', flex: 1 }}>
+              {Object.entries(BADGE_DISPLAY)
+                .sort(([aId], [bId]) => (earnedBadges.includes(aId) ? 0 : 1) - (earnedBadges.includes(bId) ? 0 : 1))
+                .map(([id, badge]) => {
                 const earned = earnedBadges.includes(id);
                 return (
                   <View key={id} style={[{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.xs, opacity: earned ? 1 : 0.45 }]}>
-                    <View style={[{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: earned ? colors.primaryLight + '30' : colors.grass0 }]}>
-                      <Text style={{ fontSize: 24 }}>{badge.emoji}</Text>
+                    <View style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: earned ? colors.primaryLight + '30' : colors.surfaceAlt, overflow: 'hidden', borderWidth: 2, borderColor: earned ? colors.primary : colors.textMuted }}>
+                      <Image source={badge.image} style={{ width: 48, height: 48, transform: [{ scale: 1.35 }] }} resizeMode="contain" />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[s.rowTitle, { color: earned ? colors.textPrimary : colors.textMuted }]}>{t(badge.titleKey)}</Text>
@@ -198,56 +181,14 @@ export default function SettingsScreen() {
       </Modal>
 
       {/* Profile Edit Modal */}
-      <Modal
-        transparent
+      <EditProfileModal
         visible={editProfileVisible}
-        animationType="slide"
-        onRequestClose={() => setEditProfileVisible(false)}
-      >
-        <Pressable style={s.modalOverlay} onPress={() => setEditProfileVisible(false)}>
-          <Pressable style={[s.modalSheet, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
-            <Text style={[s.premiumModalTitle, { color: colors.textPrimary, marginBottom: Spacing.lg }]}>
-              {t('settings.editProfile')}
-            </Text>
-            <View style={{ width: '100%', gap: Spacing.md }}>
-              <View>
-                <Text style={[s.rowSubtitle, { color: colors.textSecondary, marginBottom: 6 }]}>
-                  {t('settings.editProfileName')}
-                </Text>
-                <TextInput
-                  value={editName}
-                  onChangeText={setEditName}
-                  placeholder={t('profile.namePlaceholder')}
-                  placeholderTextColor={colors.textMuted}
-                  style={[s.textInput, { color: colors.textPrimary, borderColor: colors.grass0, backgroundColor: colors.surfaceAlt }]}
-                />
-              </View>
-              <View>
-                <Text style={[s.rowSubtitle, { color: colors.textSecondary, marginBottom: 6 }]}>
-                  {t('settings.editProfileUsername')}
-                </Text>
-                <TextInput
-                  value={editUsername}
-                  onChangeText={setEditUsername}
-                  placeholder={t('profile.usernamePlaceholder')}
-                  placeholderTextColor={colors.textMuted}
-                  autoCapitalize="none"
-                  style={[s.textInput, { color: colors.textPrimary, borderColor: colors.grass0, backgroundColor: colors.surfaceAlt }]}
-                />
-              </View>
-            </View>
-            <Pressable
-              style={[s.purchaseBtn, { backgroundColor: colors.primary, marginTop: Spacing.xl }]}
-              onPress={handleSaveProfile}
-            >
-              <Text style={s.purchaseBtnText}>{t('settings.editProfileSave')}</Text>
-            </Pressable>
-            <Pressable style={s.laterBtn} onPress={() => setEditProfileVisible(false)}>
-              <Text style={[s.laterBtnText, { color: colors.textMuted }]}>{t('common.cancel')}</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        onClose={() => setEditProfileVisible(false)}
+        displayName={displayName ?? ''}
+        username={username ?? ''}
+        photoURL={photoURL}
+        onSave={handleSaveProfile}
+      />
 
       {/* Premium Modal */}
       <Modal
@@ -309,15 +250,14 @@ export default function SettingsScreen() {
               <>
                 <View style={s.row}>
                   <View style={s.rowLeft}>
-                    <View style={[s.avatar, { backgroundColor: colors.primary + '30', overflow: 'hidden' }]}>
-                      {photoURL ? (
-                        <Image source={{ uri: photoURL }} style={{ width: 44, height: 44, borderRadius: 22 }} />
-                      ) : (
-                        <Text style={[s.avatarText, { color: colors.primary }]}>
-                          {(displayName ?? email ?? 'G').charAt(0).toUpperCase()}
-                        </Text>
-                      )}
-                    </View>
+                    <ProfileAvatar
+                      photoURL={photoURL}
+                      displayName={displayName ?? email ?? 'G'}
+                      size={44}
+                      backgroundColor={colors.primary + '30'}
+                      textColor={colors.primary}
+                      style={[s.avatar]}
+                    />
                     <View>
                       <Text style={s.rowTitle}>{displayName ?? email ?? t('settings.googleUser')}</Text>
                       {(username || email) && (
@@ -373,12 +313,22 @@ export default function SettingsScreen() {
                       borderColor: isDarkMode ? colors.grass0 : '#dadce0',
                     },
                   ]}
-                  onPress={() => {
-                    signInWithGoogleNative()
-                      .then((user) => {
-                        if (user) setAuth({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
-                      })
-                      .catch((err) => console.error('[settings] Google sign-in failed:', err));
+                  onPress={async () => {
+                    try {
+                      const user = await signInWithGoogleNative();
+                      if (user) {
+                        await setAuth({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
+                        const currentUsername = useUserStore.getState().username;
+                        if (!currentUsername) {
+                          // New user — trigger global onboarding modals in _layout.tsx
+                          setPendingNewUserSignIn({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
+                        } else {
+                          await setAuthCompleted();
+                        }
+                      }
+                    } catch (err) {
+                      console.error('[settings] Google sign-in failed:', err);
+                    }
                   }}
                 >
                   <Ionicons name="logo-google" size={20} color="#EA4335" />

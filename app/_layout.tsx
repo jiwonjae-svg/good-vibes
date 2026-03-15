@@ -7,13 +7,17 @@ import * as NavigationBar from 'expo-navigation-bar';
 import '../i18n';
 import { initFirebase } from '../services/firebaseConfig';
 import { initSentry } from '../services/sentryService';
-import { configureGoogleSignIn, onAuthChange } from '../services/authService';
-import { initNotificationHandler, validateAndRescheduleDailyReminder } from '../services/notificationService';
+import { configureGoogleSignIn, onAuthChange, getCurrentUser } from '../services/authService';
+import { initNotificationHandler, validateAndRescheduleDailyReminder, checkFollowNotifications } from '../services/notificationService';
 import { useGrassStore } from '../stores/useGrassStore';
 import { useUserStore } from '../stores/useUserStore';
 import OnboardingScreen from '../components/OnboardingScreen';
 import AnimatedSplash from '../components/AnimatedSplash';
 import ErrorBoundary from '../components/ErrorBoundary';
+import MilestoneBadgeModal from '../components/MilestoneBadgeModal';
+import GoogleSignInConfirmModal from '../components/GoogleSignInConfirmModal';
+import ProfileSetupModal from '../components/ProfileSetupModal';
+import { appLog } from '../services/logger';
 
 // Module-level flag: ensures the splash plays only once per JS runtime session,
 // even if RootLayout somehow remounts (e.g. after settings onboarding replay).
@@ -35,18 +39,68 @@ export default function RootLayout() {
   const setAuth = useUserStore((s) => s.setAuth);
   const showOnboardingFlag = useUserStore((s) => s.showOnboardingFlag);
   const setShowOnboardingFlag = useUserStore((s) => s.setShowOnboardingFlag);
+  const newBadgeEarned = useUserStore((s) => s.newBadgeEarned);
+  const clearNewBadge = useUserStore((s) => s.clearNewBadge);
+  const pendingNewUserSignIn = useUserStore((s) => s.pendingNewUserSignIn);
+  const setPendingNewUserSignIn = useUserStore((s) => s.setPendingNewUserSignIn);
+  const setProfile = useUserStore((s) => s.setProfile);
+  const setAuthCompleted = useUserStore((s) => s.setAuthCompleted);
+
+  // New-user onboarding modals (triggered by any login path, not just login.tsx)
+  const [showNewUserConfirm, setShowNewUserConfirm] = useState(false);
+  const [showNewUserProfile, setShowNewUserProfile] = useState(false);
+
+  useEffect(() => {
+    if (pendingNewUserSignIn && !showNewUserConfirm && !showNewUserProfile) {
+      setShowNewUserConfirm(true);
+    }
+  }, [pendingNewUserSignIn]);
+
+  const handleNewUserConfirmAgree = useCallback(() => {
+    setShowNewUserConfirm(false);
+    setShowNewUserProfile(true);
+  }, []);
+
+  const handleNewUserConfirmCancel = useCallback(() => {
+    setShowNewUserConfirm(false);
+    setPendingNewUserSignIn(null);
+  }, [setPendingNewUserSignIn]);
+
+  const handleNewUserProfileComplete = useCallback(async (displayName: string, username: string) => {
+    appLog.log('[layout] new user profile complete', { displayName, username });
+    await setProfile(displayName, username);
+    await setAuthCompleted();
+    setPendingNewUserSignIn(null);
+    setShowNewUserProfile(false);
+  }, [setProfile, setAuthCompleted, setPendingNewUserSignIn]);
+
+  const handleNewUserProfileSkip = useCallback(async () => {
+    const randomSuffix = Date.now().toString(36).slice(-6);
+    const randomUsername = `user_${randomSuffix}`;
+    const name = pendingNewUserSignIn?.displayName ?? 'User';
+    try { await setProfile(name, randomUsername); } catch { /* best-effort */ }
+    await setAuthCompleted();
+    setPendingNewUserSignIn(null);
+    setShowNewUserProfile(false);
+  }, [pendingNewUserSignIn, setProfile, setAuthCompleted, setPendingNewUserSignIn]);
 
   // Re-validate notification schedule when the app returns to the foreground
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
-        const { dailyReminderEnabled, uid, displayName, currentStreak } = useUserStore.getState();
+        const { dailyReminderEnabled, uid, displayName, currentStreak, refreshCloudData } = useUserStore.getState();
         validateAndRescheduleDailyReminder(dailyReminderEnabled, {
           uid: uid ?? undefined,
           userName: displayName ?? undefined,
           currentStreak,
         }).catch(() => {});
+        // Re-sync badge/streak/social data when coming back to foreground.
+        // This also recovers cloud data that was unavailable at login (offline scenario).
+        if (uid) {
+          refreshCloudData().catch(() => {});
+          checkFollowNotifications(uid).catch(() => {});
+        }
       }
       appStateRef.current = nextState;
     });
@@ -64,21 +118,39 @@ export default function RootLayout() {
   const [showSplash, setShowSplash] = useState(!_splashHasPlayed);
 
   // Single global auth listener — set up only after the user store has loaded
-  // from AsyncStorage. Skips the first emission to avoid false sign-outs caused
-  // by Firebase taking a moment to restore its session (race condition).
+  // from AsyncStorage. Uses a 3-second grace window on the first null emission so
+  // that a transient null while Firebase restores its session does not trigger a
+  // false sign-out. Once a valid user emission has been received, any subsequent
+  // null is treated immediately as a genuine sign-out.
   useEffect(() => {
     if (!isLoaded) return;
-    let firstEmission = true;
+    let sessionInitialized = false;
+    let signOutTimer: ReturnType<typeof setTimeout> | null = null;
     const unsub = onAuthChange((user) => {
-      if (firstEmission) {
-        firstEmission = false;
-        return; // Ignore – may be null while Firebase restores session
+      if (signOutTimer) { clearTimeout(signOutTimer); signOutTimer = null; }
+      if (user) {
+        sessionInitialized = true;
+        return;
       }
-      if (!user && useUserStore.getState().uid) {
+      if (!useUserStore.getState().uid) return;
+      if (sessionInitialized) {
+        // A confirmed session went null → genuine sign-out
         setAuth(null);
+      } else {
+        // First emission is null: Firebase may still be restoring session.
+        // Wait 3 s, then verify with the SDK before acting.
+        signOutTimer = setTimeout(() => {
+          signOutTimer = null;
+          if (!getCurrentUser() && useUserStore.getState().uid) {
+            setAuth(null);
+          }
+        }, 3000);
       }
     });
-    return unsub;
+    return () => {
+      unsub();
+      if (signOutTimer) clearTimeout(signOutTimer);
+    };
   }, [isLoaded]);
 
   useEffect(() => {
@@ -172,7 +244,26 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="login" options={{ gestureEnabled: false }} />
           <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
+          <Stack.Screen name="quote" options={{ gestureEnabled: false, animation: 'none' }} />
         </Stack>
+        {/* Global badge milestone modal — shown on any screen */}
+        <MilestoneBadgeModal
+          badgeId={newBadgeEarned}
+          onClose={() => { if (newBadgeEarned) appLog.log('[layout] badge modal dismissed', { badgeId: newBadgeEarned }); clearNewBadge(); }}
+        />
+        {/* New-user onboarding modals triggered from any login entry point */}
+        <GoogleSignInConfirmModal
+          visible={showNewUserConfirm}
+          email={pendingNewUserSignIn?.email ?? null}
+          onConfirm={handleNewUserConfirmAgree}
+          onCancel={handleNewUserConfirmCancel}
+        />
+        <ProfileSetupModal
+          visible={showNewUserProfile}
+          initialDisplayName={pendingNewUserSignIn?.displayName}
+          onComplete={handleNewUserProfileComplete}
+          onSkip={handleNewUserProfileSkip}
+        />
       </GestureHandlerRootView>
     </ErrorBoundary>
   );

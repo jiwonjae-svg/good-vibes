@@ -6,7 +6,7 @@ import type { LanguageCode } from '../i18n';
 import { clearQuoteCache } from '../services/quoteService';
 import { appLog } from '../services/logger';
 import { scheduleSmartNotifications } from '../services/notificationService';
-import { updatePremiumStatus, fetchPremiumStatus, logActivity, saveBookmarkedQuotes, fetchBookmarkedQuotes, logQuoteBookmarked, saveViewedQuotesForDate, fetchViewedQuotesForDate, saveStreakToFirestore, fetchStreakFromFirestore, saveUserSettings, fetchUserSettings, fetchUsername, saveUserProfile, saveUserBadges, saveQuoteRating, fetchPublicUserProfile } from '../services/firestoreUserService';
+import { updatePremiumStatus, fetchPremiumStatus, logActivity, saveBookmarkedQuotes, fetchBookmarkedQuotes, logQuoteBookmarked, saveViewedQuotesForDate, fetchViewedQuotesForDate, saveStreakToFirestore, fetchStreakFromFirestore, saveUserSettings, fetchUserSettings, fetchUsername, saveUserProfile, saveUserBadges, fetchUserBadges, saveQuoteRating, fetchPublicUserProfile } from '../services/firestoreUserService';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -105,6 +105,9 @@ interface UserState {
   // Total community submissions (for community_5 badge)
   communitySubmitCount: number;
 
+  // Total quote shares (for sharer badge)
+  sharesCount: number;
+
   // Recent category views (ring buffer) — synced to Firestore for smart notifications
   recentViewedCategories: string[];
 
@@ -128,7 +131,8 @@ interface UserState {
   toggleBookmark: (quoteId: string) => Promise<void>;
   isBookmarked: (quoteId: string) => boolean;
   setAuth: (user: { uid: string; displayName: string | null; email: string | null; photoURL: string | null } | null) => Promise<void>;
-  setProfile: (displayName: string, username: string) => Promise<void>;
+  setProfile: (displayName: string, username: string, photoURL?: string) => Promise<void>;
+  incrementShareCount: () => Promise<void>;
   updateStreak: (todayStr: string) => Promise<void>;
   startPremiumTrial: () => Promise<void>;
   isEffectivelyPremium: () => boolean;
@@ -148,6 +152,10 @@ interface UserState {
   incrementCommunitySubmitCount: () => Promise<void>;
   /** Track which quote category the user just viewed (ring buffer of last 30) */
   trackCategoryView: (category: string) => void;
+  refreshCloudData: () => Promise<void>;
+  /** Pending new-user requiring onboarding modals (consent + profile setup) */
+  pendingNewUserSignIn: { uid: string; displayName: string | null; email: string | null; photoURL: string | null } | null;
+  setPendingNewUserSignIn: (user: { uid: string; displayName: string | null; email: string | null; photoURL: string | null } | null) => void;
 }
 
 const USER_KEY = '@dailyglow_user_v1';
@@ -195,9 +203,11 @@ export const useUserStore = create<UserState>((set, get) => ({
   dislikedQuoteIds: [],
   showCommunityQuotes: true,
   communitySubmitCount: 0,
+  sharesCount: 0,
   recentViewedCategories: [],
   followerCount: 0,
   followingCount: 0,
+  pendingNewUserSignIn: null,
 
   loadUser: async () => {
     try {
@@ -325,7 +335,7 @@ export const useUserStore = create<UserState>((set, get) => ({
         const newDates = { ...get().earnedBadgeDates, [badgeId]: todayStr };
         appLog.log('[badge] quotes milestone earned', { uid, badgeId, total: t });
         set({ earnedBadges: next, newBadgeEarned: badgeId, earnedBadgeDates: newDates });
-        if (uid) saveUserBadges(uid, next).catch(() => {});
+        if (uid) saveUserBadges(uid, next, get().earnedBadgeDates).catch(() => {});
         break;
       }
     }
@@ -361,6 +371,7 @@ export const useUserStore = create<UserState>((set, get) => ({
 
   setLanguage: async (lang) => {
     const uid = get().uid;
+    const previousLanguage = get().language;
     i18n.changeLanguage(lang);
     set({ language: lang });
     await get().persistUser();
@@ -372,6 +383,15 @@ export const useUserStore = create<UserState>((set, get) => ({
       const { useQuoteStore } = require('./useQuoteStore');
       useQuoteStore.getState().setQuotes([]);
     } catch (err) { appLog.warn('[setLanguage] failed to reset quote store', { err: String(err) }); }
+    // Award multilingual badge when the user changes to a different language
+    if (lang !== previousLanguage && !get().earnedBadges.includes('multilingual')) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const newBadges = [...get().earnedBadges, 'multilingual'];
+      const newDates = { ...get().earnedBadgeDates, multilingual: todayStr };
+      appLog.log('[badge] multilingual earned', { uid, lang, prev: previousLanguage });
+      set({ earnedBadges: newBadges, newBadgeEarned: 'multilingual', earnedBadgeDates: newDates });
+      if (uid) saveUserBadges(uid, newBadges, get().earnedBadgeDates).catch(() => {});
+    }
   },
 
   setCategories: async (cats) => {
@@ -410,13 +430,13 @@ export const useUserStore = create<UserState>((set, get) => ({
     await get().persistUser();
   },
 
-  setProfile: async (displayName, username) => {
+  setProfile: async (displayName, username, photoURL) => {
     const uid = get().uid;
     const previousUsername = get().username ?? undefined;
-    set({ displayName, username });
+    set({ displayName, username, ...(photoURL !== undefined && { photoURL }) });
     await get().persistUser();
     if (uid) {
-      await saveUserProfile(uid, displayName, username, previousUsername);
+      await saveUserProfile(uid, displayName, username, previousUsername, photoURL);
     }
   },
 
@@ -440,7 +460,7 @@ export const useUserStore = create<UserState>((set, get) => ({
           const newDates = { ...get().earnedBadgeDates, [badgeId]: todayStr };
           appLog.log('[badge] bookmark badge earned', { uid, badgeId });
           set({ earnedBadges: newBadges, newBadgeEarned: badgeId, earnedBadgeDates: newDates });
-          if (uid) saveUserBadges(uid, newBadges).catch(() => {});
+          if (uid) saveUserBadges(uid, newBadges, get().earnedBadgeDates).catch(() => {});
           break;
         }
       }
@@ -460,7 +480,7 @@ export const useUserStore = create<UserState>((set, get) => ({
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-      const [premiumStatus, cloudBookmarks, cloudTodayViewed, cloudSettings, cloudStreak, cloudUsername, socialProfile] = await Promise.all([
+      const [premiumStatus, cloudBookmarks, cloudTodayViewed, cloudSettings, cloudStreak, cloudUsername, socialProfile, cloudBadgesResult] = await Promise.all([
         fetchPremiumStatus(user.uid),
         fetchBookmarkedQuotes(user.uid),
         fetchViewedQuotesForDate(user.uid, todayStr),
@@ -468,7 +488,24 @@ export const useUserStore = create<UserState>((set, get) => ({
         fetchStreakFromFirestore(user.uid),
         fetchUsername(user.uid),
         fetchPublicUserProfile(user.uid),
+        fetchUserBadges(user.uid),
       ]);
+      const cloudBadges = cloudBadgesResult.badges;
+      const cloudBadgeDates = cloudBadgesResult.badgeDates;
+
+      // Merge cloud badges into local state so earned badges survive app reinstall.
+      // Use Firestore-stored badgeDates for accurate acquisition dates; fall back to
+      // today as an approximation only when no date is stored in Firestore.
+      if (cloudBadges.length > 0) {
+        const merged = [...new Set([...get().earnedBadges, ...cloudBadges])];
+        const mergedDates: Record<string, string> = { ...get().earnedBadgeDates };
+        for (const badge of cloudBadges) {
+          if (!mergedDates[badge]) {
+            mergedDates[badge] = cloudBadgeDates[badge] ?? todayStr;
+          }
+        }
+        set({ earnedBadges: merged, earnedBadgeDates: mergedDates });
+      }
       
       if (premiumStatus) {
         set({ isPremium: true });
@@ -530,10 +567,20 @@ export const useUserStore = create<UserState>((set, get) => ({
           ...(cloudSettings.dailyReminderEnabled != null && { dailyReminderEnabled: cloudSettings.dailyReminderEnabled }),
         });
       }
+
+      // Award first_login badge on first-ever sign-in
+      if (!get().earnedBadges.includes('first_login')) {
+        const newBadges = [...get().earnedBadges, 'first_login'];
+        const newDates = { ...get().earnedBadgeDates, first_login: todayStr };
+        appLog.log('[badge] first_login earned', { uid: user.uid });
+        set({ earnedBadges: newBadges, newBadgeEarned: 'first_login', earnedBadgeDates: newDates });
+        saveUserBadges(user.uid, newBadges, get().earnedBadgeDates).catch(() => {});
+      }
     } else {
       // Logout: clear all user-specific data so the next user starts clean.
-      // earnedBadges and premiumTrial* are deliberately NOT cleared — they are
-      // device-side achievements and should survive a re-login.
+      // earnedBadges/earnedBadgeDates are cleared so a different user's cloud
+      // badges don't bleed into the next session; they are restored from
+      // Firestore when the same (or a new) user signs in again.
       set({
         uid: null, displayName: null, email: null, photoURL: null, username: null,
         isPremium: false,
@@ -548,6 +595,12 @@ export const useUserStore = create<UserState>((set, get) => ({
         streakFreezeCount: 0,
         streakFreezeWeekKey: null,
         newBadgeEarned: null,
+        earnedBadges: [],
+        earnedBadgeDates: {},
+        pendingNewUserSignIn: null,
+        // Clear trial expiry so a different user on the same device doesn't
+        // inherit an active Glow+ trial belonging to the previous account.
+        premiumTrialExpiry: null,
       });
       // Clear local viewed-quotes caches
       AsyncStorage.removeItem(VIEWED_QUOTES_KEY).catch(() => {});
@@ -594,9 +647,18 @@ export const useUserStore = create<UserState>((set, get) => ({
         const newDates = { ...get().earnedBadgeDates, [badgeId]: todayStr };
         appLog.log('[badge] milestone earned', { uid, badgeId, streak: newStreak });
         set({ earnedBadges: next, newBadgeEarned: badgeId, earnedBadgeDates: newDates });
-        if (uid) saveUserBadges(uid, next).catch(() => {});
+        if (uid) saveUserBadges(uid, next, get().earnedBadgeDates).catch(() => {});
         break; // award at most one badge per streak update
       }
+    }
+
+    // Award week_perfect: 7+ streak AND bookmarked at least 7 quotes
+    if (newStreak >= 7 && get().bookmarkedQuoteIds.length >= 7 && !get().earnedBadges.includes('week_perfect')) {
+      const next = [...get().earnedBadges, 'week_perfect'];
+      const newDates = { ...get().earnedBadgeDates, week_perfect: todayStr };
+      appLog.log('[badge] week_perfect earned', { uid, streak: newStreak, bookmarks: get().bookmarkedQuoteIds.length });
+      set({ earnedBadges: next, newBadgeEarned: 'week_perfect', earnedBadgeDates: newDates });
+      if (uid) saveUserBadges(uid, next, get().earnedBadgeDates).catch(() => {});
     }
 
     await get().persistUser();
@@ -637,6 +699,10 @@ export const useUserStore = create<UserState>((set, get) => ({
   setFontSizeMultiplier: async (mult) => {
     set({ quoteFontSizeMultiplier: mult });
     await get().persistUser();
+    try {
+      const { saveFontSizeForWidget } = require('../services/widgetService');
+      saveFontSizeForWidget(mult).catch(() => {});
+    } catch { /* silent */ }
   },
 
   setFollowSystemDarkMode: async (follow) => {
@@ -687,6 +753,24 @@ export const useUserStore = create<UserState>((set, get) => ({
     if (uid) {
       const todayIdsOnly = newIds.map((q) => q.split('|')[0]);
       saveViewedQuotesForDate(uid, todayStr, todayIdsOnly).catch(() => {});
+    }
+    // Award early_bird / night_owl badges on first daily view
+    if (todayViewedDate !== todayStr) {
+      const hour = new Date().getHours();
+      const currentBadges = get().earnedBadges;
+      if (hour >= 6 && hour < 7 && !currentBadges.includes('early_bird')) {
+        const newBadges = [...get().earnedBadges, 'early_bird'];
+        const newDates = { ...get().earnedBadgeDates, early_bird: todayStr };
+        appLog.log('[badge] early_bird earned', { uid, hour });
+        set({ earnedBadges: newBadges, newBadgeEarned: 'early_bird', earnedBadgeDates: newDates });
+        if (uid) saveUserBadges(uid, newBadges, get().earnedBadgeDates).catch(() => {});
+      } else if (hour < 1 && !currentBadges.includes('night_owl')) {
+        const newBadges = [...get().earnedBadges, 'night_owl'];
+        const newDates = { ...get().earnedBadgeDates, night_owl: todayStr };
+        appLog.log('[badge] night_owl earned', { uid, hour });
+        set({ earnedBadges: newBadges, newBadgeEarned: 'night_owl', earnedBadgeDates: newDates });
+        if (uid) saveUserBadges(uid, newBadges, get().earnedBadgeDates).catch(() => {});
+      }
     }
   },
 
@@ -755,7 +839,7 @@ export const useUserStore = create<UserState>((set, get) => ({
       const newDates = { ...get().earnedBadgeDates, community_5: todayStr };
       appLog.log('[badge] community_5 earned', { uid, total: newCount });
       set({ earnedBadges: newBadges, newBadgeEarned: 'community_5', earnedBadgeDates: newDates });
-      if (uid) saveUserBadges(uid, newBadges).catch(() => {});
+      if (uid) saveUserBadges(uid, newBadges, get().earnedBadgeDates).catch(() => {});
     }
     await get().persistUser();
   },
@@ -767,5 +851,56 @@ export const useUserStore = create<UserState>((set, get) => ({
     set({ recentViewedCategories: updated });
     // Fire-and-forget sync to Firestore (only when logged in)
     if (uid) saveUserSettings(uid, { recentViewedCategories: updated }).catch(() => {});
+  },
+
+  incrementShareCount: async () => {
+    const uid = get().uid;
+    const newCount = get().sharesCount + 1;
+    set({ sharesCount: newCount });
+    if (!get().earnedBadges.includes('sharer')) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const newBadges = [...get().earnedBadges, 'sharer'];
+      const newDates = { ...get().earnedBadgeDates, sharer: todayStr };
+      appLog.log('[badge] sharer earned', { uid, sharesCount: newCount });
+      set({ earnedBadges: newBadges, newBadgeEarned: 'sharer', earnedBadgeDates: newDates });
+      if (uid) saveUserBadges(uid, newBadges, get().earnedBadgeDates).catch(() => {});
+    }
+    await get().persistUser();
+  },
+
+  setPendingNewUserSignIn: (user) => set({ pendingNewUserSignIn: user }),
+
+  refreshCloudData: async () => {
+    const uid = get().uid;
+    if (!uid) return;
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const [premiumStatus, cloudBadgesResult, cloudStreak, socialProfile] = await Promise.all([
+        fetchPremiumStatus(uid),
+        fetchUserBadges(uid),
+        fetchStreakFromFirestore(uid),
+        fetchPublicUserProfile(uid),
+      ]);
+      if (premiumStatus) set({ isPremium: true });
+      if (socialProfile) {
+        set({ followerCount: socialProfile.followerCount, followingCount: socialProfile.followingCount });
+      }
+      if (cloudStreak && cloudStreak.current > get().currentStreak) {
+        set({ currentStreak: cloudStreak.current, lastActiveDate: cloudStreak.lastActiveDate });
+      }
+      const cloudBadges = cloudBadgesResult.badges;
+      const cloudBadgeDates = cloudBadgesResult.badgeDates;
+      if (cloudBadges.length > 0) {
+        const merged = [...new Set([...get().earnedBadges, ...cloudBadges])];
+        const mergedDates: Record<string, string> = { ...get().earnedBadgeDates };
+        for (const badge of cloudBadges) {
+          if (!mergedDates[badge]) {
+            mergedDates[badge] = cloudBadgeDates[badge] ?? todayStr;
+          }
+        }
+        set({ earnedBadges: merged, earnedBadgeDates: mergedDates });
+      }
+      await get().persistUser();
+    } catch { /* silent */ }
   },
 }));

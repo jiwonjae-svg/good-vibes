@@ -14,8 +14,8 @@ import { useGrassStore } from '../../stores/useGrassStore';
 import { useAutoPlayStore } from '../../stores/useAutoPlayStore';
 import { getInitialQuotes, fetchQuoteBatch } from '../../services/quoteService';
 import { getPraise } from '../../services/praiseService';
-import { saveQuoteForWidget } from '../../services/widgetService';
-import { logActivityCompletion } from '../../services/firestoreUserService';
+import { saveQuoteForWidget, saveStreakForWidget } from '../../services/widgetService';
+import { logActivityCompletion, fetchFollowedUserIds } from '../../services/firestoreUserService';
 import { appLog } from '../../services/logger';
 import { QUOTE_CONFIG } from '../../constants/config';
 import { useAdInterstitial, showAdForActivity } from '../../components/AdInterstitial';
@@ -49,6 +49,7 @@ export default function HomeScreen() {
   const { incrementScroll, updateStreak, addViewedQuote, clearNewBadge } = useUserStore();
   const trackCategoryView = useUserStore((s) => s.trackCategoryView);
   const newBadgeEarned = useUserStore((s) => s.newBadgeEarned);
+  const currentStreak = useUserStore((s) => s.currentStreak);
   const language = useUserStore((s) => s.language);
   const autoReadEnabled = useUserStore((s) => s.autoReadEnabled);
   const isPremium = useUserStore((s) => s.isPremium);
@@ -68,6 +69,7 @@ export default function HomeScreen() {
   const [profileTarget, setProfileTarget] = useState<{ uid: string; name: string; photoURL?: string | null } | null>(null);
 
   const showCommunityQuotes = useUserStore((s) => s.showCommunityQuotes);
+  const uid = useUserStore((s) => s.uid);
 
   // Community feed
   const {
@@ -75,6 +77,7 @@ export default function HomeScreen() {
     hasMore: communityHasMore,
     loadCommunityQuotes, loadMore: loadMoreCommunity,
     init: initCommunityStore,
+    setFollowedUids,
   } = useCommunityStore();
 
   // Interleave community quotes into the main feed (every 5th slot) when enabled
@@ -120,19 +123,50 @@ export default function HomeScreen() {
   const isInitialMount = useRef(true);
   const dailyModalShownRef = useRef(false);
   const widgetSavedRef = useRef(false);
-  const uid = useUserStore((s) => s.uid);
   const isGuest = !uid;
   const selectedCategories = useUserStore((s) => s.selectedCategories);
+
+  // Load followed UIDs when the user logs in/out; clear on logout
+  useEffect(() => {
+    if (!uid) {
+      setFollowedUids([]);
+      return;
+    }
+    fetchFollowedUserIds(uid).then(setFollowedUids).catch(() => {});
+  }, [uid]);
 
   // Save today's daily quote to widget when quotes first load (all users)
   useEffect(() => {
     if (quotes.length === 0 || widgetSavedRef.current) return;
     widgetSavedRef.current = true;
     const daily = getDailyQuote(quotes);
-    if (daily) saveQuoteForWidget(daily.text, daily.author, daily.category, daily.id);
+    if (daily) saveQuoteForWidget(daily.text, daily.author, daily.category, daily.id, currentStreak);
   }, [quotes.length]);
 
+  // When streak loads from Firestore after login, update the widget streak value
+  useEffect(() => {
+    if (currentStreak > 0) saveStreakForWidget(currentStreak).catch(() => {});
+  }, [currentStreak]);
+
+  // When language changes, reset the widget save flag so new-language quotes
+  // get pushed to the widget on next quote load
+  useEffect(() => {
+    widgetSavedRef.current = false;
+  }, [language]);
+
+  // When streak loads from Firestore (after login), update the widget streak value
+  useEffect(() => {
+    if (currentStreak > 0) saveStreakForWidget(currentStreak).catch(() => {});
+  }, [currentStreak]);
+
+  // When language changes, reset the widget save flag so the new-language
+  // quote gets persisted on the next quote load
+  useEffect(() => {
+    widgetSavedRef.current = false;
+  }, [language]);
+
   // Handle deep links from widget tap: com.jiwonjae.dailyglow://quote?id=<id>
+  // The app/quote.tsx route stores the id in AsyncStorage and redirects here.
   useEffect(() => {
     const navigate = (url: string) => {
       const match = url.match(/[?&]id=([^&]+)/);
@@ -145,6 +179,15 @@ export default function HomeScreen() {
         pendingQuoteIdRef.current = id; // quotes not loaded yet — will retry below
       }
     };
+    // Check for a quote ID stored by app/quote.tsx (widget deep link)
+    AsyncStorage.getItem('@dailyglow_pending_quote_id').then((storedId) => {
+      if (storedId) {
+        AsyncStorage.removeItem('@dailyglow_pending_quote_id').catch(() => {});
+        const idx = displayedQuotesRef.current.findIndex((q) => q.id === storedId);
+        if (idx >= 0) flatListRef.current?.scrollToIndex({ index: idx, animated: false });
+        else pendingQuoteIdRef.current = storedId;
+      }
+    });
     Linking.getInitialURL().then((url) => { if (url) navigate(url); });
     const sub = Linking.addEventListener('url', ({ url }) => navigate(url));
     return () => sub.remove();
@@ -303,7 +346,7 @@ export default function HomeScreen() {
         const q = qs[idx];
         if (q) {
           if (isPremium) {
-            saveQuoteForWidget(q.text, q.author, q.category, q.id);
+            saveQuoteForWidget(q.text, q.author, q.category, q.id, currentStreak);
           }
           if (viewableItems.length === 1) {
             addViewedQuote(q.id, q.text, q.author ?? '', q.source ?? '', todayString());
@@ -363,6 +406,7 @@ export default function HomeScreen() {
     if (!isGuest && currentQuote && uid) {
       await recordActivity(type, currentQuote.id, currentQuote.text);
       await updateStreak(todayString());
+      saveStreakForWidget(useUserStore.getState().currentStreak);
       const activityType = type === 'speak' ? 'speak_along' : type === 'write' ? 'write_along' : 'type_along';
       logActivityCompletion(uid, activityType);
     }
@@ -500,7 +544,6 @@ export default function HomeScreen() {
           setSearchVisible(false);
         }}
       />
-      <MilestoneBadgeModal badgeId={newBadgeEarned} onClose={() => { if (newBadgeEarned) appLog.log('[home] badge modal dismissed', { badgeId: newBadgeEarned }); clearNewBadge(); }} />
       <PraiseModal visible={praiseVisible} praise={praiseText} onClose={() => setPraiseVisible(false)} />
       <LoginPromptModal
         visible={loginPromptVisible}

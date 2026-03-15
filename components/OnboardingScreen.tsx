@@ -241,7 +241,6 @@ export default function OnboardingScreen({ onComplete, isReplay = false }: Onboa
   const [slideIndex, setSlideIndex] = useState(0);
   const [step, setStep] = useState(0); // 0-3: slides, 4: categories, 5: notification
   const flatListRef = useRef<FlatList>(null);
-  const extraPagerRef = useRef<FlatList>(null);
   const setCategories = useUserStore((s) => s.setCategories);
   const setDailyReminder = useUserStore((s) => s.setDailyReminder);
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
@@ -254,15 +253,6 @@ export default function OnboardingScreen({ onComplete, isReplay = false }: Onboa
         const idx = viewableItems[0].index ?? 0;
         setSlideIndex(idx);
         setStep(idx);
-      }
-    }
-  ).current;
-
-  const onExtraViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (viewableItems.length > 0) {
-        const idx = viewableItems[0].index ?? 0;
-        setStep(SLIDES_DATA.length + idx);
       }
     }
   ).current;
@@ -298,12 +288,15 @@ export default function OnboardingScreen({ onComplete, isReplay = false }: Onboa
       });
       return;
     } else if (step === SLIDES_DATA.length) {
-      // Save selected categories and scroll to notification step
+      // Save selected categories then fade into notification step
       if (selectedCats.length > 0) {
         appLog.log('[onboarding] categories saved', { categories: selectedCats });
         await setCategories(selectedCats);
       }
-      extraPagerRef.current?.scrollToIndex({ index: 1, animated: true });
+      Animated.timing(phaseAnim, { toValue: 0, duration: 240, useNativeDriver: true }).start(() => {
+        setStep(SLIDES_DATA.length + 1);
+        Animated.timing(phaseAnim, { toValue: 1, duration: 240, useNativeDriver: true }).start();
+      });
     } else {
       // Notification step — user pressed "Skip"
       appLog.log('[onboarding] notification skipped');
@@ -423,24 +416,7 @@ export default function OnboardingScreen({ onComplete, isReplay = false }: Onboa
         </Animated.View>
       ) : (
         <Animated.View style={{ opacity: phaseAnim, flex: 1 }}>
-          <FlatList
-            ref={extraPagerRef}
-            data={[{ key: 'cats' }, { key: 'notif' }]}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            scrollEnabled
-            onViewableItemsChanged={onExtraViewableItemsChanged}
-            viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50 }}
-            getItemLayout={(_data, index) => ({ length: width, offset: width * index, index })}
-            renderItem={({ item }) => (
-              <View style={{ width, height }}>
-                {item.key === 'cats' ? renderCategoryStep() : renderNotificationStep()}
-              </View>
-            )}
-            keyExtractor={(item) => item.key}
-            style={{ flex: 1 }}
-          />
+          {step === SLIDES_DATA.length ? renderCategoryStep() : renderNotificationStep()}
         </Animated.View>
       )}
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, Modal, Pressable, ScrollView,
-  StyleSheet, ActivityIndicator, Image, Alert,
+  StyleSheet, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,12 +9,16 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { Fonts, FontSize, Spacing, BorderRadius, Shadows } from '../constants/theme';
+import ProfileAvatar from './ProfileAvatar';
 import {
   fetchPublicUserProfile,
   checkIsFollowing,
   followUser,
   unfollowUser,
+  fetchFollowerList,
+  fetchFollowingList,
   type PublicUserProfile,
+  type FollowUser,
 } from '../services/firestoreUserService';
 import { fetchCommunityQuotesByUser, type CommunityQuote } from '../services/communityService';
 import { useUserStore } from '../stores/useUserStore';
@@ -45,6 +49,11 @@ export default function UserProfileModal({
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+
+  // Follow list modal state
+  const [followListType, setFollowListType] = useState<'followers' | 'following' | null>(null);
+  const [followList, setFollowList] = useState<FollowUser[]>([]);
+  const [followListLoading, setFollowListLoading] = useState(false);
 
   const isOwnProfile = myUid === targetUid;
 
@@ -110,7 +119,7 @@ export default function UserProfileModal({
       if (wasFollowing) {
         await unfollowUser(myUid, targetUid);
       } else {
-        await followUser(myUid, targetUid);
+        await followUser(myUid, targetUid, myDisplayName, myStorePhotoURL);
       }
     } catch {
       // Rollback optimistic update
@@ -125,6 +134,20 @@ export default function UserProfileModal({
     }
   };
 
+  const handleOpenFollowList = async (type: 'followers' | 'following') => {
+    setFollowListType(type);
+    setFollowList([]);
+    setFollowListLoading(true);
+    try {
+      const list = type === 'followers'
+        ? await fetchFollowerList(targetUid)
+        : await fetchFollowingList(isOwnProfile ? myUid! : targetUid);
+      setFollowList(list);
+    } catch { /* silently fail */ } finally {
+      setFollowListLoading(false);
+    }
+  };
+
   const s = makeStyles(colors);
   const displayName = profile?.displayName ?? targetName;
   const username = profile?.username;
@@ -132,6 +155,7 @@ export default function UserProfileModal({
   const initial = (displayName || '?').charAt(0).toUpperCase();
 
   return (
+    <>
     <Modal
       visible={visible}
       animationType="slide"
@@ -162,13 +186,14 @@ export default function UserProfileModal({
             {/* Profile section */}
             <View style={s.profileSection}>
               <View style={{ position: 'relative' }}>
-                <View style={[s.avatar, { backgroundColor: colors.primary + '40' }]}>
-                  {photoURL ? (
-                    <Image source={{ uri: photoURL }} style={s.avatarImg} />
-                  ) : (
-                    <Text style={[s.avatarInitial, { color: colors.primary }]}>{initial}</Text>
-                  )}
-                </View>
+                <ProfileAvatar
+                  photoURL={photoURL}
+                  displayName={displayName}
+                  size={72}
+                  backgroundColor={colors.primary + '40'}
+                  textColor={colors.primary}
+                  style={s.avatar}
+                />
                 {isOwnProfile && (
                   <Pressable
                     style={[s.editAvatarBtn, { backgroundColor: colors.primary }]}
@@ -184,21 +209,21 @@ export default function UserProfileModal({
                 <Text style={[s.username, { color: colors.textSecondary }]}>@{username}</Text>
               ) : null}
 
-              {/* Follower / Following counts */}
+              {/* Follower / Following counts — tappable */}
               <View style={s.statsRow}>
-                <View style={s.statItem}>
+                <Pressable style={s.statItem} onPress={() => handleOpenFollowList('followers')} hitSlop={8}>
                   <Text style={[s.statCount, { color: colors.textPrimary }]}>
                     {profile?.followerCount ?? 0}
                   </Text>
                   <Text style={[s.statLabel, { color: colors.textSecondary }]}>{t('profile.followers')}</Text>
-                </View>
+                </Pressable>
                 <View style={s.statDivider} />
-                <View style={s.statItem}>
+                <Pressable style={s.statItem} onPress={() => handleOpenFollowList('following')} hitSlop={8}>
                   <Text style={[s.statCount, { color: colors.textPrimary }]}>
                     {profile?.followingCount ?? 0}
                   </Text>
                   <Text style={[s.statLabel, { color: colors.textSecondary }]}>{t('profile.following')}</Text>
-                </View>
+                </Pressable>
                 <View style={s.statDivider} />
                 <View style={s.statItem}>
                   <Text style={[s.statCount, { color: colors.textPrimary }]}>{quotes.length}</Text>
@@ -256,6 +281,73 @@ export default function UserProfileModal({
         )}
       </SafeAreaView>
     </Modal>
+
+    {/* Follow list bottom sheet (followers / following) */}
+    <Modal
+      visible={followListType !== null}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => setFollowListType(null)}
+    >
+      <SafeAreaView style={[s.container, { backgroundColor: colors.background }]} edges={['top']}>
+        <View style={[s.header, { borderBottomColor: colors.grass0 }]}>
+          <Pressable onPress={() => setFollowListType(null)} hitSlop={12}>
+            <Ionicons name="close" size={24} color={colors.textSecondary} />
+          </Pressable>
+          <Text style={[s.headerTitle, { color: colors.textPrimary }]}>
+            {followListType === 'followers' ? t('profile.followerList') : t('profile.followingList')}
+          </Text>
+          <View style={{ width: 24 }} />
+        </View>
+        {followListLoading ? (
+          <View style={s.centered}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : followList.length === 0 ? (
+          <View style={s.centered}>
+            <Ionicons name="people-outline" size={48} color={colors.textMuted} />
+            <Text style={[s.errorText, { color: colors.textMuted }]}>
+              {followListType === 'followers' ? t('profile.noFollowers') : t('profile.noFollowing')}
+            </Text>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={{ paddingVertical: Spacing.sm }}>
+            {followList.map((user) => (
+              <Pressable
+                key={user.uid}
+                style={[s.followUserRow, { borderBottomColor: colors.grass0 }]}
+                onPress={() => {
+                  setFollowListType(null);
+                  // Open this user's profile after a short delay (modal close animation)
+                  setTimeout(() => {
+                    onClose(); // close outer modal first
+                  }, 200);
+                }}
+              >
+                <ProfileAvatar
+                  photoURL={user.photoURL}
+                  displayName={user.displayName}
+                  size={40}
+                  backgroundColor={colors.primary + '40'}
+                  textColor={colors.primary}
+                />
+                <View style={s.followUserInfo}>
+                  <Text style={[s.followUserName, { color: colors.textPrimary }]} numberOfLines={1}>
+                    {user.displayName ?? user.uid}
+                  </Text>
+                  {user.username ? (
+                    <Text style={[s.followUserHandle, { color: colors.textSecondary }]} numberOfLines={1}>
+                      @{user.username}
+                    </Text>
+                  ) : null}
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
+      </SafeAreaView>
+    </Modal>
+    </>
   );
 }
 
@@ -342,5 +434,16 @@ function makeStyles(colors: any) {
     quoteAuthor: { ...Fonts.body, fontSize: FontSize.sm, fontStyle: 'italic' },
     quoteFooter: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     quoteFooterText: { ...Fonts.body, fontSize: FontSize.xs },
+    followUserRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: Spacing.lg,
+      paddingVertical: Spacing.sm,
+      gap: Spacing.md,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    followUserInfo: { flex: 1, gap: 2 },
+    followUserName: { ...Fonts.heading, fontSize: FontSize.sm },
+    followUserHandle: { ...Fonts.body, fontSize: FontSize.xs },
   });
 }

@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import {
   fetchApprovedCommunityQuotes,
+  fetchFollowedQuotes,
   likeCommunityQuote,
   unlikeCommunityQuote,
   fetchLikedIds,
@@ -65,6 +66,7 @@ interface CommunityState {
   isLoading: boolean;
   hasMore: boolean;
   lastCursor: QueryDocumentSnapshot<DocumentData> | null;
+  followedUids: string[];
 
   // Submission rate limit: track timestamps of recent submissions (persisted to AsyncStorage)
   recentSubmissionTimes: number[];
@@ -72,6 +74,7 @@ interface CommunityState {
   init: () => Promise<void>;
   setFeedMode: (mode: FeedMode) => void;
   setSortBy: (sort: SortBy) => void;
+  setFollowedUids: (uids: string[]) => void;
   loadCommunityQuotes: (language: string, uid?: string, reset?: boolean) => Promise<void>;
   loadMore: (language: string, uid?: string) => Promise<void>;
   toggleLike: (uid: string, quoteId: string) => Promise<void>;
@@ -100,6 +103,7 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
   hasMore: true,
   lastCursor: null,
   recentSubmissionTimes: [],
+  followedUids: [],
 
   init: async () => {
     const [times, reportedIds, storedSort] = await Promise.all([
@@ -121,8 +125,10 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
     await AsyncStorage.setItem(SORT_KEY, sort).catch(() => {});
   },
 
+  setFollowedUids: (uids) => set({ followedUids: uids }),
+
   loadCommunityQuotes: async (language, uid, reset = false) => {
-    const { isLoading, sortBy } = get();
+    const { isLoading, sortBy, followedUids } = get();
     if (isLoading && !reset) return;
     set({ isLoading: true });
     if (reset) set({ communityQuotes: [], lastCursor: null, hasMore: true });
@@ -130,17 +136,32 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
     try {
       const { quotes, lastDoc } = await fetchApprovedCommunityQuotes(language, 20, null, sortBy);
 
-      let likedIds: string[] = get().likedCommunityIds;
-      if (uid && quotes.length > 0) {
+      // Fetch quotes from followed users to boost at the head of the feed
+      let boostedQuotes: CommunityQuote[] = [];
+      if (followedUids.length > 0) {
         try {
-          likedIds = await fetchLikedIds(uid, quotes.map((q) => q.id));
+          boostedQuotes = await fetchFollowedQuotes(followedUids, language, 15);
+        } catch (e) {
+          appLog.warn('[communityStore] fetchFollowedQuotes failed', e);
+        }
+      }
+
+      // Merge: followed-user quotes first, then regular feed (deduplicated)
+      const boostedIds = new Set(boostedQuotes.map((q) => q.id));
+      const dedupedRegular = quotes.filter((q) => !boostedIds.has(q.id));
+      const merged = [...boostedQuotes, ...dedupedRegular];
+
+      let likedIds: string[] = get().likedCommunityIds;
+      if (uid && merged.length > 0) {
+        try {
+          likedIds = await fetchLikedIds(uid, merged.map((q) => q.id));
         } catch (e) {
           appLog.warn('[communityStore] fetchLikedIds failed', e);
         }
       }
 
       set({
-        communityQuotes: quotes,
+        communityQuotes: merged,
         lastCursor: lastDoc,
         hasMore: quotes.length === 20,
         likedCommunityIds: likedIds,

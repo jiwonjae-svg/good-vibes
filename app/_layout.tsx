@@ -9,6 +9,7 @@ import { initFirebase } from '../services/firebaseConfig';
 import { initSentry } from '../services/sentryService';
 import { configureGoogleSignIn, onAuthChange, getCurrentUser } from '../services/authService';
 import { initNotificationHandler, validateAndRescheduleDailyReminder, checkFollowNotifications } from '../services/notificationService';
+import { saveStreakForWidget } from '../services/widgetService';
 import { useGrassStore } from '../stores/useGrassStore';
 import { useUserStore } from '../stores/useUserStore';
 import OnboardingScreen from '../components/OnboardingScreen';
@@ -100,6 +101,8 @@ export default function RootLayout() {
         if (uid) {
           refreshCloudData().catch(() => {});
           checkFollowNotifications(uid).catch(() => {});
+          // Refresh widget streak in case it was stale
+          if (currentStreak > 0) saveStreakForWidget(currentStreak).catch(() => {});
         }
       }
       appStateRef.current = nextState;

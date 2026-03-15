@@ -33,12 +33,22 @@ export default function ProfileAvatar({
         style,
       ]}
     >
-      {source ? (
-        <Image
-          source={source}
-          style={[styles.image, { width: size, height: size, borderRadius: radius }]}
-          resizeMode="cover"
-        />
+      {source !== null ? (
+        typeof source === 'number' ? (
+          // Local badge image: scale up to fill the circle, contain to keep aspect ratio
+          <Image
+            source={source}
+            style={[styles.image, { width: size * 1.4, height: size * 1.4 }]}
+            resizeMode="contain"
+          />
+        ) : (
+          // Remote URI photo
+          <Image
+            source={source}
+            style={[styles.image, { width: size, height: size, borderRadius: radius }]}
+            resizeMode="cover"
+          />
+        )
       ) : (
         <Text
           style={[

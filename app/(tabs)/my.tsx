@@ -10,7 +10,8 @@ import { useRouter } from 'expo-router';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { Fonts, FontSize, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { useUserStore } from '../../stores/useUserStore';
-import { useQuoteStore, Quote } from '../../stores/useQuoteStore';
+import { useQuoteStore } from '../../stores/useQuoteStore';
+import { useCommunityStore } from '../../stores/useCommunityStore';
 import { useTTS } from '../../hooks/useTTS';
 import { shareQuoteText } from '../../services/shareService';
 
@@ -141,19 +142,29 @@ export default function MyScreen() {
   const router = useRouter();
   const { bookmarkedQuoteIds, todayViewedQuoteIds, toggleBookmark, uid } = useUserStore();
   const quotes = useQuoteStore((s) => s.quotes);
+  const communityQuotes = useCommunityStore((s) => s.communityQuotes);
   const isGuest = !uid;
 
   const [selectedQuote, setSelectedQuote] = useState<{ id: string; text: string; author?: string; source?: string; gradientIndex: number } | null>(null);
   const [activeTab, setActiveTab] = useState<'bookmarked' | 'today'>('bookmarked');
 
-  const bookmarkedQuotes = quotes.filter((q) => bookmarkedQuoteIds.includes(q.id));
-
   // Build a lookup map from the loaded quote store for metadata recovery
   const quoteStoreMap = React.useMemo(() => {
-    const m = new Map<string, Quote>();
-    quotes.forEach((q) => m.set(q.id, q));
+    const m = new Map<string, { text: string; author?: string; source?: string; gradientIndex: number }>();
+    quotes.forEach((q) => m.set(q.id, { text: q.text, author: q.author || undefined, source: q.source, gradientIndex: q.gradientIndex }));
+    communityQuotes.forEach((cq, i) => m.set(cq.id, { text: cq.text, author: cq.author || undefined, source: 'community', gradientIndex: i % 8 }));
     return m;
-  }, [quotes]);
+  }, [quotes, communityQuotes]);
+
+  // Bookmarks: include both regular and community quotes
+  const bookmarkedQuotes = React.useMemo(() => {
+    const result: Array<{ id: string; text: string; author?: string; source?: string; gradientIndex: number }> = [];
+    for (const id of bookmarkedQuoteIds) {
+      const q = quoteStoreMap.get(id);
+      if (q) result.push({ id, ...q });
+    }
+    return result;
+  }, [bookmarkedQuoteIds, quoteStoreMap]);
 
   const todayQuotes = React.useMemo(() => todayViewedQuoteIds.map((entry, idx) => {
     const parts = entry.split('|');
@@ -184,7 +195,7 @@ export default function MyScreen() {
     router.push('/');
   };
 
-  const renderBookmarkedItem = useCallback(({ item }: { item: Quote }) => (
+  const renderBookmarkedItem = useCallback(({ item }: { item: { id: string; text: string; author?: string; source?: string; gradientIndex: number } }) => (
     <Pressable
       style={[styles.quoteItem, { backgroundColor: colors.surface }]}
       onPress={() => handleQuotePress({ ...item, gradientIndex: item.gradientIndex })}

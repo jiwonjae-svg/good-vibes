@@ -38,9 +38,14 @@ function ensureDir(p) { fs.mkdirSync(p, { recursive: true }); }
 function dailyGlowWidgetKt(packageId) {
   return `package ${packageId}.widget
 
+import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import ${packageId}.R
@@ -48,9 +53,41 @@ import ${packageId}.R
 class DailyGlowWidget : AppWidgetProvider() {
 
     companion object {
-        const val PREFS_NAME = "DailyGlowWidget"
-        const val KEY_TEXT   = "quoteText"
-        const val KEY_AUTHOR = "quoteAuthor"
+        const val PREFS_NAME    = "DailyGlowWidget"
+        const val KEY_TEXT      = "quoteText"
+        const val KEY_AUTHOR    = "quoteAuthor"
+        const val KEY_ID        = "quoteId"
+        const val KEY_STREAK    = "streak"
+        const val KEY_QUOTES_JSON = "quotesJson"
+        const val KEY_QUOTE_INDEX = "quoteIndex"
+        const val KEY_FONT_SCALE  = "fontScale"
+        const val ACTION_REFRESH  = "${packageId}.WIDGET_REFRESH"
+    }
+
+    override fun onReceive(context: Context, intent: Intent) {
+        super.onReceive(context, intent)
+        if (intent.action == ACTION_REFRESH) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val quotesJson = prefs.getString(KEY_QUOTES_JSON, null)
+            if (!quotesJson.isNullOrEmpty()) {
+                try {
+                    val arr = org.json.JSONArray(quotesJson)
+                    if (arr.length() > 1) {
+                        val idx = (prefs.getInt(KEY_QUOTE_INDEX, 0) + 1) % arr.length()
+                        val q = arr.getJSONObject(idx)
+                        prefs.edit()
+                            .putString(KEY_TEXT,   q.optString("text", ""))
+                            .putString(KEY_AUTHOR, q.optString("author", ""))
+                            .putString(KEY_ID,     q.optString("id", ""))
+                            .putInt(KEY_QUOTE_INDEX, idx)
+                            .apply()
+                    }
+                } catch (_: Exception) { /* silent */ }
+            }
+            val manager = AppWidgetManager.getInstance(context)
+            val ids = manager.getAppWidgetIds(ComponentName(context, DailyGlowWidget::class.java))
+            for (id in ids) updateWidget(context, manager, id)
+        }
     }
 
     override fun onUpdate(
@@ -62,18 +99,52 @@ class DailyGlowWidget : AppWidgetProvider() {
     }
 
     fun updateWidget(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int) {
-        val prefs  = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val text   = prefs.getString(KEY_TEXT,   context.getString(R.string.widget_default_quote)) ?: ""
-        val author = prefs.getString(KEY_AUTHOR, "") ?: ""
+        val prefs   = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val text    = prefs.getString(KEY_TEXT,   context.getString(R.string.widget_default_quote)) ?: ""
+        val author  = prefs.getString(KEY_AUTHOR, "") ?: ""
+        val quoteId = prefs.getString(KEY_ID,     "") ?: ""
+        val streak  = prefs.getInt(KEY_STREAK, 0)
 
         val views = RemoteViews(context.packageName, R.layout.widget_layout)
         views.setTextViewText(R.id.widget_quote, text)
         if (author.isNotEmpty()) {
-            views.setTextViewText(R.id.widget_author, "— $author")
+            views.setTextViewText(R.id.widget_author, "\u2014 $author")
             views.setViewVisibility(R.id.widget_author, View.VISIBLE)
         } else {
             views.setViewVisibility(R.id.widget_author, View.GONE)
         }
+        if (streak > 0) {
+            views.setTextViewText(R.id.widget_streak, "\uD83D\uDD25 $streak")
+            views.setViewVisibility(R.id.widget_streak, View.VISIBLE)
+        } else {
+            views.setViewVisibility(R.id.widget_streak, View.GONE)
+        }
+
+        // Tap → deep link to the specific quote in the app
+        val deepLink = Uri.parse("com.jiwonjae.dailyglow://quote?id=\${Uri.encode(quoteId)}")
+        val launchIntent = Intent(Intent.ACTION_VIEW, deepLink).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context, appWidgetId, launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+
+        // Refresh button — cycles to next quote in the buffer
+        val refreshIntent = Intent(context, DailyGlowWidget::class.java).apply {
+            action = ACTION_REFRESH
+        }
+        val refreshPi = PendingIntent.getBroadcast(
+            context, appWidgetId + 1000, refreshIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.widget_refresh, refreshPi)
+
+        // Font size (user-configurable multiplier)
+        val fontScale = prefs.getFloat(KEY_FONT_SCALE, 1.0f)
+        views.setTextViewTextSize(R.id.widget_quote, TypedValue.COMPLEX_UNIT_SP, 14.0f * fontScale)
+
         appWidgetManager.updateAppWidget(appWidgetId, views)
     }
 }
@@ -105,6 +176,49 @@ class WidgetModule(private val reactContext: ReactApplicationContext) :
                 .putString(DailyGlowWidget.KEY_TEXT,   text)
                 .putString(DailyGlowWidget.KEY_AUTHOR, author)
                 .putString(DailyGlowWidget.KEY_ID,     id)
+                .apply()
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject("WIDGET_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun saveStreakData(streak: Int, promise: Promise) {
+        try {
+            reactContext
+                .getSharedPreferences(DailyGlowWidget.PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putInt(DailyGlowWidget.KEY_STREAK, streak)
+                .apply()
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject("WIDGET_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun saveQuotesData(jsonArray: String, promise: Promise) {
+        try {
+            reactContext
+                .getSharedPreferences(DailyGlowWidget.PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(DailyGlowWidget.KEY_QUOTES_JSON, jsonArray)
+                .putInt(DailyGlowWidget.KEY_QUOTE_INDEX, 0)
+                .apply()
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject("WIDGET_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun saveFontSizeData(multiplier: Double, promise: Promise) {
+        try {
+            reactContext
+                .getSharedPreferences(DailyGlowWidget.PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putFloat(DailyGlowWidget.KEY_FONT_SCALE, multiplier.toFloat())
                 .apply()
             promise.resolve(null)
         } catch (e: Exception) {
@@ -171,15 +285,43 @@ const WIDGET_LAYOUT_XML = `<?xml version="1.0" encoding="utf-8"?>
         android:maxLines="5"
         android:ellipsize="end" />
 
-    <TextView
-        android:id="@+id/widget_author"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:textSize="12sp"
-        android:textColor="#99FF4A2A"
-        android:gravity="end"
-        android:visibility="gone" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/widget_author"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="12sp"
+            android:textColor="#99FF4A2A"
+            android:gravity="start"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_streak"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="11sp"
+            android:textColor="#CCFF4A2A"
+            android:gravity="end"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/widget_refresh"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_marginStart="8dp"
+            android:src="@drawable/ic_widget_refresh"
+            android:alpha="0.55"
+            android:padding="2dp"
+            android:contentDescription="@null" />
+
+    </LinearLayout>
 
 </LinearLayout>
 `;
@@ -194,7 +336,7 @@ const WIDGET_INFO_XML = `<?xml version="1.0" encoding="utf-8"?>
     android:updatePeriodMillis="3600000"
     android:initialLayout="@layout/widget_layout"
     android:resizeMode="horizontal|vertical"
-    android:widgetCategory="home_screen" />
+    android:widgetCategory="home_screen|keyguard" />
 `;
 
 const WIDGET_BACKGROUND_XML = `<?xml version="1.0" encoding="utf-8"?>
@@ -204,6 +346,18 @@ const WIDGET_BACKGROUND_XML = `<?xml version="1.0" encoding="utf-8"?>
     <corners android:radius="16dp" />
     <stroke android:width="1dp" android:color="#1AFF9F7E" />
 </shape>
+`;
+
+const IC_WIDGET_REFRESH_XML = `<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+    android:fillColor="#FF4A2A"
+    android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z"/>
+</vector>
 `;
 
 // ─── Android ─────────────────────────────────────────────────────────────────
@@ -229,6 +383,7 @@ function withAndroidWidget(config) {
           {
             action: [
               { $: { 'android:name': 'android.appwidget.action.APPWIDGET_UPDATE' } },
+              { $: { 'android:name': `${packageId}.WIDGET_REFRESH` } },
             ],
           },
         ],
@@ -268,9 +423,10 @@ function withAndroidWidget(config) {
       ensureDir(path.join(resBase, 'layout'));
       ensureDir(path.join(resBase, 'xml'));
       ensureDir(path.join(resBase, 'drawable'));
-      fs.writeFileSync(path.join(resBase, 'layout/widget_layout.xml'),   WIDGET_LAYOUT_XML);
-      fs.writeFileSync(path.join(resBase, 'xml/widget_info.xml'),        WIDGET_INFO_XML);
+      fs.writeFileSync(path.join(resBase, 'layout/widget_layout.xml'),       WIDGET_LAYOUT_XML);
+      fs.writeFileSync(path.join(resBase, 'xml/widget_info.xml'),            WIDGET_INFO_XML);
       fs.writeFileSync(path.join(resBase, 'drawable/widget_background.xml'), WIDGET_BACKGROUND_XML);
+      fs.writeFileSync(path.join(resBase, 'drawable/ic_widget_refresh.xml'), IC_WIDGET_REFRESH_XML);
 
       // String resources
       const stringsPath = path.join(resBase, 'values/strings.xml');
@@ -381,17 +537,20 @@ import SwiftUI
 private let keyText    = "quoteText"
 private let keyAuthor  = "quoteAuthor"
 private let keyQuoteId = "quoteId"
+private let keyStreak  = "streak"
 
 struct QuoteEntry: TimelineEntry {
     let date: Date
     let quoteText: String
     let quoteAuthor: String
     let quoteId: String
+    let streak: Int
+    let fontScale: Float
 }
 
 struct QuoteProvider: TimelineProvider {
     func placeholder(in context: Context) -> QuoteEntry {
-        QuoteEntry(date: .now, quoteText: "A little better, every day.", quoteAuthor: "DailyGlow", quoteId: "")
+        QuoteEntry(date: .now, quoteText: "A little better, every day.", quoteAuthor: "DailyGlow", quoteId: "", streak: 0, fontScale: 1.0)
     }
     func getSnapshot(in context: Context, completion: @escaping (QuoteEntry) -> Void) {
         completion(entry())
@@ -406,30 +565,60 @@ struct QuoteProvider: TimelineProvider {
         let text    = defaults?.string(forKey: keyText)    ?? "A little better, every day."
         let author  = defaults?.string(forKey: keyAuthor)  ?? ""
         let quoteId = defaults?.string(forKey: keyQuoteId) ?? ""
-        return QuoteEntry(date: .now, quoteText: text, quoteAuthor: author, quoteId: quoteId)
+        let streak  = defaults?.integer(forKey: keyStreak) ?? 0
+        let fontScale = Float(defaults?.double(forKey: "fontScale") ?? 1.0)
+        return QuoteEntry(date: .now, quoteText: text, quoteAuthor: author, quoteId: quoteId, streak: streak, fontScale: fontScale)
     }
 }
 
 struct DailyGlowWidgetEntryView: View {
     var entry: QuoteEntry
+    @Environment(\\.widgetFamily) var widgetFamily
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(entry.quoteText)
-                .font(.system(size: 13, weight: .regular, design: .serif))
-                .italic()
-                .foregroundColor(Color(red: 1.0, green: 0.29, blue: 0.17))
-                .multilineTextAlignment(.leading)
-                .lineLimit(5)
-            if !entry.quoteAuthor.isEmpty {
-                Text("\u2014 \\(entry.quoteAuthor)")
-                    .font(.system(size: 11, weight: .regular))
-                    .foregroundColor(Color(red: 1.0, green: 0.29, blue: 0.17).opacity(0.65))
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+        switch widgetFamily {
+        case .accessoryRectangular:
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.quoteText)
+                    .font(.caption2)
+                    .lineLimit(2)
+                if !entry.quoteAuthor.isEmpty {
+                    Text("\u2014 \\(entry.quoteAuthor)")
+                        .font(.caption2)
+                        .opacity(0.65)
+                }
             }
+            .containerBackground(.clear, for: .widget)
+        case .accessoryInline:
+            Text(entry.quoteText)
+                .lineLimit(1)
+                .containerBackground(.clear, for: .widget)
+        default:
+            VStack(alignment: .leading, spacing: 8) {
+                Text(entry.quoteText)
+                    .font(.system(size: 13 * CGFloat(entry.fontScale), weight: .regular, design: .serif))
+                    .italic()
+                    .foregroundColor(Color(red: 1.0, green: 0.29, blue: 0.17))
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(5)
+                HStack {
+                    if !entry.quoteAuthor.isEmpty {
+                        Text("\u2014 \\(entry.quoteAuthor)")
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundColor(Color(red: 1.0, green: 0.29, blue: 0.17).opacity(0.65))
+                    }
+                    Spacer()
+                    if entry.streak > 0 {
+                        Text("\\u{1F525} \\(entry.streak)")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(Color(red: 1.0, green: 0.29, blue: 0.17).opacity(0.75))
+                    }
+                }
+            }
+            .padding(14)
+            .containerBackground(Color(red: 1.0, green: 0.97, blue: 0.94), for: .widget)
+            .widgetURL(URL(string: "com.jiwonjae.dailyglow://quote?id=\\(entry.quoteId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? \"\")"))
         }
-        .padding(14)
-        .containerBackground(Color(red: 1.0, green: 0.97, blue: 0.94), for: .widget)
-        .widgetURL(URL(string: "com.jiwonjae.dailyglow://quote?id=\\(entry.quoteId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? \"\")"))
     }
 }
 
@@ -441,7 +630,7 @@ struct DailyGlowWidget: Widget {
         }
         .configurationDisplayName("DailyGlow")
         .description("Today's quote on your home screen.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular, .accessoryInline])
     }
 }
 `;
@@ -480,9 +669,31 @@ class WidgetModule: NSObject {
         resolve(nil)
     }
 
+    @objc func saveStreakData(_ streak: Int,
+                              resolve: @escaping RCTPromiseResolveBlock,
+                              reject: @escaping RCTPromiseRejectBlock) {
+        guard let defaults = UserDefaults(suiteName: "${appGroup}") else {
+            reject("WIDGET_ERROR", "App Group UserDefaults unavailable", nil); return
+        }
+        defaults.set(streak, forKey: "streak")
+        defaults.synchronize()
+        resolve(nil)
+    }
+
     @objc func reloadAllTimelines(_ resolve: @escaping RCTPromiseResolveBlock,
                                   reject: @escaping RCTPromiseRejectBlock) {
         WidgetCenter.shared.reloadAllTimelines()
+        resolve(nil)
+    }
+
+    @objc func saveFontSizeData(_ multiplier: Double,
+                                resolve: @escaping RCTPromiseResolveBlock,
+                                reject: @escaping RCTPromiseRejectBlock) {
+        guard let defaults = UserDefaults(suiteName: "${appGroup}") else {
+            reject("WIDGET_ERROR", "App Group UserDefaults unavailable", nil); return
+        }
+        defaults.set(multiplier, forKey: "fontScale")
+        defaults.synchronize()
         resolve(nil)
     }
 }
@@ -500,7 +711,15 @@ RCT_EXTERN_METHOD(saveQuoteData:(NSString *)text
                   resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(saveStreakData:(NSInteger)streak
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
+
 RCT_EXTERN_METHOD(reloadAllTimelines:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(saveFontSizeData:(double)multiplier
+                  resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 
 @end

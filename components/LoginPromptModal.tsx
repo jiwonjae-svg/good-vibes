@@ -25,13 +25,22 @@ export default function LoginPromptModal({
   const { t } = useTranslation();
   const colors = useThemeColors();
   const setAuth = useUserStore((s) => s.setAuth);
+  const setAuthCompleted = useUserStore((s) => s.setAuthCompleted);
+  const setPendingNewUserSignIn = useUserStore((s) => s.setPendingNewUserSignIn);
   const isDarkMode = useUserStore((s) => s.isDarkMode);
 
   const handleGoogleLogin = async () => {
     try {
       const user = await signInWithGoogleNative();
       if (user) {
-        setAuth({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
+        await setAuth({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
+        const currentUsername = useUserStore.getState().username;
+        if (!currentUsername) {
+          // New user — trigger global onboarding modals in _layout.tsx
+          setPendingNewUserSignIn({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
+        } else {
+          await setAuthCompleted();
+        }
         onClose();
       }
     } catch {

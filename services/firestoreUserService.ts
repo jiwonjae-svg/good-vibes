@@ -499,6 +499,7 @@ export async function saveUserProfile(
   displayName: string,
   username: string,
   previousUsername?: string,
+  photoURL?: string,
 ): Promise<{ success: boolean; error?: 'taken' | 'invalid' | 'unknown' }> {
   try {
     if (!isValidUsername(username)) return { success: false, error: 'invalid' };
@@ -509,28 +510,43 @@ export async function saveUserProfile(
     if (!db) return { success: false, error: 'unknown' };
 
     const lowerUsername = username.toLowerCase();
+    const userRef = doc(db, 'users', uid);
+    const newUsernameRef = doc(db, 'usernames', lowerUsername);
+    const oldUsernameRef =
+      previousUsername && previousUsername.toLowerCase() !== lowerUsername
+        ? doc(db, 'usernames', previousUsername.toLowerCase())
+        : null;
 
-    // Check availability (skip if same as current)
-    if (!previousUsername || previousUsername.toLowerCase() !== lowerUsername) {
-      const available = await isUsernameAvailable(lowerUsername);
-      if (!available) return { success: false, error: 'taken' };
-    }
+    // Atomic transaction: availability check + user doc update + username reservation
+    const { runTransaction } = await import('firebase/firestore');
+    await runTransaction(db, async (transaction) => {
+      // Check availability within the transaction (skip if username unchanged)
+      if (!previousUsername || previousUsername.toLowerCase() !== lowerUsername) {
+        const usernameSnap = await transaction.get(newUsernameRef);
+        if (usernameSnap.exists()) {
+          throw Object.assign(new Error('Username taken'), { code: 'taken' });
+        }
+      }
 
-    // Write both docs (non-atomic but safe — username index is written last)
-    await setDoc(doc(db, 'users', uid), { displayName, username: lowerUsername }, { merge: true });
+      // Update user profile
+      transaction.set(
+        userRef,
+        { displayName, username: lowerUsername, ...(photoURL !== undefined && { photoURL }) },
+        { merge: true },
+      );
 
-    // Release old username reservation
-    if (previousUsername && previousUsername.toLowerCase() !== lowerUsername) {
-      try {
-        const { deleteDoc } = await import('firebase/firestore');
-        await deleteDoc(doc(db, 'usernames', previousUsername.toLowerCase()));
-      } catch { /* silent */ }
-    }
+      // Release old username reservation
+      if (oldUsernameRef) {
+        transaction.delete(oldUsernameRef);
+      }
 
-    await setDoc(doc(db, 'usernames', lowerUsername), { uid, createdAt: serverTimestamp() });
+      // Reserve new username
+      transaction.set(newUsernameRef, { uid, createdAt: serverTimestamp() });
+    });
 
     return { success: true };
-  } catch {
+  } catch (err: any) {
+    if (err?.code === 'taken') return { success: false, error: 'taken' };
     return { success: false, error: 'unknown' };
   }
 }
@@ -578,32 +594,46 @@ export async function reportQuote(
 /**
  * Saves the user's earned badge array to Firestore.
  */
-export async function saveUserBadges(uid: string, badges: string[]): Promise<void> {
+export async function saveUserBadges(
+  uid: string,
+  badges: string[],
+  badgeDates?: Record<string, string>,
+): Promise<void> {
   appLog.log('[firestore] saveUserBadges', { uid, count: badges.length });
   try {
     initFirebase();
     const db = getDb();
     if (!db) return;
     const userRef = doc(db, 'users', uid);
-    await setDoc(userRef, { badges }, { merge: true });
+    const payload: Record<string, unknown> = { badges };
+    if (badgeDates !== undefined) payload.badgeDates = badgeDates;
+    await setDoc(userRef, payload, { merge: true });
   } catch { /* silent */ }
 }
 
 /**
  * Fetches the user's earned badges from Firestore.
  */
-export async function fetchUserBadges(uid: string): Promise<string[]> {
+export async function fetchUserBadges(
+  uid: string,
+): Promise<{ badges: string[]; badgeDates: Record<string, string> }> {
   appLog.log('[firestore] fetchUserBadges', { uid });
   try {
     initFirebase();
     const db = getDb();
-    if (!db) return [];
+    if (!db) return { badges: [], badgeDates: {} };
     const userRef = doc(db, 'users', uid);
     const snap = await getDoc(userRef);
-    if (snap.exists()) return (snap.data()?.badges as string[]) ?? [];
-    return [];
+    if (snap.exists()) {
+      const data = snap.data();
+      return {
+        badges: (data?.badges as string[]) ?? [],
+        badgeDates: (data?.badgeDates as Record<string, string>) ?? {},
+      };
+    }
+    return { badges: [], badgeDates: {} };
   } catch {
-    return [];
+    return { badges: [], badgeDates: {} };
   }
 }
 
@@ -687,7 +717,12 @@ export async function checkIsFollowing(myUid: string, targetUid: string): Promis
   }
 }
 
-export async function followUser(myUid: string, targetUid: string): Promise<void> {
+export async function followUser(
+  myUid: string,
+  targetUid: string,
+  fromName?: string | null,
+  fromPhotoURL?: string | null,
+): Promise<void> {
   try {
     initFirebase();
     const db = getDb();
@@ -703,6 +738,17 @@ export async function followUser(myUid: string, targetUid: string): Promise<void
       await updateDoc(doc(db, 'users', myUid), { followingCount: inc(1) });
       await updateDoc(doc(db, 'users', targetUid), { followerCount: inc(1) });
     } catch { /* non-critical */ }
+    // Write follow notification to the target user's subcollection
+    try {
+      await setDoc(doc(db, 'users', targetUid, 'notifications', `follow_${myUid}`), {
+        type: 'follow',
+        fromUid: myUid,
+        fromName: fromName ?? null,
+        fromPhotoURL: fromPhotoURL ?? null,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+    } catch { /* non-critical — notification delivery is best-effort */ }
     appLog.log('[firestore] followUser', { myUid, targetUid });
   } catch (err) {
     appLog.warn('[firestore] followUser failed', { err: String(err) });
@@ -721,10 +767,100 @@ export async function unfollowUser(myUid: string, targetUid: string): Promise<vo
       await updateDoc(doc(db, 'users', myUid), { followingCount: inc(-1) });
       await updateDoc(doc(db, 'users', targetUid), { followerCount: inc(-1) });
     } catch { /* non-critical */ }
+    // Remove the follow notification (sender revoked the follow)
+    try {
+      await deleteDoc(doc(db, 'users', targetUid, 'notifications', `follow_${myUid}`));
+    } catch { /* non-critical */ }
     appLog.log('[firestore] unfollowUser', { myUid, targetUid });
   } catch (err) {
     appLog.warn('[firestore] unfollowUser failed', { err: String(err) });
     throw err;
+  }
+}
+
+// =============================================================================
+// Follow Lists
+// =============================================================================
+
+export interface FollowUser {
+  uid: string;
+  displayName: string | null;
+  username: string | null;
+  photoURL: string | null;
+}
+
+async function _batchFetchPublicProfiles(
+  db: ReturnType<typeof getDb>,
+  uids: string[],
+): Promise<FollowUser[]> {
+  if (uids.length === 0 || !db) return [];
+  const snaps = await Promise.all(uids.map((uid) => getDoc(doc(db, 'users', uid))));
+  return snaps
+    .filter((s) => s.exists())
+    .map((s) => {
+      const d = s.data() as Record<string, unknown>;
+      return {
+        uid: s.id,
+        displayName: (d.displayName as string) ?? null,
+        username: (d.username as string) ?? null,
+        photoURL: (d.photoURL as string) ?? null,
+      };
+    });
+}
+
+/** Returns UIDs of everyone myUid follows — used to prioritize the community feed. */
+export async function fetchFollowedUserIds(myUid: string, maxLimit = 200): Promise<string[]> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return [];
+    const q = query(
+      collection(db, 'follows'),
+      where('followerId', '==', myUid),
+      limit(maxLimit),
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => d.data().followedId as string);
+  } catch {
+    return [];
+  }
+}
+
+/** Returns public profiles of users who follow targetUid (for the Followers list modal). */
+export async function fetchFollowerList(targetUid: string, maxLimit = 50): Promise<FollowUser[]> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return [];
+    const q = query(
+      collection(db, 'follows'),
+      where('followedId', '==', targetUid),
+      limit(maxLimit),
+    );
+    const snap = await getDocs(q);
+    const uids = snap.docs.map((d) => d.data().followerId as string);
+    return _batchFetchPublicProfiles(db, uids);
+  } catch {
+    return [];
+  }
+}
+
+/** Returns public profiles of users that myUid follows (for the Following list modal). */
+export async function fetchFollowingList(myUid: string, maxLimit = 50): Promise<FollowUser[]> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return [];
+    const q = query(
+      collection(db, 'follows'),
+      where('followerId', '==', myUid),
+      limit(maxLimit),
+    );
+    const snap = await getDocs(q);
+    const uids = snap.docs.map((d) => d.data().followedId as string);
+    return _batchFetchPublicProfiles(db, uids);
+  } catch {
+    return [];
   }
 }
 

@@ -18,6 +18,7 @@ import LoginPromptModal from './LoginPromptModal';
 import PremiumPromptModal from './PremiumPromptModal';
 import { onTTSPressed } from './AdInterstitial';
 import CommunityBadge from './CommunityBadge';
+import ProfileAvatar from './ProfileAvatar';
 import { useCommunityStore } from '../stores/useCommunityStore';
 
 const ACTION_BG_LIGHT = 'rgba(255,255,255,0.92)';
@@ -302,15 +303,14 @@ export default function QuoteCard({ quote, onSpeakAlong, onWriteAlong, onTypeAlo
               }
               hitSlop={8}
             >
-              <View style={styles.submitterAvatar}>
-                {quote.submitterPhotoURL ? (
-                  <Image source={{ uri: quote.submitterPhotoURL }} style={styles.submitterAvatarImg} />
-                ) : (
-                  <Text style={styles.submitterAvatarInitial}>
-                    {(quote.submitterName ?? '?').charAt(0).toUpperCase()}
-                  </Text>
-                )}
-              </View>
+              <ProfileAvatar
+                  photoURL={quote.submitterPhotoURL}
+                  displayName={quote.submitterName}
+                  size={32}
+                  backgroundColor={`rgba(255,255,255,0.25)`}
+                  textColor="#fff"
+                  style={styles.submitterAvatar}
+                />
               <Text style={styles.submitterName} numberOfLines={1}>{quote.submitterName ?? ''}</Text>
             </Pressable>
           )}

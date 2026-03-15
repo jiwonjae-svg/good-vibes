@@ -21,7 +21,11 @@ service cloud.firestore {
         || (request.auth != null
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followerCount'])
             && (request.resource.data.followerCount == resource.data.followerCount + 1
-                || request.resource.data.followerCount == resource.data.followerCount - 1));
+                || request.resource.data.followerCount == resource.data.followerCount - 1))
+        || (request.auth != null
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followingCount'])
+            && (request.resource.data.followingCount == resource.data.followingCount + 1
+                || request.resource.data.followingCount == resource.data.followingCount - 1));
     }
 
     // 사용자명 인덱스: 누구나 읽기(가용성 확인), 본인 uid로만 생성/삭제
@@ -32,15 +36,6 @@ service cloud.firestore {
       allow delete: if request.auth != null
         && resource.data.uid == request.auth.uid;
       allow update: if false;
-    }
-
-    // 활동 로그: 본인 uid 문서만 생성/읽기
-    match /activity_logs/{logId} {
-      allow read: if request.auth != null
-        && request.auth.uid == resource.data.uid;
-      allow create: if request.auth != null
-        && request.auth.uid == request.resource.data.uid;
-      allow update, delete: if false;
     }
 
     // ── 커뮤니티 기능 ────────────────────────────────────────────────────
@@ -119,6 +114,62 @@ service cloud.firestore {
         && resource.data.followerId == request.auth.uid;
 
       allow update: if false;
+    }
+
+    // 팔로우 알림: 수신자 본인이 읽기/read 업데이트; 인증 사용자가 생성(발송); 발신자 또는 수신자가 삭제
+    // 경로: users/{userId}/notifications/{notifId}  (notifId = "follow_{senderUid}")
+    match /users/{userId}/notifications/{notifId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+
+      allow create: if request.auth != null;
+
+      // 수신자는 read 필드만 true 로 업데이트 가능
+      allow update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+        && request.resource.data.read == true;
+
+      // 수신자 또는 발신자(unfollow 시)가 삭제 가능
+      allow delete: if request.auth != null
+        && (request.auth.uid == userId
+            || resource.data.fromUid == request.auth.uid);
+    }
+
+    // ── 사용자 서브컬렉션 ────────────────────────────────────────────────
+
+    // 오늘/날짜별 열람 명언 + 북마크: 본인만 읽기/쓰기
+    // 경로: users/{uid}/quoteHistory/{YYYY-MM-DD | "bookmarked"}
+    match /users/{userId}/quoteHistory/{docId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // 활동 잔디 기록: 본인만 읽기/쓰기
+    // 경로: users/{uid}/grassHistory/{YYYY-MM-DD}
+    match /users/{userId}/grassHistory/{docId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ── 로그 / 평가 / 신고 컬렉션 ────────────────────────────────────────
+
+    // activities: 인증 사용자가 자기 uid로만 생성 (로그인·명언 열람 등 이벤트 로깅)
+    match /activities/{docId} {
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if false;
+    }
+
+    // reports: 인증 사용자가 자기 uid로만 신고 생성, 수정/삭제 불가
+    match /reports/{docId} {
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if false;
+    }
+
+    // quoteRatings: 자기 평가만 읽기/쓰기
+    // 문서 ID 규칙: {uid}_{quoteId}
+    match /quoteRatings/{ratingId} {
+      allow read, write: if request.auth != null
+        && ratingId.matches(request.auth.uid + '_.*');
     }
   }
 }

@@ -426,3 +426,60 @@ export async function fetchCommunityQuotesByUser(
     return [];
   }
 }
+
+// --------------------------------------------------------------------------
+// Followed users' quotes (feed boosting)
+// --------------------------------------------------------------------------
+
+/**
+ * Fetches recent approved quotes from a set of followed user UIDs.
+ * Results are sorted by recency and deduplicated.
+ * Firestore `in` query supports up to 30 items per chunk.
+ */
+export async function fetchFollowedQuotes(
+  followedUids: string[],
+  language: string,
+  maxLimit = 15,
+): Promise<CommunityQuote[]> {
+  if (followedUids.length === 0) return [];
+  const db = getDb();
+  if (!db) return [];
+
+  try {
+    // Chunk into groups of 30 (Firestore 'in' operator limit)
+    const chunks: string[][] = [];
+    for (let i = 0; i < followedUids.length; i += 30) {
+      chunks.push(followedUids.slice(i, i + 30));
+    }
+
+    const results = await Promise.all(
+      chunks.map(async (chunk) => {
+        const q = query(
+          collection(db, COMMUNITY_QUOTES),
+          where('submitterId', 'in', chunk),
+          where('status', '==', 'approved'),
+          where('language', '==', language),
+          orderBy('createdAt', 'desc'),
+          limit(maxLimit),
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<CommunityQuote, 'id' | 'createdAt'>),
+          createdAt: d.data().createdAt?.toMillis?.() ?? Date.now(),
+        }));
+      }),
+    );
+
+    // Flatten, deduplicate, sort by recency, cap at maxLimit
+    const seen = new Set<string>();
+    return results
+      .flat()
+      .filter((q) => { if (seen.has(q.id)) return false; seen.add(q.id); return true; })
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, maxLimit);
+  } catch (e) {
+    appLog.error('[communityService] fetchFollowedQuotes failed', e);
+    return [];
+  }
+}

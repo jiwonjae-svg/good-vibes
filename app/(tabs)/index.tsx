@@ -178,6 +178,26 @@ export default function HomeScreen() {
     widgetSavedRef.current = false;
   }, [language]);
 
+  // Helper: scroll to a quote by ID, prepending it to the list if not found.
+  const scrollToQuoteById = useCallback((id: string) => {
+    const idx = displayedQuotesRef.current.findIndex((q) => q.id === id);
+    if (idx >= 0) {
+      flatListRef.current?.scrollToIndex({ index: idx, animated: false });
+      return true;
+    }
+    // Quote not in displayedQuotes (e.g. different category filter) —
+    // find it in the full quote store and prepend it so it appears at index 0.
+    const allQuotes = useQuoteStore.getState().quotes;
+    const fullMatch = allQuotes.find((q) => q.id === id);
+    if (fullMatch) {
+      const { setQuotes } = useQuoteStore.getState();
+      setQuotes([fullMatch, ...allQuotes.filter((q) => q.id !== id)]);
+      setTimeout(() => flatListRef.current?.scrollToIndex({ index: 0, animated: false }), 100);
+      return true;
+    }
+    return false;
+  }, []);
+
   // Handle deep links from widget tap: com.jiwonjae.dailyglow://quote?id=<id>
   // The app/quote.tsx route stores the id in AsyncStorage and redirects here.
   useEffect(() => {
@@ -185,10 +205,7 @@ export default function HomeScreen() {
       const match = url.match(/[?&]id=([^&]+)/);
       if (!match) return;
       const id = decodeURIComponent(match[1]);
-      const idx = displayedQuotesRef.current.findIndex((q) => q.id === id);
-      if (idx >= 0) {
-        flatListRef.current?.scrollToIndex({ index: idx, animated: false });
-      } else {
+      if (!scrollToQuoteById(id)) {
         pendingQuoteIdRef.current = id; // quotes not loaded yet — will retry below
       }
     };
@@ -196,9 +213,9 @@ export default function HomeScreen() {
     AsyncStorage.getItem('@dailyglow_pending_quote_id').then((storedId) => {
       if (storedId) {
         AsyncStorage.removeItem('@dailyglow_pending_quote_id').catch(() => {});
-        const idx = displayedQuotesRef.current.findIndex((q) => q.id === storedId);
-        if (idx >= 0) flatListRef.current?.scrollToIndex({ index: idx, animated: false });
-        else pendingQuoteIdRef.current = storedId;
+        if (!scrollToQuoteById(storedId)) {
+          pendingQuoteIdRef.current = storedId;
+        }
       }
     });
     Linking.getInitialURL().then((url) => { if (url) navigate(url); });
@@ -210,10 +227,8 @@ export default function HomeScreen() {
   useEffect(() => {
     const id = pendingQuoteIdRef.current;
     if (!id || displayedQuotes.length === 0) return;
-    const idx = displayedQuotes.findIndex((q) => q.id === id);
-    if (idx >= 0) {
+    if (scrollToQuoteById(id)) {
       pendingQuoteIdRef.current = null;
-      setTimeout(() => flatListRef.current?.scrollToIndex({ index: idx, animated: false }), 400);
     }
   }, [displayedQuotes.length]);
 

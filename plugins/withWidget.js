@@ -126,7 +126,7 @@ class DailyGlowWidget : AppWidgetProvider() {
         if (quoteId.isNotEmpty()) {
             val deepLink = Uri.parse("com.jiwonjae.dailyglow://quote?id=\${Uri.encode(quoteId)}")
             val launchIntent = Intent(Intent.ACTION_VIEW, deepLink).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             }
             val pendingIntent = PendingIntent.getActivity(
                 context, appWidgetId, launchIntent,
@@ -293,6 +293,7 @@ const WIDGET_LAYOUT_XML = `<?xml version="1.0" encoding="utf-8"?>
         android:layout_height="16dp"
         android:src="@drawable/ic_widget_quote_open"
         android:scaleType="fitStart"
+        android:layout_gravity="center_horizontal"
         android:layout_marginBottom="2dp"
         android:contentDescription="@null" />
 
@@ -307,17 +308,17 @@ const WIDGET_LAYOUT_XML = `<?xml version="1.0" encoding="utf-8"?>
         android:textColor="#FF4A2A"
         android:textStyle="italic"
         android:fontFamily="serif"
-        android:gravity="start|center_vertical"
+        android:gravity="center"
         android:maxLines="6"
         android:ellipsize="end" />
 
-    <!-- Closing quote mark PNG (right-aligned) -->
+    <!-- Closing quote mark PNG -->
     <ImageView
         android:layout_width="22dp"
         android:layout_height="16dp"
         android:src="@drawable/ic_widget_quote_close"
         android:scaleType="fitEnd"
-        android:layout_gravity="end"
+        android:layout_gravity="center_horizontal"
         android:layout_marginTop="2dp"
         android:contentDescription="@null" />
 
@@ -333,7 +334,7 @@ const WIDGET_LAYOUT_XML = `<?xml version="1.0" encoding="utf-8"?>
             android:layout_height="match_parent"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_alignParentStart="true"
+            android:layout_centerHorizontal="true"
             android:layout_toStartOf="@id/widget_refresh"
             android:layout_marginEnd="4dp">
 
@@ -382,6 +383,9 @@ const WIDGET_INFO_XML = `<?xml version="1.0" encoding="utf-8"?>
     android:targetCellHeight="2"
     android:updatePeriodMillis="3600000"
     android:initialLayout="@layout/widget_layout"
+    android:previewImage="@drawable/widget_background"
+    android:previewLayout="@layout/widget_layout"
+    android:description="@string/widget_description"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen|keyguard" />
 `;
@@ -500,6 +504,14 @@ function withAndroidWidget(config) {
           xml = xml.replace(
             '</resources>',
             '    <string name="widget_default_quote">A little better, every day.</string>\n' +
+            '    <string name="widget_description">Daily inspirational quotes at a glance</string>\n' +
+            '</resources>',
+          );
+          fs.writeFileSync(stringsPath, xml);
+        } else if (!xml.includes('widget_description')) {
+          xml = xml.replace(
+            '</resources>',
+            '    <string name="widget_description">Daily inspirational quotes at a glance</string>\n' +
             '</resources>',
           );
           fs.writeFileSync(stringsPath, xml);

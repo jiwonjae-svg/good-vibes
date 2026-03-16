@@ -475,7 +475,11 @@ export const useUserStore = create<UserState>((set, get) => ({
 
   setAuth: async (user) => {
     if (user) {
-      set({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
+      // Keep the locally stored displayName (if any) to avoid flashing the
+      // Google account name before the Firestore profile loads. The correct
+      // displayName will be set below once the cloud data arrives.
+      const existingDisplayName = get().displayName;
+      set({ uid: user.uid, displayName: existingDisplayName ?? user.displayName, email: user.email, photoURL: user.photoURL });
 
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -559,11 +563,13 @@ export const useUserStore = create<UserState>((set, get) => ({
       }
 
       // Restore displayName from Firestore so custom display names survive logout/re-login.
-      // Without this, setAuth always resets displayName to the OAuth account name (e.g.
-      // Google display name) because we seed it at the top of this block from user.displayName.
+      // Falls back to the Google OAuth displayName only when no custom name exists in Firestore.
       if (socialProfile?.displayName) {
         set({ displayName: socialProfile.displayName });
         if (socialProfile.photoURL) set({ photoURL: socialProfile.photoURL });
+      } else if (!get().displayName || get().displayName === user.displayName) {
+        // First-time user or no stored name — use Google name as fallback
+        set({ displayName: user.displayName });
       }
 
       // Restore saved preference settings from the cloud (language is local-only).

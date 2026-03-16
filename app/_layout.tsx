@@ -47,49 +47,60 @@ export default function RootLayout() {
   const setProfile = useUserStore((s) => s.setProfile);
   const setAuthCompleted = useUserStore((s) => s.setAuthCompleted);
 
-  // New-user onboarding modals (triggered by any login path, not just login.tsx)
-  const [showNewUserConfirm, setShowNewUserConfirm] = useState(false);
-  const [showNewUserProfile, setShowNewUserProfile] = useState(false);
+  // ── Modal queue: ensures at most one modal is visible at any time ──────────
+  // Modals are enqueued by type and shown in FIFO order. When the front modal
+  // is dismissed, the next one becomes visible automatically.
+  type ModalEntry =
+    | { type: 'googleConfirm' }
+    | { type: 'profileSetup' }
+    | { type: 'badge'; badgeId: string };
 
-  // Deferred badge modal: wait until other modals have had a chance to appear
-  // so the badge modal never overlaps with confirm/profile/onboarding modals.
-  const [deferredBadgeId, setDeferredBadgeId] = useState<string | null>(null);
-  useEffect(() => {
-    // Block badge modal while any new-user onboarding flow is in progress.
-    // pendingNewUserSignIn is checked directly (in addition to the derived
-    // showNewUserConfirm/showNewUserProfile) to close the race window where
-    // pendingNewUserSignIn is set but showNewUserConfirm hasn't been flipped yet.
-    if (!newBadgeEarned || showNewUserConfirm || showNewUserProfile || !!pendingNewUserSignIn) {
-      setDeferredBadgeId(null);
-      return;
-    }
-    const timer = setTimeout(() => setDeferredBadgeId(newBadgeEarned), 1500);
-    return () => clearTimeout(timer);
-  }, [newBadgeEarned, showNewUserConfirm, showNewUserProfile, pendingNewUserSignIn]);
+  const [modalQueue, setModalQueue] = useState<ModalEntry[]>([]);
+  const activeModal = modalQueue[0] ?? null;
 
+  const dismissFrontModal = useCallback(() => {
+    setModalQueue((q) => q.slice(1));
+  }, []);
+
+  // Enqueue new-user onboarding modals when pendingNewUserSignIn fires
   useEffect(() => {
-    if (pendingNewUserSignIn && !showNewUserConfirm && !showNewUserProfile) {
-      setShowNewUserConfirm(true);
-    }
+    if (!pendingNewUserSignIn) return;
+    setModalQueue((q) => {
+      // Avoid duplicates
+      if (q.some((m) => m.type === 'googleConfirm')) return q;
+      return [...q, { type: 'googleConfirm' }];
+    });
   }, [pendingNewUserSignIn]);
 
+  // Enqueue badge modal when a new badge is earned
+  useEffect(() => {
+    if (!newBadgeEarned) return;
+    setModalQueue((q) => {
+      if (q.some((m) => m.type === 'badge' && m.badgeId === newBadgeEarned)) return q;
+      return [...q, { type: 'badge', badgeId: newBadgeEarned }];
+    });
+  }, [newBadgeEarned]);
+
   const handleNewUserConfirmAgree = useCallback(() => {
-    setShowNewUserConfirm(false);
-    setShowNewUserProfile(true);
+    // Replace the googleConfirm entry with profileSetup so it shows next
+    setModalQueue((q) => {
+      const rest = q.filter((m) => m.type !== 'googleConfirm');
+      return [{ type: 'profileSetup' as const }, ...rest];
+    });
   }, []);
 
   const handleNewUserConfirmCancel = useCallback(() => {
-    setShowNewUserConfirm(false);
+    dismissFrontModal();
     setPendingNewUserSignIn(null);
-  }, [setPendingNewUserSignIn]);
+  }, [setPendingNewUserSignIn, dismissFrontModal]);
 
   const handleNewUserProfileComplete = useCallback(async (displayName: string, username: string) => {
     appLog.log('[layout] new user profile complete', { displayName, username });
     await setProfile(displayName, username);
     await setAuthCompleted();
     setPendingNewUserSignIn(null);
-    setShowNewUserProfile(false);
-  }, [setProfile, setAuthCompleted, setPendingNewUserSignIn]);
+    dismissFrontModal();
+  }, [setProfile, setAuthCompleted, setPendingNewUserSignIn, dismissFrontModal]);
 
   const handleNewUserProfileSkip = useCallback(async () => {
     const randomSuffix = Date.now().toString(36).slice(-6);
@@ -98,8 +109,8 @@ export default function RootLayout() {
     try { await setProfile(name, randomUsername); } catch { /* best-effort */ }
     await setAuthCompleted();
     setPendingNewUserSignIn(null);
-    setShowNewUserProfile(false);
-  }, [pendingNewUserSignIn, setProfile, setAuthCompleted, setPendingNewUserSignIn]);
+    dismissFrontModal();
+  }, [pendingNewUserSignIn, setProfile, setAuthCompleted, setPendingNewUserSignIn, dismissFrontModal]);
 
   // Re-validate notification schedule when the app returns to the foreground
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
@@ -265,20 +276,20 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
           <Stack.Screen name="quote" options={{ gestureEnabled: false, animation: 'none' }} />
         </Stack>
-        {/* Global badge milestone modal — shown on any screen, deferred 1.5 s to avoid overlap */}
+        {/* Global badge milestone modal — shown via modal queue */}
         <MilestoneBadgeModal
-          badgeId={deferredBadgeId}
-          onClose={() => { if (newBadgeEarned) appLog.log('[layout] badge modal dismissed', { badgeId: newBadgeEarned }); clearNewBadge(); }}
+          badgeId={activeModal?.type === 'badge' ? activeModal.badgeId : null}
+          onClose={() => { if (newBadgeEarned) appLog.log('[layout] badge modal dismissed', { badgeId: newBadgeEarned }); clearNewBadge(); dismissFrontModal(); }}
         />
-        {/* New-user onboarding modals triggered from any login entry point */}
+        {/* New-user onboarding modals — shown via modal queue */}
         <GoogleSignInConfirmModal
-          visible={showNewUserConfirm}
+          visible={activeModal?.type === 'googleConfirm'}
           email={pendingNewUserSignIn?.email ?? null}
           onConfirm={handleNewUserConfirmAgree}
           onCancel={handleNewUserConfirmCancel}
         />
         <ProfileSetupModal
-          visible={showNewUserProfile}
+          visible={activeModal?.type === 'profileSetup'}
           initialDisplayName={pendingNewUserSignIn?.displayName}
           onComplete={handleNewUserProfileComplete}
           onSkip={handleNewUserProfileSkip}

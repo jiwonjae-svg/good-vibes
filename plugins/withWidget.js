@@ -450,13 +450,35 @@ function withAndroidWidget(config) {
   config = withDangerousMod(config, [
     'android',
     (mod) => {
-      const mainAppPath = path.join(
-        mod.modRequest.platformProjectRoot,
-        'app/src/main/java',
-        packagePath,
-        'MainApplication.kt',
-      );
-      if (!fs.existsSync(mainAppPath)) return mod;
+      // Search recursively for MainApplication.kt so the path resolution works
+      // regardless of whether the android package has subdirectories that differ
+      // from the configured package name, or if the EAS build uses a different
+      // internal workspace structure.
+      const androidRoot = mod.modRequest.platformProjectRoot;
+      const javaRoot = path.join(androidRoot, 'app/src/main/java');
+
+      function findMainApplication(dir) {
+        if (!fs.existsSync(dir)) return null;
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            const found = findMainApplication(full);
+            if (found) return found;
+          } else if (entry.name === 'MainApplication.kt') {
+            return full;
+          }
+        }
+        return null;
+      }
+
+      // First try the expected path (fast path), then fall back to recursive search
+      const expectedPath = path.join(javaRoot, packagePath, 'MainApplication.kt');
+      const mainAppPath = fs.existsSync(expectedPath)
+        ? expectedPath
+        : findMainApplication(javaRoot);
+
+      if (!mainAppPath) return mod;
 
       let src = fs.readFileSync(mainAppPath, 'utf8');
       if (src.includes('WidgetPackage')) return mod; // already registered

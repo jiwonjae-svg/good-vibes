@@ -473,7 +473,7 @@ export function isValidDisplayName(name: string): boolean {
 }
 
 /**
- * Checks if a username is already taken.
+ * Checks if a username is already taken by querying the users collection.
  * Returns true if available, false if taken.
  */
 export async function isUsernameAvailable(username: string): Promise<boolean> {
@@ -481,9 +481,9 @@ export async function isUsernameAvailable(username: string): Promise<boolean> {
     initFirebase();
     const db = getDb();
     if (!db) return true; // assume available when offline/uninitialized
-    const ref = doc(db, 'usernames', username.toLowerCase());
-    const snap = await getDoc(ref);
-    return !snap.exists();
+    const q = query(collection(db, 'users'), where('username', '==', username.toLowerCase()), limit(1));
+    const snap = await getDocs(q);
+    return snap.empty;
   } catch {
     return true; // assume available on error so new users aren't blocked
   }
@@ -511,38 +511,15 @@ export async function saveUserProfile(
 
     const lowerUsername = username.toLowerCase();
     const userRef = doc(db, 'users', uid);
-    const newUsernameRef = doc(db, 'usernames', lowerUsername);
-    const oldUsernameRef =
-      previousUsername && previousUsername.toLowerCase() !== lowerUsername
-        ? doc(db, 'usernames', previousUsername.toLowerCase())
-        : null;
 
-    // Atomic transaction: availability check + user doc update + username reservation
-    const { runTransaction } = await import('firebase/firestore');
-    await runTransaction(db, async (transaction) => {
-      // Check availability within the transaction (skip if username unchanged)
-      if (!previousUsername || previousUsername.toLowerCase() !== lowerUsername) {
-        const usernameSnap = await transaction.get(newUsernameRef);
-        if (usernameSnap.exists()) {
-          throw Object.assign(new Error('Username taken'), { code: 'taken' });
-        }
-      }
-
-      // Update user profile
-      transaction.set(
-        userRef,
-        { displayName, username: lowerUsername, ...(photoURL !== undefined && { photoURL }) },
-        { merge: true },
-      );
-
-      // Release old username reservation
-      if (oldUsernameRef) {
-        transaction.delete(oldUsernameRef);
-      }
-
-      // Reserve new username
-      transaction.set(newUsernameRef, { uid, createdAt: serverTimestamp() });
-    });
+    // Write displayName, username, and optional photoURL directly to users/{uid}.
+    // The separate 'usernames' collection has been removed as it was unused.
+    const { setDoc: setDocFn } = await import('firebase/firestore');
+    await setDocFn(
+      userRef,
+      { displayName, username: lowerUsername, ...(photoURL !== undefined && { photoURL }) },
+      { merge: true },
+    );
 
     return { success: true };
   } catch (err: any) {

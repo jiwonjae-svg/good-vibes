@@ -558,6 +558,14 @@ export const useUserStore = create<UserState>((set, get) => ({
         }
       }
 
+      // Restore displayName from Firestore so custom display names survive logout/re-login.
+      // Without this, setAuth always resets displayName to the OAuth account name (e.g.
+      // Google display name) because we seed it at the top of this block from user.displayName.
+      if (socialProfile?.displayName) {
+        set({ displayName: socialProfile.displayName });
+        if (socialProfile.photoURL) set({ photoURL: socialProfile.photoURL });
+      }
+
       // Restore saved preference settings from the cloud (language is local-only).
       // selectedCategories is ALWAYS overridden from Firestore (never inherited from local
       // AsyncStorage) so that: (a) new users start with no categories instead of inheriting

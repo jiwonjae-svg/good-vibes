@@ -149,13 +149,14 @@ export default function SettingsScreen() {
 
       {/* Badge Modal */}
       <Modal transparent visible={badgeModalVisible} animationType="slide" onRequestClose={() => setBadgeModalVisible(false)}>
-        <Pressable style={s.modalOverlay} onPress={() => setBadgeModalVisible(false)}>
+        <View style={s.modalOverlay}>
+          {/* Backdrop dismiss — rendered behind the sheet */}
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setBadgeModalVisible(false)} />
           <View
             style={[s.modalSheet, { backgroundColor: colors.surface, height: '78%', width: '100%', maxWidth: 400 }]}
-            onStartShouldSetResponder={() => true}
           >
             <Text style={[s.premiumModalTitle, { color: colors.textPrimary, marginBottom: Spacing.lg }]}>{t('settings.myBadges')}</Text>
-            <ScrollView showsVerticalScrollIndicator={true} nestedScrollEnabled style={{ width: '100%', flex: 1 }}>
+            <ScrollView showsVerticalScrollIndicator={true} style={{ width: '100%', flex: 1 }}>
               {Object.entries(BADGE_DISPLAY)
                 .sort(([aId], [bId]) => (earnedBadges.includes(aId) ? 0 : 1) - (earnedBadges.includes(bId) ? 0 : 1))
                 .map(([id, badge]) => {
@@ -180,7 +181,7 @@ export default function SettingsScreen() {
               <View style={{ height: Spacing.lg }} />
             </ScrollView>
           </View>
-        </Pressable>
+        </View>
       </Modal>
 
       {/* Profile Edit Modal */}

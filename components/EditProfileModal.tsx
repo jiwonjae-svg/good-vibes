@@ -165,8 +165,8 @@ export default function EditProfileModal({
                       onPress={() => setEditPhotoURL(`badge:${item}`)}
                       style={[s.badgeOption, { borderColor: isSelected ? colors.primary : 'transparent', backgroundColor: colors.surfaceAlt }]}
                     >
-                      {/* Scale to 3x so the badge graphic fills the 48x48 circle (margins ~22-34% per side) */}
-                      <Image source={badge.image} style={{ width: 144, height: 144, position: 'absolute', top: -48, left: -48 }} resizeMode="contain" />
+                      {/* Natural size — badge fills the 48x48 circle via overflow:hidden */}
+                      <Image source={badge.image} style={{ width: 48, height: 48 }} resizeMode="contain" />
                     </Pressable>
                   );
                 }}

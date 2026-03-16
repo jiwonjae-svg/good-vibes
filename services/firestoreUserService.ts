@@ -71,18 +71,20 @@ export async function syncUserToFirestore(
 
     const userRef = doc(db, 'users', user.uid);
     const existingDoc = await getDoc(userRef);
+    const isNew = !existingDoc.exists();
 
     const userData: Partial<FirestoreUser> = {
       uid: user.uid,
       email: user.email,
-      displayName: user.displayName,
-      photoURL: user.photoURL,
       lastLogin: serverTimestamp() as Timestamp,
       provider,
     };
 
-    if (!existingDoc.exists()) {
+    if (isNew) {
+      // New user: seed profile fields from OAuth — never overwrite on subsequent logins
       userData.createdAt = serverTimestamp() as Timestamp;
+      userData.displayName = user.displayName;
+      userData.photoURL = user.photoURL;
       userData.followerCount = 0;
       userData.followingCount = 0;
     }

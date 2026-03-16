@@ -490,12 +490,12 @@ function withAndroidWidget(config) {
       );
 
       // Pattern A: Expo SDK 52+ (New Architecture) format:
-      //   val packages = PackageList(this).packages
+      //   val packages = PackageList(this).packages          (or this@MainApplication)
       //   // optional comments
       //   return packages
-      if (/val packages = PackageList\(this\)\.packages/.test(src)) {
+      if (/val packages = PackageList\(this(?:@\w+)?\)\.packages/.test(src)) {
         src = src.replace(
-          /(val packages = PackageList\(this\)\.packages)([\s\S]*?)([ \t]*return packages)/,
+          /(val packages = PackageList\(this(?:@\w+)?\)\.packages)([\s\S]*?)([ \t]*return packages)/,
           (match, decl, between, ret) => {
             const indent = ret.match(/^[ \t]*/)[0];
             return `${decl}${between}${indent}packages.add(WidgetPackage())\n${ret}`;

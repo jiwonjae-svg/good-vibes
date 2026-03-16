@@ -467,16 +467,28 @@ function withAndroidWidget(config) {
         `$1\n\nimport ${packageId}.widget.WidgetPackage\n`,
       );
 
-      // Pattern 1: PackageList(this).packages.apply { ... }
-      if (src.includes('PackageList(this).packages.apply')) {
+      // Pattern A: Expo SDK 52+ (New Architecture) format:
+      //   val packages = PackageList(this).packages
+      //   // optional comments
+      //   return packages
+      if (/val packages = PackageList\(this\)\.packages/.test(src)) {
+        src = src.replace(
+          /(val packages = PackageList\(this\)\.packages)([\s\S]*?)([ \t]*return packages)/,
+          (match, decl, between, ret) => {
+            const indent = ret.match(/^[ \t]*/)[0];
+            return `${decl}${between}${indent}packages.add(WidgetPackage())\n${ret}`;
+          },
+        );
+      // Pattern B: Old Expo format — PackageList(this).packages.apply { ... }
+      } else if (src.includes('PackageList(this).packages.apply')) {
         src = src.replace(
           /(PackageList\(this\)\.packages\.apply\s*\{)([\s\S]*?)(\s*\})/,
           (match, open, inner, close) => {
             return `${open}${inner}            add(WidgetPackage())\n        ${close.trimStart()}`;
           },
         );
-      // Pattern 2: override fun getPackages(): List<ReactPackage> { return mutableListOf(... }
-      } else if (src.includes('getPackages()')) {
+      // Pattern C: Explicit list literal — return mutableListOf(...) / listOf(...)
+      } else if (/return\s+(?:mutableListOf|listOf)\(/.test(src)) {
         src = src.replace(
           /(override fun getPackages\(\)[\s\S]*?return\s+(?:mutableListOf|listOf)\()([\s\S]*?)(\))/,
           (match, open, inner, close) => {
@@ -484,12 +496,14 @@ function withAndroidWidget(config) {
             return `${open}${inner}${sep}WidgetPackage()${close}`;
           },
         );
-      // Pattern 3: add(PackageList(this).getPackages()) style
-      } else {
-        // Fallback: append before the closing brace of the class
+      // Pattern D: Any getPackages override — inject a packages.add before first return
+      } else if (src.includes('override fun getPackages()')) {
         src = src.replace(
-          /(override fun getPackages\(\)[^}]*\{)/,
-          `$1\n        val packages = PackageList(this).packages\n        packages.add(WidgetPackage())\n        return packages\n    }\n\n    // WIDGET_PACKAGE_ADDED — original getPackages:\n    fun _originalGetPackages_unused() {`,
+          /(override fun getPackages\(\)[^{]*\{[\s\S]*?)([ \t]*return )/,
+          (match, before, ret) => {
+            const indent = ret.match(/^[ \t]*/)[0];
+            return `${before}${indent}PackageList(this).packages.also { it.add(WidgetPackage()) }.let { return it }\n${ret}`;
+          },
         );
       }
 

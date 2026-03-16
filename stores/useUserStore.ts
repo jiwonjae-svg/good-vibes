@@ -558,14 +558,21 @@ export const useUserStore = create<UserState>((set, get) => ({
         }
       }
 
-      // Restore saved preference settings from the cloud (language is local-only)
+      // Restore saved preference settings from the cloud (language is local-only).
+      // selectedCategories is ALWAYS overridden from Firestore (never inherited from local
+      // AsyncStorage) so that: (a) new users start with no categories instead of inheriting
+      // pre-login onboarding selections, and (b) switching accounts shows the correct
+      // categories for the newly signed-in user.
       if (cloudSettings) {
         set({
           ...(cloudSettings.isDarkMode != null && { isDarkMode: cloudSettings.isDarkMode }),
-          ...(cloudSettings.selectedCategories != null && { selectedCategories: cloudSettings.selectedCategories }),
+          selectedCategories: cloudSettings.selectedCategories ?? [],
           ...(cloudSettings.autoReadEnabled != null && { autoReadEnabled: cloudSettings.autoReadEnabled }),
           ...(cloudSettings.dailyReminderEnabled != null && { dailyReminderEnabled: cloudSettings.dailyReminderEnabled }),
         });
+      } else {
+        // New user — no Firestore settings yet, start with empty categories
+        set({ selectedCategories: [] });
       }
 
       // Award first_login badge on first-ever sign-in
@@ -598,6 +605,8 @@ export const useUserStore = create<UserState>((set, get) => ({
         earnedBadges: [],
         earnedBadgeDates: {},
         pendingNewUserSignIn: null,
+        // Clear categories so a different user's selections don't carry over.
+        selectedCategories: [],
         // Clear trial expiry so a different user on the same device doesn't
         // inherit an active Glow+ trial belonging to the previous account.
         premiumTrialExpiry: null,

@@ -35,10 +35,11 @@ export default function ProfileAvatar({
     >
       {source !== null ? (
         typeof source === 'number' ? (
-          // Local badge image: scale up to fill the circle, contain to keep aspect ratio
+          // Local badge image: scale to 3× and center so the badge graphic fills the
+          // circle while the white margins (≈22–34% per side in our assets) are clipped.
           <Image
             source={source}
-            style={[styles.image, { width: size * 1.4, height: size * 1.4 }]}
+            style={[styles.image, { width: size * 3, height: size * 3, top: -size, left: -size }]}
             resizeMode="contain"
           />
         ) : (

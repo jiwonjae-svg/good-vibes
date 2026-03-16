@@ -158,7 +158,7 @@ class DailyGlowWidget : AppWidgetProvider() {
 
         // Font size (user-configurable multiplier)
         val fontScale = prefs.getFloat(KEY_FONT_SCALE, 1.0f)
-        views.setTextViewTextSize(R.id.widget_quote, TypedValue.COMPLEX_UNIT_SP, 14.0f * fontScale)
+        views.setTextViewTextSize(R.id.widget_quote, TypedValue.COMPLEX_UNIT_SP, 16.0f * fontScale)
 
         appWidgetManager.updateAppWidget(appWidgetId, views)
     }
@@ -285,17 +285,16 @@ const WIDGET_LAYOUT_XML = `<?xml version="1.0" encoding="utf-8"?>
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@drawable/widget_background"
-    android:padding="16dp">
+    android:padding="14dp">
 
-    <!-- Decorative opening quotation mark -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="&#x201C;"
-        android:textSize="28sp"
-        android:textColor="#33FF4A2A"
-        android:includeFontPadding="false"
-        android:lineSpacingExtra="-4sp" />
+    <!-- Opening quote mark PNG -->
+    <ImageView
+        android:layout_width="22dp"
+        android:layout_height="16dp"
+        android:src="@drawable/ic_widget_quote_open"
+        android:scaleType="fitStart"
+        android:layout_marginBottom="2dp"
+        android:contentDescription="@null" />
 
     <!-- Quote text (expands to fill available height) -->
     <TextView
@@ -304,12 +303,23 @@ const WIDGET_LAYOUT_XML = `<?xml version="1.0" encoding="utf-8"?>
         android:layout_height="0dp"
         android:layout_weight="1"
         android:text="@string/widget_default_quote"
-        android:textSize="14sp"
+        android:textSize="16sp"
         android:textColor="#FF4A2A"
         android:textStyle="italic"
+        android:fontFamily="serif"
         android:gravity="start|center_vertical"
         android:maxLines="6"
         android:ellipsize="end" />
+
+    <!-- Closing quote mark PNG (right-aligned) -->
+    <ImageView
+        android:layout_width="22dp"
+        android:layout_height="16dp"
+        android:src="@drawable/ic_widget_quote_close"
+        android:scaleType="fitEnd"
+        android:layout_gravity="end"
+        android:layout_marginTop="2dp"
+        android:contentDescription="@null" />
 
     <!-- Bottom row: author + streak (left), refresh button (right) -->
     <RelativeLayout
@@ -333,6 +343,7 @@ const WIDGET_LAYOUT_XML = `<?xml version="1.0" encoding="utf-8"?>
                 android:layout_height="wrap_content"
                 android:textSize="11sp"
                 android:textColor="#99FF4A2A"
+                android:fontFamily="serif"
                 android:visibility="gone" />
 
             <TextView
@@ -378,9 +389,12 @@ const WIDGET_INFO_XML = `<?xml version="1.0" encoding="utf-8"?>
 const WIDGET_BACKGROUND_XML = `<?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#FFFFF8F0" />
-    <corners android:radius="16dp" />
-    <stroke android:width="1dp" android:color="#1AFF9F7E" />
+    <gradient
+        android:type="linear"
+        android:startColor="#FFE5D9"
+        android:endColor="#FFD4C2"
+        android:angle="135" />
+    <corners android:radius="20dp" />
 </shape>
 `;
 
@@ -463,6 +477,20 @@ function withAndroidWidget(config) {
       fs.writeFileSync(path.join(resBase, 'xml/widget_info.xml'),            WIDGET_INFO_XML);
       fs.writeFileSync(path.join(resBase, 'drawable/widget_background.xml'), WIDGET_BACKGROUND_XML);
       fs.writeFileSync(path.join(resBase, 'drawable/ic_widget_refresh.xml'), IC_WIDGET_REFRESH_XML);
+
+      // Copy quote-mark PNGs from the project's assets folder into res/drawable
+      // so the widget layout can reference them as @drawable/ic_widget_quote_open/close.
+      const projectRoot = mod.modRequest.projectRoot;
+      const quotePngs = [
+        { src: 'assets/double quotes-front.png', dst: 'ic_widget_quote_open.png' },
+        { src: 'assets/double quotes-back.png',  dst: 'ic_widget_quote_close.png' },
+      ];
+      for (const { src, dst } of quotePngs) {
+        const srcPath = path.join(projectRoot, src);
+        if (fs.existsSync(srcPath)) {
+          fs.copyFileSync(srcPath, path.join(resBase, 'drawable', dst));
+        }
+      }
 
       // String resources
       const stringsPath = path.join(resBase, 'values/strings.xml');

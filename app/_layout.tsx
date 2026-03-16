@@ -55,13 +55,17 @@ export default function RootLayout() {
   // so the badge modal never overlaps with confirm/profile/onboarding modals.
   const [deferredBadgeId, setDeferredBadgeId] = useState<string | null>(null);
   useEffect(() => {
-    if (!newBadgeEarned || showNewUserConfirm || showNewUserProfile) {
+    // Block badge modal while any new-user onboarding flow is in progress.
+    // pendingNewUserSignIn is checked directly (in addition to the derived
+    // showNewUserConfirm/showNewUserProfile) to close the race window where
+    // pendingNewUserSignIn is set but showNewUserConfirm hasn't been flipped yet.
+    if (!newBadgeEarned || showNewUserConfirm || showNewUserProfile || !!pendingNewUserSignIn) {
       setDeferredBadgeId(null);
       return;
     }
     const timer = setTimeout(() => setDeferredBadgeId(newBadgeEarned), 1500);
     return () => clearTimeout(timer);
-  }, [newBadgeEarned, showNewUserConfirm, showNewUserProfile]);
+  }, [newBadgeEarned, showNewUserConfirm, showNewUserProfile, pendingNewUserSignIn]);
 
   useEffect(() => {
     if (pendingNewUserSignIn && !showNewUserConfirm && !showNewUserProfile) {

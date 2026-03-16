@@ -711,9 +711,14 @@ export const useUserStore = create<UserState>((set, get) => ({
     const expiry = new Date();
     expiry.setDate(expiry.getDate() + 7);
     const expiryStr = expiry.toISOString().split('T')[0];
-    appLog.log('[premium] trial started', { uid: get().uid, expiry: expiryStr });
-    set({ premiumTrialExpiry: expiryStr, premiumTrialUsed: true });
+    const uid = get().uid;
+    appLog.log('[premium] trial started', { uid, expiry: expiryStr });
+    set({ premiumTrialExpiry: expiryStr, premiumTrialUsed: true, isPremium: true });
     await get().persistUser();
+    // Persist isPremium to Firestore so it survives logout → re-login.
+    if (uid) {
+      updatePremiumStatus(uid, true).catch(() => {});
+    }
   },
 
   isEffectivelyPremium: () => {

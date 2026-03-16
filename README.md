@@ -72,8 +72,14 @@ Perfect for:
 
 ### 📣 Sharing & Widgets
 - **SNS Share**: Share quotes to any social platform
-- **Home Screen Widget**: Today's quote on your home screen (iOS)
-- **Ads**: AdMob interstitial every 5 quotes (premium-exempt)
+- **Home Screen Widget**: Today's quote on your home screen (Android & iOS) — tap to jump to that quote
+- **Widget Refresh**: Tap the refresh button to cycle through a curated buffer of quotes
+- **Ads**: AdMob interstitial every 5 quotes (Glow+-exempt)
+
+### 💎 Glow+ Premium
+- **Ad-free**: No interstitial ads
+- **Unlimited widget refresh**: Buffer grows as you scroll (free: 5 quotes, Glow+: 30 quotes)
+- **7-day free trial** available (persistent across devices via cloud sync)
 
 ## 📦 Installation
 
@@ -156,7 +162,7 @@ See `.env.example` for detailed instructions on obtaining each key.
 | **Dark Mode** | Toggle for full dark theme |
 | **Category** | Filter quote themes |
 | **Daily Reminder** | Push notification at 9 AM |
-| **Premium** | Remove all ads |
+| **Glow+** | Remove all ads + larger widget refresh buffer |
 | **Account** | Google / email login, logout |
 
 ### Keyboard Shortcuts (TypeAlong)
@@ -319,8 +325,6 @@ Modules incompatible with Expo Go are conditionally loaded:
 - ✅ **Local-first** — all data stored on device by default
 - ✅ **Optional cloud sync** — only when logged in to Firebase
 - ✅ **Open source** — audit the code yourself
-- ✅ **Input sanitization** — HTML tags, scripts, and event handlers blocked on community submissions
-- ✅ **Firestore security rules** — per-field write restrictions; clients cannot modify `status`, `submitterId`, or others' data
 - ✅ **Input sanitization** — HTML tags, scripts, and event handlers blocked on community quote submissions
 - ✅ **Firestore security rules** — per-field write restrictions; clients cannot modify `status`, `submitterId`, or others' data
 

@@ -51,6 +51,18 @@ export default function RootLayout() {
   const [showNewUserConfirm, setShowNewUserConfirm] = useState(false);
   const [showNewUserProfile, setShowNewUserProfile] = useState(false);
 
+  // Deferred badge modal: wait until other modals have had a chance to appear
+  // so the badge modal never overlaps with confirm/profile/onboarding modals.
+  const [deferredBadgeId, setDeferredBadgeId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!newBadgeEarned || showNewUserConfirm || showNewUserProfile) {
+      setDeferredBadgeId(null);
+      return;
+    }
+    const timer = setTimeout(() => setDeferredBadgeId(newBadgeEarned), 1500);
+    return () => clearTimeout(timer);
+  }, [newBadgeEarned, showNewUserConfirm, showNewUserProfile]);
+
   useEffect(() => {
     if (pendingNewUserSignIn && !showNewUserConfirm && !showNewUserProfile) {
       setShowNewUserConfirm(true);
@@ -249,9 +261,9 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
           <Stack.Screen name="quote" options={{ gestureEnabled: false, animation: 'none' }} />
         </Stack>
-        {/* Global badge milestone modal — shown on any screen */}
+        {/* Global badge milestone modal — shown on any screen, deferred 1.5 s to avoid overlap */}
         <MilestoneBadgeModal
-          badgeId={newBadgeEarned}
+          badgeId={deferredBadgeId}
           onClose={() => { if (newBadgeEarned) appLog.log('[layout] badge modal dismissed', { badgeId: newBadgeEarned }); clearNewBadge(); }}
         />
         {/* New-user onboarding modals triggered from any login entry point */}

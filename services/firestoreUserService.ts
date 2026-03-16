@@ -423,6 +423,10 @@ export interface UserSettings {
   selectedCategories: string[];
   autoReadEnabled: boolean;
   dailyReminderEnabled: boolean;
+  ttsSpeed: number;
+  notificationHours: number[];
+  quoteFontSizeMultiplier: number;
+  showCommunityQuotes: boolean;
   /** Ring buffer of the last 30 quote categories the user has viewed (for smart notifications) */
   recentViewedCategories?: string[];
 }

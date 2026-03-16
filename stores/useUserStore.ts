@@ -577,6 +577,10 @@ export const useUserStore = create<UserState>((set, get) => ({
           selectedCategories: cloudSettings.selectedCategories ?? [],
           ...(cloudSettings.autoReadEnabled != null && { autoReadEnabled: cloudSettings.autoReadEnabled }),
           ...(cloudSettings.dailyReminderEnabled != null && { dailyReminderEnabled: cloudSettings.dailyReminderEnabled }),
+          ...(cloudSettings.ttsSpeed != null && { ttsSpeed: cloudSettings.ttsSpeed }),
+          ...(cloudSettings.notificationHours != null && { notificationHours: cloudSettings.notificationHours }),
+          ...(cloudSettings.quoteFontSizeMultiplier != null && { quoteFontSizeMultiplier: cloudSettings.quoteFontSizeMultiplier }),
+          ...(cloudSettings.showCommunityQuotes != null && { showCommunityQuotes: cloudSettings.showCommunityQuotes }),
         });
       } else {
         // New user — no Firestore settings yet, start with empty categories
@@ -618,6 +622,14 @@ export const useUserStore = create<UserState>((set, get) => ({
         // Clear trial expiry so a different user on the same device doesn't
         // inherit an active Glow+ trial belonging to the previous account.
         premiumTrialExpiry: null,
+        // Reset per-user preference settings so different user on same device
+        // doesn't inherit the previous user's configuration.
+        dailyReminderEnabled: false,
+        autoReadEnabled: false,
+        notificationHours: [8],
+        ttsSpeed: 0.9,
+        quoteFontSizeMultiplier: 1.0,
+        showCommunityQuotes: true,
       });
       // Clear local viewed-quotes caches
       AsyncStorage.removeItem(VIEWED_QUOTES_KEY).catch(() => {});
@@ -716,6 +728,8 @@ export const useUserStore = create<UserState>((set, get) => ({
   setFontSizeMultiplier: async (mult) => {
     set({ quoteFontSizeMultiplier: mult });
     await get().persistUser();
+    const uid = get().uid;
+    if (uid) saveUserSettings(uid, { quoteFontSizeMultiplier: mult }).catch(() => {});
     try {
       const { saveFontSizeForWidget } = require('../services/widgetService');
       saveFontSizeForWidget(mult).catch(() => {});
@@ -813,12 +827,16 @@ export const useUserStore = create<UserState>((set, get) => ({
   setNotificationHours: async (hours) => {
     set({ notificationHours: hours, notificationHour: hours[0] ?? 8 });
     await get().persistUser();
+    const uid = get().uid;
+    if (uid) saveUserSettings(uid, { notificationHours: hours }).catch(() => {});
   },
 
   setTtsSpeed: async (speed) => {
     appLog.log('[settings] ttsSpeed changed', { speed });
     set({ ttsSpeed: speed });
     await get().persistUser();
+    const uid = get().uid;
+    if (uid) saveUserSettings(uid, { ttsSpeed: speed }).catch(() => {});
   },
 
   rateQuote: async (quoteId, rating) => {
@@ -843,6 +861,8 @@ export const useUserStore = create<UserState>((set, get) => ({
   setShowCommunityQuotes: async (show) => {
     set({ showCommunityQuotes: show });
     await get().persistUser();
+    const uid = get().uid;
+    if (uid) saveUserSettings(uid, { showCommunityQuotes: show }).catch(() => {});
   },
 
   incrementCommunitySubmitCount: async () => {

@@ -506,7 +506,9 @@ function withAndroidWidget(config) {
         src = src.replace(
           /(PackageList\(this\)\.packages\.apply\s*\{)([\s\S]*?)(\s*\})/,
           (match, open, inner, close) => {
-            return `${open}${inner}            add(WidgetPackage())\n        ${close.trimStart()}`;
+            // Ensure add() is always on its own line (inner may end without a newline
+            // when "\s*}" consumed the trailing newline from the comment line)
+            return `${open}${inner}\n            add(WidgetPackage())\n        ${close.trimStart()}`;
           },
         );
       // Pattern C: Explicit list literal — return mutableListOf(...) / listOf(...)

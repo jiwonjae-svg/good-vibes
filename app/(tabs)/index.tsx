@@ -14,7 +14,7 @@ import { useGrassStore } from '../../stores/useGrassStore';
 import { useAutoPlayStore } from '../../stores/useAutoPlayStore';
 import { getInitialQuotes, fetchQuoteBatch } from '../../services/quoteService';
 import { getPraise } from '../../services/praiseService';
-import { saveQuoteForWidget, saveStreakForWidget } from '../../services/widgetService';
+import { saveQuoteForWidget, saveStreakForWidget, saveQuotesBufferForWidget, WidgetQuoteData } from '../../services/widgetService';
 import { logActivityCompletion, fetchFollowedUserIds } from '../../services/firestoreUserService';
 import { appLog } from '../../services/logger';
 import { QUOTE_CONFIG } from '../../constants/config';
@@ -140,7 +140,20 @@ export default function HomeScreen() {
     if (quotes.length === 0 || widgetSavedRef.current) return;
     widgetSavedRef.current = true;
     const daily = getDailyQuote(quotes);
-    if (daily) saveQuoteForWidget(daily.text, daily.author, daily.category, daily.id, currentStreak);
+    if (!daily) return;
+    saveQuoteForWidget(daily.text, daily.author, daily.category, daily.id, currentStreak, isPremium);
+    // Seed the widget refresh buffer with 5 random quotes for free users so
+    // the refresh button cycles through varied content rather than staying stuck.
+    if (!isPremium && quotes.length > 1) {
+      const others = quotes.filter((q) => q.id !== daily.id);
+      const seed: WidgetQuoteData[] = [
+        { id: daily.id, text: daily.text, author: daily.author, category: daily.category, updatedAt: Date.now() },
+        ...[...others].sort(() => Math.random() - 0.5).slice(0, 4).map((q) => ({
+          id: q.id, text: q.text, author: q.author, category: q.category, updatedAt: Date.now(),
+        })),
+      ];
+      saveQuotesBufferForWidget(seed).catch(() => {});
+    }
   }, [quotes.length]);
 
   // When streak loads from Firestore after login, update the widget streak value
@@ -346,7 +359,7 @@ export default function HomeScreen() {
         const q = qs[idx];
         if (q) {
           if (isPremium) {
-            saveQuoteForWidget(q.text, q.author, q.category, q.id, currentStreak);
+            saveQuoteForWidget(q.text, q.author, q.category, q.id, currentStreak, true);
           }
           if (viewableItems.length === 1) {
             addViewedQuote(q.id, q.text, q.author ?? '', q.source ?? '', todayString());

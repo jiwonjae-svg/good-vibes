@@ -75,10 +75,12 @@ class DailyGlowWidget : AppWidgetProvider() {
                     if (arr.length() > 1) {
                         val idx = (prefs.getInt(KEY_QUOTE_INDEX, 0) + 1) % arr.length()
                         val q = arr.getJSONObject(idx)
+                        val newId = q.optString("id", "")
+                        val oldId = prefs.getString(KEY_ID, "") ?: ""
                         prefs.edit()
                             .putString(KEY_TEXT,   q.optString("text", ""))
                             .putString(KEY_AUTHOR, q.optString("author", ""))
-                            .putString(KEY_ID,     q.optString("id", ""))
+                            .putString(KEY_ID,     if (newId.isNotEmpty()) newId else oldId)
                             .putInt(KEY_QUOTE_INDEX, idx)
                             .apply()
                     }
@@ -121,15 +123,28 @@ class DailyGlowWidget : AppWidgetProvider() {
         }
 
         // Tap → deep link to the specific quote in the app
-        val deepLink = Uri.parse("com.jiwonjae.dailyglow://quote?id=\${Uri.encode(quoteId)}")
-        val launchIntent = Intent(Intent.ACTION_VIEW, deepLink).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (quoteId.isNotEmpty()) {
+            val deepLink = Uri.parse("com.jiwonjae.dailyglow://quote?id=\${Uri.encode(quoteId)}")
+            val launchIntent = Intent(Intent.ACTION_VIEW, deepLink).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                context, appWidgetId, launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+        } else {
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+            }
+            if (launchIntent != null) {
+                val pendingIntent = PendingIntent.getActivity(
+                    context, appWidgetId, launchIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+            }
         }
-        val pendingIntent = PendingIntent.getActivity(
-            context, appWidgetId, launchIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
 
         // Refresh button — cycles to next quote in the buffer
         val refreshIntent = Intent(context, DailyGlowWidget::class.java).apply {
@@ -269,59 +284,80 @@ const WIDGET_LAYOUT_XML = `<?xml version="1.0" encoding="utf-8"?>
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:gravity="center"
-    android:padding="16dp"
-    android:background="@drawable/widget_background">
+    android:background="@drawable/widget_background"
+    android:padding="16dp">
 
+    <!-- Decorative opening quotation mark -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="&#x201C;"
+        android:textSize="28sp"
+        android:textColor="#33FF4A2A"
+        android:includeFontPadding="false"
+        android:lineSpacingExtra="-4sp" />
+
+    <!-- Quote text (expands to fill available height) -->
     <TextView
         android:id="@+id/widget_quote"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:text="@string/widget_default_quote"
         android:textSize="14sp"
         android:textColor="#FF4A2A"
         android:textStyle="italic"
-        android:gravity="center"
-        android:maxLines="5"
+        android:gravity="start|center_vertical"
+        android:maxLines="6"
         android:ellipsize="end" />
 
-    <LinearLayout
+    <!-- Bottom row: author + streak (left), refresh button (right) -->
+    <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:layout_height="30dp"
+        android:layout_marginTop="4dp">
 
-        <TextView
-            android:id="@+id/widget_author"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textSize="12sp"
-            android:textColor="#99FF4A2A"
-            android:gravity="start"
-            android:visibility="gone" />
-
-        <TextView
-            android:id="@+id/widget_streak"
+        <LinearLayout
+            android:id="@+id/widget_meta"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="11sp"
-            android:textColor="#CCFF4A2A"
-            android:gravity="end"
-            android:visibility="gone" />
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_alignParentStart="true"
+            android:layout_toStartOf="@id/widget_refresh"
+            android:layout_marginEnd="4dp">
+
+            <TextView
+                android:id="@+id/widget_author"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="11sp"
+                android:textColor="#99FF4A2A"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/widget_streak"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:textSize="11sp"
+                android:textColor="#CCFF4A2A"
+                android:visibility="gone" />
+
+        </LinearLayout>
 
         <ImageView
             android:id="@+id/widget_refresh"
             android:layout_width="28dp"
             android:layout_height="28dp"
-            android:layout_marginStart="8dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
             android:src="@drawable/ic_widget_refresh"
             android:alpha="0.55"
-            android:padding="2dp"
+            android:scaleType="fitCenter"
             android:contentDescription="@null" />
 
-    </LinearLayout>
+    </RelativeLayout>
 
 </LinearLayout>
 `;

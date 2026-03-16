@@ -56,6 +56,7 @@ export async function saveQuoteForWidget(
   category?: string,
   id?: string,
   streak?: number,
+  isPremium?: boolean,
 ): Promise<void> {
   const entry: WidgetQuoteData = { id, text, author, category, streak, updatedAt: Date.now() };
   await widgetService.updateWidgetQuote(entry);
@@ -63,7 +64,8 @@ export async function saveQuoteForWidget(
   // Maintain the rolling buffer for widget refresh cycling
   try {
     const buffer = await getQuotesBuffer();
-    const updated = [entry, ...buffer.filter((q) => q.id !== id)].slice(0, MAX_BUFFER);
+    const maxBuffer = isPremium ? MAX_BUFFER_PREMIUM : MAX_BUFFER_FREE;
+    const updated = [entry, ...buffer.filter((q) => q.id !== id)].slice(0, maxBuffer);
     await saveQuotesBufferForWidget(updated);
   } catch {
     // silent — buffer update is non-critical
@@ -85,7 +87,8 @@ export async function saveStreakForWidget(streak: number): Promise<void> {
 }
 
 const WIDGET_QUOTES_BUFFER_KEY = '@dailyglow_widget_quotes_buffer';
-const MAX_BUFFER = 5;
+const MAX_BUFFER_FREE = 5;
+const MAX_BUFFER_PREMIUM = 30;
 
 async function getQuotesBuffer(): Promise<WidgetQuoteData[]> {
   try {
@@ -96,12 +99,11 @@ async function getQuotesBuffer(): Promise<WidgetQuoteData[]> {
   }
 }
 
-/** Saves up to 5 recent quotes so the widget refresh button can cycle through them. */
+/** Saves quotes to the widget refresh buffer. Caller is responsible for trimming to the correct size. */
 export async function saveQuotesBufferForWidget(quotes: WidgetQuoteData[]): Promise<void> {
   try {
-    const trimmed = quotes.slice(0, MAX_BUFFER);
-    await AsyncStorage.setItem(WIDGET_QUOTES_BUFFER_KEY, JSON.stringify(trimmed));
-    const nativePayload = trimmed.map((q) => ({ text: q.text, author: q.author ?? '', id: q.id ?? '' }));
+    await AsyncStorage.setItem(WIDGET_QUOTES_BUFFER_KEY, JSON.stringify(quotes));
+    const nativePayload = quotes.map((q) => ({ text: q.text, author: q.author ?? '', id: q.id ?? '' }));
     if (Platform.OS === 'android' && NativeModules.WidgetModule?.saveQuotesData) {
       await NativeModules.WidgetModule.saveQuotesData(JSON.stringify(nativePayload));
     }

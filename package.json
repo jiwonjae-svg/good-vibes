@@ -5,8 +5,8 @@
   "scripts": {
     "eas-build-post-install": "node scripts/setup-google-services.js",
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "build:android:local": "eas build --local --platform android --profile preview",
     "build:android:wsl": "powershell -ExecutionPolicy Bypass -File ./scripts/build-android-wsl.ps1",

@@ -64,12 +64,17 @@ export default function SettingsScreen() {
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [badgeModalVisible, setBadgeModalVisible] = useState(false);
 
-  const handlePremiumPurchase = () => {
+  const handlePremiumPurchase = async () => {
     // TODO: Replace with real IAP via RevenueCat or Google Play Billing.
     // This currently starts a free trial as a placeholder — no payment is collected.
     // SECURITY: server-side receipt validation must be added before going live.
     appLog.log('[settings] premium trial started (IAP not yet integrated)', { uid });
-    startPremiumTrial();
+    if (premiumTrialUsed) {
+      // Trial already used — directly activate premium for testing until real IAP is wired up.
+      await setPremium(true);
+    } else {
+      await startPremiumTrial();
+    }
     setPremiumModalVisible(false);
   };
 

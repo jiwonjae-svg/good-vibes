@@ -231,3 +231,23 @@ export async function getInitialQuotes(): Promise<Quote[]> {
   }
   return selectQuotes(BATCH_SIZE);
 }
+
+/**
+ * Look up a single quote by ID from the full source pool (client + cached server).
+ * Used by the widget deep-link handler when the quote isn't in the current session store.
+ */
+export async function findQuoteById(id: string): Promise<Quote | null> {
+  const lang = i18n.language;
+  const match = clientQuotes.find((q) => q.id === id);
+  if (match) return makeQuote(match, lang);
+  // Check cached server quotes
+  try {
+    const raw = await AsyncStorage.getItem(SERVER_QUOTES_CACHE_KEY);
+    if (raw) {
+      const serverQuotes: CrawledQuote[] = JSON.parse(raw);
+      const srv = serverQuotes.find((q) => q.id === id);
+      if (srv) return makeQuote(srv, lang);
+    }
+  } catch { /* silent */ }
+  return null;
+}

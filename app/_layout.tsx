@@ -46,17 +46,20 @@ export default function RootLayout() {
   const setPendingNewUserSignIn = useUserStore((s) => s.setPendingNewUserSignIn);
   const setProfile = useUserStore((s) => s.setProfile);
   const setAuthCompleted = useUserStore((s) => s.setAuthCompleted);
+  const globalModalCount = useUserStore((s) => s.globalModalCount);
 
   // ── Modal queue: ensures at most one modal is visible at any time ──────────
   // Modals are enqueued by type and shown in FIFO order. When the front modal
   // is dismissed, the next one becomes visible automatically.
+  // The queue is blocked while any local screen modal is active (globalModalCount > 0).
   type ModalEntry =
     | { type: 'googleConfirm' }
     | { type: 'profileSetup' }
     | { type: 'badge'; badgeId: string };
 
   const [modalQueue, setModalQueue] = useState<ModalEntry[]>([]);
-  const activeModal = modalQueue[0] ?? null;
+  // Only show the front modal when no screen-local modals are present
+  const activeModal = globalModalCount === 0 ? (modalQueue[0] ?? null) : null;
 
   const dismissFrontModal = useCallback(() => {
     setModalQueue((q) => q.slice(1));

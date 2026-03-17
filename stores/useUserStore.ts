@@ -74,6 +74,13 @@ interface UserState {
   earnedBadges: string[];
   newBadgeEarned: string | null; // transient: badge id just awarded, for toast display
 
+  // Transient counter: how many local modals (praise, confirm, profile, etc.) are
+  // currently visible across all screens. The global badge queue in _layout.tsx
+  // only shows its front entry when this is 0.
+  globalModalCount: number;
+  pushGlobalModal: () => void;
+  popGlobalModal: () => void;
+
   // Premium trial (7 days)
   premiumTrialExpiry: string | null; // ISO date string
   premiumTrialUsed: boolean;
@@ -190,6 +197,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   streakFreezeWeekKey: null,
   earnedBadges: [],
   newBadgeEarned: null,
+  globalModalCount: 0,
   premiumTrialExpiry: null,
   premiumTrialUsed: false,
   quoteFontSizeMultiplier: 1.0,
@@ -475,11 +483,14 @@ export const useUserStore = create<UserState>((set, get) => ({
 
   setAuth: async (user) => {
     if (user) {
-      // Keep the locally stored displayName (if any) to avoid flashing the
-      // Google account name before the Firestore profile loads. The correct
-      // displayName will be set below once the cloud data arrives.
-      const existingDisplayName = get().displayName;
-      set({ uid: user.uid, displayName: existingDisplayName ?? user.displayName, email: user.email, photoURL: user.photoURL });
+      // Collect all state updates and apply them in a single batch at the end
+      // to avoid intermediate re-renders that flash the Google displayName
+      // before the Firestore custom name arrives.
+      const batch: Partial<UserState> = {
+        uid: user.uid,
+        email: user.email,
+        photoURL: user.photoURL,
+      };
 
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -498,8 +509,6 @@ export const useUserStore = create<UserState>((set, get) => ({
       const cloudBadgeDates = cloudBadgesResult.badgeDates;
 
       // Merge cloud badges into local state so earned badges survive app reinstall.
-      // Use Firestore-stored badgeDates for accurate acquisition dates; fall back to
-      // today as an approximation only when no date is stored in Firestore.
       if (cloudBadges.length > 0) {
         const merged = [...new Set([...get().earnedBadges, ...cloudBadges])];
         const mergedDates: Record<string, string> = { ...get().earnedBadgeDates };
@@ -508,36 +517,34 @@ export const useUserStore = create<UserState>((set, get) => ({
             mergedDates[badge] = cloudBadgeDates[badge] ?? todayStr;
           }
         }
-        set({ earnedBadges: merged, earnedBadgeDates: mergedDates });
+        batch.earnedBadges = merged;
+        batch.earnedBadgeDates = mergedDates;
       }
       
       if (premiumStatus) {
-        set({ isPremium: true });
+        batch.isPremium = true;
       }
       
       if (cloudUsername) {
-        set({ username: cloudUsername });
+        batch.username = cloudUsername;
       }
 
       if (socialProfile) {
-        set({ followerCount: socialProfile.followerCount, followingCount: socialProfile.followingCount });
+        batch.followerCount = socialProfile.followerCount;
+        batch.followingCount = socialProfile.followingCount;
       }
       
       if (cloudBookmarks.length > 0) {
         const localBookmarks = get().bookmarkedQuoteIds;
-        const merged = [...new Set([...localBookmarks, ...cloudBookmarks])];
-        set({ bookmarkedQuoteIds: merged });
+        batch.bookmarkedQuoteIds = [...new Set([...localBookmarks, ...cloudBookmarks])];
       }
 
       // Restore today's viewed quotes from cloud
       if (cloudTodayViewed.length > 0) {
         const localToday = get().todayViewedDate === todayStr ? get().todayViewedQuoteIds : [];
-        // Cloud IDs are plain q_ids; local entries may be "q_id|author|source|text" format
         const localIds = localToday.map((q) => q.split('|')[0]);
         const allIds = [...new Set([...localIds, ...cloudTodayViewed])];
-        // Keep local entries (with full metadata) where available
         const localMap = new Map(localToday.map((e) => [e.split('|')[0], e]));
-        // For cloud-only IDs, try to recover metadata from the quote store
         let quoteMap: Map<string, { text: string; author: string; source?: string }> = new Map();
         try {
           const { useQuoteStore } = require('./useQuoteStore');
@@ -548,9 +555,10 @@ export const useUserStore = create<UserState>((set, get) => ({
           if (localMap.has(id)) return localMap.get(id)!;
           const meta = quoteMap.get(id);
           if (meta) return `${id}|${meta.author ?? ''}|${meta.source ?? ''}|${meta.text}`;
-          return id; // fallback: plain id (will be hidden in MyScreen since text is empty)
+          return id;
         });
-        set({ todayViewedQuoteIds: merged, todayViewedDate: todayStr });
+        batch.todayViewedQuoteIds = merged;
+        batch.todayViewedDate = todayStr;
         AsyncStorage.setItem(VIEWED_QUOTES_KEY, JSON.stringify({ ids: merged, date: todayStr })).catch(() => {});
       }
 
@@ -558,49 +566,48 @@ export const useUserStore = create<UserState>((set, get) => ({
       if (cloudStreak) {
         const localStreak = get().currentStreak;
         if (cloudStreak.current > localStreak) {
-          set({ currentStreak: cloudStreak.current, lastActiveDate: cloudStreak.lastActiveDate });
+          batch.currentStreak = cloudStreak.current;
+          batch.lastActiveDate = cloudStreak.lastActiveDate;
         }
       }
 
       // Restore displayName from Firestore so custom display names survive logout/re-login.
-      // Falls back to the Google OAuth displayName only when no custom name exists in Firestore.
+      // Falls back to the Google OAuth displayName only when no Firestore name exists.
       if (socialProfile?.displayName) {
-        set({ displayName: socialProfile.displayName });
-        if (socialProfile.photoURL) set({ photoURL: socialProfile.photoURL });
-      } else if (!get().displayName || get().displayName === user.displayName) {
-        // First-time user or no stored name — use Google name as fallback
-        set({ displayName: user.displayName });
+        batch.displayName = socialProfile.displayName;
+        if (socialProfile.photoURL) batch.photoURL = socialProfile.photoURL;
+      } else {
+        batch.displayName = user.displayName;
       }
 
       // Restore saved preference settings from the cloud (language is local-only).
-      // selectedCategories is ALWAYS overridden from Firestore (never inherited from local
-      // AsyncStorage) so that: (a) new users start with no categories instead of inheriting
-      // pre-login onboarding selections, and (b) switching accounts shows the correct
-      // categories for the newly signed-in user.
       if (cloudSettings) {
-        set({
-          ...(cloudSettings.isDarkMode != null && { isDarkMode: cloudSettings.isDarkMode }),
-          selectedCategories: cloudSettings.selectedCategories ?? [],
-          ...(cloudSettings.autoReadEnabled != null && { autoReadEnabled: cloudSettings.autoReadEnabled }),
-          ...(cloudSettings.dailyReminderEnabled != null && { dailyReminderEnabled: cloudSettings.dailyReminderEnabled }),
-          ...(cloudSettings.ttsSpeed != null && { ttsSpeed: cloudSettings.ttsSpeed }),
-          ...(cloudSettings.notificationHours != null && { notificationHours: cloudSettings.notificationHours }),
-          ...(cloudSettings.quoteFontSizeMultiplier != null && { quoteFontSizeMultiplier: cloudSettings.quoteFontSizeMultiplier }),
-          ...(cloudSettings.showCommunityQuotes != null && { showCommunityQuotes: cloudSettings.showCommunityQuotes }),
-        });
+        if (cloudSettings.isDarkMode != null) batch.isDarkMode = cloudSettings.isDarkMode;
+        batch.selectedCategories = cloudSettings.selectedCategories ?? [];
+        if (cloudSettings.autoReadEnabled != null) batch.autoReadEnabled = cloudSettings.autoReadEnabled;
+        if (cloudSettings.dailyReminderEnabled != null) batch.dailyReminderEnabled = cloudSettings.dailyReminderEnabled;
+        if (cloudSettings.ttsSpeed != null) batch.ttsSpeed = cloudSettings.ttsSpeed;
+        if (cloudSettings.notificationHours != null) batch.notificationHours = cloudSettings.notificationHours;
+        if (cloudSettings.quoteFontSizeMultiplier != null) batch.quoteFontSizeMultiplier = cloudSettings.quoteFontSizeMultiplier;
+        if (cloudSettings.showCommunityQuotes != null) batch.showCommunityQuotes = cloudSettings.showCommunityQuotes;
       } else {
-        // New user — no Firestore settings yet, start with empty categories
-        set({ selectedCategories: [] });
+        batch.selectedCategories = [];
       }
 
       // Award first_login badge on first-ever sign-in
-      if (!get().earnedBadges.includes('first_login')) {
-        const newBadges = [...get().earnedBadges, 'first_login'];
-        const newDates = { ...get().earnedBadgeDates, first_login: todayStr };
+      const currentBadges = batch.earnedBadges ?? get().earnedBadges;
+      if (!currentBadges.includes('first_login')) {
+        const newBadges = [...currentBadges, 'first_login'];
+        const newDates = { ...(batch.earnedBadgeDates ?? get().earnedBadgeDates), first_login: todayStr };
         appLog.log('[badge] first_login earned', { uid: user.uid });
-        set({ earnedBadges: newBadges, newBadgeEarned: 'first_login', earnedBadgeDates: newDates });
-        saveUserBadges(user.uid, newBadges, get().earnedBadgeDates).catch(() => {});
+        batch.earnedBadges = newBadges;
+        batch.earnedBadgeDates = newDates;
+        batch.newBadgeEarned = 'first_login';
+        saveUserBadges(user.uid, newBadges, newDates).catch(() => {});
       }
+
+      // Apply all state changes in one atomic update
+      set(batch as any);
     } else {
       // Logout: clear all user-specific data so the next user starts clean.
       // earnedBadges/earnedBadgeDates are cleared so a different user's cloud
@@ -917,6 +924,9 @@ export const useUserStore = create<UserState>((set, get) => ({
   },
 
   setPendingNewUserSignIn: (user) => set({ pendingNewUserSignIn: user }),
+
+  pushGlobalModal: () => set((s) => ({ globalModalCount: s.globalModalCount + 1 })),
+  popGlobalModal: () => set((s) => ({ globalModalCount: Math.max(0, s.globalModalCount - 1) })),
 
   refreshCloudData: async () => {
     const uid = get().uid;

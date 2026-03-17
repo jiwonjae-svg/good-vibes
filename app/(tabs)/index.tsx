@@ -12,7 +12,7 @@ import { useQuoteStore, Quote } from '../../stores/useQuoteStore';
 import { useUserStore } from '../../stores/useUserStore';
 import { useGrassStore } from '../../stores/useGrassStore';
 import { useAutoPlayStore } from '../../stores/useAutoPlayStore';
-import { getInitialQuotes, fetchQuoteBatch } from '../../services/quoteService';
+import { getInitialQuotes, fetchQuoteBatch, findQuoteById } from '../../services/quoteService';
 import { getPraise } from '../../services/praiseService';
 import { saveQuoteForWidget, saveStreakForWidget, saveQuotesBufferForWidget, WidgetQuoteData } from '../../services/widgetService';
 import { logActivityCompletion, fetchFollowedUserIds } from '../../services/firestoreUserService';
@@ -179,7 +179,7 @@ export default function HomeScreen() {
   }, [language]);
 
   // Helper: scroll to a quote by ID, prepending it to the list if not found.
-  const scrollToQuoteById = useCallback((id: string) => {
+  const scrollToQuoteById = useCallback(async (id: string): Promise<boolean> => {
     const idx = displayedQuotesRef.current.findIndex((q) => q.id === id);
     if (idx >= 0) {
       flatListRef.current?.scrollToIndex({ index: idx, animated: false });
@@ -195,25 +195,34 @@ export default function HomeScreen() {
       setTimeout(() => flatListRef.current?.scrollToIndex({ index: 0, animated: false }), 100);
       return true;
     }
+    // Quote not in current session — look up from the full raw source pool
+    const fromSource = await findQuoteById(id);
+    if (fromSource) {
+      const { setQuotes } = useQuoteStore.getState();
+      const current = useQuoteStore.getState().quotes;
+      setQuotes([fromSource, ...current]);
+      setTimeout(() => flatListRef.current?.scrollToIndex({ index: 0, animated: false }), 100);
+      return true;
+    }
     return false;
   }, []);
 
   // Handle deep links from widget tap: com.jiwonjae.dailyglow://quote?id=<id>
   // The app/quote.tsx route stores the id in AsyncStorage and redirects here.
   useEffect(() => {
-    const navigate = (url: string) => {
+    const navigate = async (url: string) => {
       const match = url.match(/[?&]id=([^&]+)/);
       if (!match) return;
       const id = decodeURIComponent(match[1]);
-      if (!scrollToQuoteById(id)) {
+      if (!(await scrollToQuoteById(id))) {
         pendingQuoteIdRef.current = id; // quotes not loaded yet — will retry below
       }
     };
     // Check for a quote ID stored by app/quote.tsx (widget deep link)
-    AsyncStorage.getItem('@dailyglow_pending_quote_id').then((storedId) => {
+    AsyncStorage.getItem('@dailyglow_pending_quote_id').then(async (storedId) => {
       if (storedId) {
         AsyncStorage.removeItem('@dailyglow_pending_quote_id').catch(() => {});
-        if (!scrollToQuoteById(storedId)) {
+        if (!(await scrollToQuoteById(storedId))) {
           pendingQuoteIdRef.current = storedId;
         }
       }
@@ -227,9 +236,9 @@ export default function HomeScreen() {
   useEffect(() => {
     const id = pendingQuoteIdRef.current;
     if (!id || displayedQuotes.length === 0) return;
-    if (scrollToQuoteById(id)) {
-      pendingQuoteIdRef.current = null;
-    }
+    scrollToQuoteById(id).then((found) => {
+      if (found) pendingQuoteIdRef.current = null;
+    });
   }, [displayedQuotes.length]);
 
   useEffect(() => {
@@ -446,6 +455,7 @@ export default function HomeScreen() {
       catch { praise = t('praise.fallback'); }
       setPraiseText(praise);
       setPraiseVisible(true);
+      useUserStore.getState().pushGlobalModal();
 
       if (isGuest && !loginPromptShown.current) {
         loginPromptShown.current = true;
@@ -572,7 +582,7 @@ export default function HomeScreen() {
           setSearchVisible(false);
         }}
       />
-      <PraiseModal visible={praiseVisible} praise={praiseText} onClose={() => setPraiseVisible(false)} />
+      <PraiseModal visible={praiseVisible} praise={praiseText} onClose={() => { setPraiseVisible(false); useUserStore.getState().popGlobalModal(); }} />
       <LoginPromptModal
         visible={loginPromptVisible}
         onClose={() => setLoginPromptVisible(false)}

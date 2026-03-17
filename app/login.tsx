@@ -26,6 +26,8 @@ export default function LoginScreen() {
   const setProfile = useUserStore((s) => s.setProfile);
   const hasSeenOnboarding = useUserStore((s) => s.hasSeenOnboarding);
   const isDarkMode = useUserStore((s) => s.isDarkMode);
+  const pushGlobalModal = useUserStore((s) => s.pushGlobalModal);
+  const popGlobalModal = useUserStore((s) => s.popGlobalModal);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -60,6 +62,7 @@ export default function LoginScreen() {
           setIsNewUser(true);
           setKnownEmail(user.email);
           setConfirmVisible(true);
+          pushGlobalModal();
         } else {
           await setAuthCompleted();
           appLog.log('[login] existing user, navigating');
@@ -82,12 +85,14 @@ export default function LoginScreen() {
   const handleConfirmAgree = () => {
     setConfirmVisible(false);
     setProfileVisible(true);
+    // globalModalCount stays at 1 — transitioning between modals
   };
 
   const handleProfileComplete = async (displayName: string, username: string) => {
     await setProfile(displayName, username);
     await setAuthCompleted();
     setProfileVisible(false);
+    popGlobalModal();
     appLog.log('[login] profile saved, navigating');
     if (hasSeenOnboarding) router.replace('/(tabs)');
   };
@@ -104,6 +109,7 @@ export default function LoginScreen() {
     }
     await setAuthCompleted();
     setProfileVisible(false);
+    popGlobalModal();
     if (hasSeenOnboarding) router.replace('/(tabs)');
   };
 
@@ -175,7 +181,7 @@ export default function LoginScreen() {
         visible={confirmVisible}
         email={knownEmail}
         onConfirm={handleConfirmAgree}
-        onCancel={() => setConfirmVisible(false)}
+        onCancel={() => { setConfirmVisible(false); popGlobalModal(); }}
       />
 
       {/* Profile setup modal for new users */}

@@ -207,21 +207,19 @@ export default function HomeScreen() {
   // Handle deep links from widget tap: com.jiwonjae.dailyglow://quote?id=<id>
   // The app/quote.tsx route stores the id in AsyncStorage and redirects here.
   useEffect(() => {
-    const navigate = async (url: string) => {
+    const storeId = (id: string) => {
+      pendingQuoteIdRef.current = id;
+    };
+    const navigate = (url: string) => {
       const match = url.match(/[?&]id=([^&]+)/);
       if (!match) return;
-      const id = decodeURIComponent(match[1]);
-      if (!(await scrollToQuoteById(id))) {
-        pendingQuoteIdRef.current = id; // quotes not loaded yet — will retry below
-      }
+      storeId(decodeURIComponent(match[1]));
     };
     // Check for a quote ID stored by app/quote.tsx (widget deep link)
-    AsyncStorage.getItem('@dailyglow_pending_quote_id').then(async (storedId) => {
+    AsyncStorage.getItem('@dailyglow_pending_quote_id').then((storedId) => {
       if (storedId) {
         AsyncStorage.removeItem('@dailyglow_pending_quote_id').catch(() => {});
-        if (!(await scrollToQuoteById(storedId))) {
-          pendingQuoteIdRef.current = storedId;
-        }
+        storeId(storedId);
       }
     });
     Linking.getInitialURL().then((url) => { if (url) navigate(url); });
@@ -229,14 +227,15 @@ export default function HomeScreen() {
     return () => sub.remove();
   }, []);
 
-  // Once quotes are loaded, scroll to any pending deep-link quote
+  // Once quotes are loaded, scroll to any pending deep-link quote.
+  // Only act when loading is complete to avoid partial scrolls that get wiped.
   useEffect(() => {
     const id = pendingQuoteIdRef.current;
-    if (!id || displayedQuotes.length === 0) return;
+    if (!id || displayedQuotes.length === 0 || isLoading) return;
     scrollToQuoteById(id).then((found) => {
       if (found) pendingQuoteIdRef.current = null;
     });
-  }, [displayedQuotes.length]);
+  }, [displayedQuotes.length, isLoading]);
 
   // React to deep link quote ID set via Zustand store (works on warm starts
   // when the home screen is already mounted and the mount-only effect won't re-run)
@@ -244,13 +243,13 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!pendingDeepLinkQuoteId) return;
     useQuoteStore.getState().setPendingDeepLinkQuoteId(null);
-    if (displayedQuotes.length === 0) {
-      pendingQuoteIdRef.current = pendingDeepLinkQuoteId;
-      return;
+    pendingQuoteIdRef.current = pendingDeepLinkQuoteId;
+    // On warm start, quotes are already loaded — scroll immediately
+    if (displayedQuotes.length > 0 && !isLoading) {
+      scrollToQuoteById(pendingDeepLinkQuoteId).then((found) => {
+        if (found) pendingQuoteIdRef.current = null;
+      });
     }
-    scrollToQuoteById(pendingDeepLinkQuoteId).then((found) => {
-      if (!found) pendingQuoteIdRef.current = pendingDeepLinkQuoteId;
-    });
   }, [pendingDeepLinkQuoteId]);
 
   useEffect(() => {
@@ -353,6 +352,22 @@ export default function HomeScreen() {
     try {
       const loaded = await getInitialQuotes();
       appLog.log('[home] quotes loaded', { count: loaded.length });
+
+      // If a deep-link quote ID is pending, find it and prepend it to the
+      // loaded batch so it appears at index 0 and doesn't get lost.
+      const deepLinkId = pendingQuoteIdRef.current;
+      if (deepLinkId && !loaded.some((q) => q.id === deepLinkId)) {
+        const deepQuote = await findQuoteById(deepLinkId);
+        if (deepQuote) {
+          loaded.unshift(deepQuote);
+          pendingQuoteIdRef.current = null;
+          appLog.log('[home] deep-link quote prepended', { id: deepLinkId });
+        }
+      } else if (deepLinkId) {
+        // Quote is already in the loaded batch — just scroll to it after render
+        // (handled by the displayedQuotes.length effect)
+      }
+
       setQuotes(loaded);
       setIsOffline(false);
     } catch (err) {
@@ -460,12 +475,23 @@ export default function HomeScreen() {
       logActivityCompletion(uid, activityType);
     }
 
+    // Capture any badge earned during the activity (e.g. streak milestone) and
+    // suppress it until after the praise modal is queued, so the praise always
+    // appears before the badge in the modal queue.
+    const earnedBadge = useUserStore.getState().newBadgeEarned;
+    if (earnedBadge) useUserStore.getState().clearNewBadge();
+
     // Show praise AFTER the ad closes (or immediately if no ad plays).
     const showPraise = async () => {
       let praise: string;
       try { praise = await getPraise(); }
       catch { praise = t('praise.fallback'); }
       useUserStore.getState().setPendingPraise(praise);
+
+      // Re-set the badge AFTER praise so the queue orders praise → badge
+      if (earnedBadge) {
+        useUserStore.setState({ newBadgeEarned: earnedBadge });
+      }
 
       if (isGuest && !loginPromptShown.current) {
         loginPromptShown.current = true;

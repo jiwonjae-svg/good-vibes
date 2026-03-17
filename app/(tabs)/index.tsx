@@ -238,6 +238,21 @@ export default function HomeScreen() {
     });
   }, [displayedQuotes.length]);
 
+  // React to deep link quote ID set via Zustand store (works on warm starts
+  // when the home screen is already mounted and the mount-only effect won't re-run)
+  const pendingDeepLinkQuoteId = useQuoteStore((s) => s.pendingDeepLinkQuoteId);
+  useEffect(() => {
+    if (!pendingDeepLinkQuoteId) return;
+    useQuoteStore.getState().setPendingDeepLinkQuoteId(null);
+    if (displayedQuotes.length === 0) {
+      pendingQuoteIdRef.current = pendingDeepLinkQuoteId;
+      return;
+    }
+    scrollToQuoteById(pendingDeepLinkQuoteId).then((found) => {
+      if (!found) pendingQuoteIdRef.current = pendingDeepLinkQuoteId;
+    });
+  }, [pendingDeepLinkQuoteId]);
+
   useEffect(() => {
     const setupAudio = async () => {
       try {

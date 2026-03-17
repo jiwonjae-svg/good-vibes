@@ -157,6 +157,8 @@ interface UserState {
   /** Track which quote category the user just viewed (ring buffer of last 30) */
   trackCategoryView: (category: string) => void;
   refreshCloudData: () => Promise<void>;
+  /** Award the first_login badge after consent flow completes */
+  awardFirstLoginBadge: () => Promise<void>;
   /** Pending new-user requiring onboarding modals (consent + profile setup) */
   pendingNewUserSignIn: { uid: string; displayName: string | null; email: string | null; photoURL: string | null } | null;
   setPendingNewUserSignIn: (user: { uid: string; displayName: string | null; email: string | null; photoURL: string | null } | null) => void;
@@ -435,6 +437,20 @@ export const useUserStore = create<UserState>((set, get) => ({
     await get().persistUser();
   },
 
+  awardFirstLoginBadge: async () => {
+    const uid = get().uid;
+    if (!uid) return;
+    const currentBadges = get().earnedBadges;
+    if (currentBadges.includes('first_login')) return;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const newBadges = [...currentBadges, 'first_login'];
+    const newDates = { ...get().earnedBadgeDates, first_login: todayStr };
+    appLog.log('[badge] first_login earned (new user after consent)', { uid });
+    set({ earnedBadges: newBadges, earnedBadgeDates: newDates, newBadgeEarned: 'first_login' });
+    await get().persistUser();
+    saveUserBadges(uid, newBadges, newDates).catch(() => {});
+  },
+
   setProfile: async (displayName, username, photoURL) => {
     const uid = get().uid;
     const previousUsername = get().username ?? undefined;
@@ -591,12 +607,15 @@ export const useUserStore = create<UserState>((set, get) => ({
         batch.selectedCategories = [];
       }
 
-      // Award first_login badge on first-ever sign-in
+      // Award first_login badge on sign-in ONLY for returning users who somehow
+      // don't have it yet (e.g. badge system added after their initial sign-up).
+      // New users (no cloudUsername) receive the badge after the consent flow
+      // completes — see awardFirstLoginBadge().
       const currentBadges = batch.earnedBadges ?? get().earnedBadges;
-      if (!currentBadges.includes('first_login')) {
+      if (cloudUsername && !currentBadges.includes('first_login')) {
         const newBadges = [...currentBadges, 'first_login'];
         const newDates = { ...(batch.earnedBadgeDates ?? get().earnedBadgeDates), first_login: todayStr };
-        appLog.log('[badge] first_login earned', { uid: user.uid });
+        appLog.log('[badge] first_login earned (returning user)', { uid: user.uid });
         batch.earnedBadges = newBadges;
         batch.earnedBadgeDates = newDates;
         batch.newBadgeEarned = 'first_login';

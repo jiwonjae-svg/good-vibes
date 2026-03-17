@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useQuoteStore } from '../stores/useQuoteStore';
 
 const PENDING_QUOTE_KEY = '@dailyglow_pending_quote_id';
 
@@ -20,6 +21,8 @@ export default function QuoteDeepLink() {
     const navigate = async () => {
       if (id) {
         await AsyncStorage.setItem(PENDING_QUOTE_KEY, id).catch(() => {});
+        // Also set the store so the home screen reacts even on warm starts
+        useQuoteStore.getState().setPendingDeepLinkQuoteId(id);
       }
       router.replace('/(tabs)');
     };

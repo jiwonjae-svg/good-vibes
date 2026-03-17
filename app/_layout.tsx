@@ -7,7 +7,7 @@ import * as NavigationBar from 'expo-navigation-bar';
 import '../i18n';
 import { initFirebase } from '../services/firebaseConfig';
 import { initSentry } from '../services/sentryService';
-import { configureGoogleSignIn, onAuthChange, getCurrentUser } from '../services/authService';
+import { configureGoogleSignIn, onAuthChange, getCurrentUser, logOut } from '../services/authService';
 import { initNotificationHandler, validateAndRescheduleDailyReminder, checkFollowNotifications } from '../services/notificationService';
 import { saveStreakForWidget } from '../services/widgetService';
 import { useGrassStore } from '../stores/useGrassStore';
@@ -49,6 +49,7 @@ export default function RootLayout() {
   const setAuthCompleted = useUserStore((s) => s.setAuthCompleted);
   const pendingPraise = useUserStore((s) => s.pendingPraise);
   const setPendingPraise = useUserStore((s) => s.setPendingPraise);
+  const awardFirstLoginBadge = useUserStore((s) => s.awardFirstLoginBadge);
 
   // ── Modal queue: ensures at most one modal is visible at any time ──────────
   // Modals are enqueued by type and shown in FIFO order. When the front modal
@@ -105,10 +106,13 @@ export default function RootLayout() {
     });
   }, []);
 
-  const handleNewUserConfirmCancel = useCallback(() => {
+  const handleNewUserConfirmCancel = useCallback(async () => {
     dismissFrontModal();
     setPendingNewUserSignIn(null);
-  }, [setPendingNewUserSignIn, dismissFrontModal]);
+    // Fully sign out so the user is not left in a half-authenticated state
+    await setAuth(null);
+    logOut().catch(() => {});
+  }, [setPendingNewUserSignIn, dismissFrontModal, setAuth]);
 
   const handleNewUserProfileComplete = useCallback(async (displayName: string, username: string) => {
     appLog.log('[layout] new user profile complete', { displayName, username });
@@ -116,7 +120,9 @@ export default function RootLayout() {
     await setAuthCompleted();
     setPendingNewUserSignIn(null);
     dismissFrontModal();
-  }, [setProfile, setAuthCompleted, setPendingNewUserSignIn, dismissFrontModal]);
+    // Award first_login badge AFTER consent + profile setup (shown via modal queue)
+    await awardFirstLoginBadge();
+  }, [setProfile, setAuthCompleted, setPendingNewUserSignIn, dismissFrontModal, awardFirstLoginBadge]);
 
   const handleNewUserProfileSkip = useCallback(async () => {
     const randomSuffix = Date.now().toString(36).slice(-6);
@@ -126,7 +132,9 @@ export default function RootLayout() {
     await setAuthCompleted();
     setPendingNewUserSignIn(null);
     dismissFrontModal();
-  }, [pendingNewUserSignIn, setProfile, setAuthCompleted, setPendingNewUserSignIn, dismissFrontModal]);
+    // Award first_login badge AFTER consent + profile setup (shown via modal queue)
+    await awardFirstLoginBadge();
+  }, [pendingNewUserSignIn, setProfile, setAuthCompleted, setPendingNewUserSignIn, dismissFrontModal, awardFirstLoginBadge]);
 
   // Re-validate notification schedule when the app returns to the foreground
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
@@ -233,7 +241,7 @@ export default function RootLayout() {
       }
     } else {
       setShowOnboarding(false);
-      if (!inTabsGroup && !inAuthGroup) {
+      if (!inTabsGroup) {
         router.replace('/(tabs)');
       }
     }

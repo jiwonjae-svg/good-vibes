@@ -19,6 +19,8 @@ interface QuoteState {
   currentIndex: number;
   isLoading: boolean;
   isGenerating: boolean;
+  /** Set by app/quote.tsx deep link route to notify the home screen reactively */
+  pendingDeepLinkQuoteId: string | null;
 
   setQuotes: (quotes: Quote[]) => void;
   appendQuotes: (quotes: Quote[]) => void;
@@ -26,6 +28,7 @@ interface QuoteState {
   setIsLoading: (loading: boolean) => void;
   setIsGenerating: (generating: boolean) => void;
   clearQuotes: () => void;
+  setPendingDeepLinkQuoteId: (id: string | null) => void;
 }
 
 export const useQuoteStore = create<QuoteState>((set) => ({
@@ -33,6 +36,7 @@ export const useQuoteStore = create<QuoteState>((set) => ({
   currentIndex: 0,
   isLoading: true,
   isGenerating: false,
+  pendingDeepLinkQuoteId: null,
 
   setQuotes: (quotes) => set({ quotes }),
   appendQuotes: (newQuotes) =>
@@ -41,4 +45,5 @@ export const useQuoteStore = create<QuoteState>((set) => ({
   setIsLoading: (loading) => set({ isLoading: loading }),
   setIsGenerating: (generating) => set({ isGenerating: generating }),
   clearQuotes: () => set({ quotes: [], currentIndex: 0 }),
+  setPendingDeepLinkQuoteId: (id) => set({ pendingDeepLinkQuoteId: id }),
 }));

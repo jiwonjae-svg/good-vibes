@@ -74,12 +74,9 @@ interface UserState {
   earnedBadges: string[];
   newBadgeEarned: string | null; // transient: badge id just awarded, for toast display
 
-  // Transient counter: how many local modals (praise, confirm, profile, etc.) are
-  // currently visible across all screens. The global badge queue in _layout.tsx
-  // only shows its front entry when this is 0.
-  globalModalCount: number;
-  pushGlobalModal: () => void;
-  popGlobalModal: () => void;
+  // Transient: praise text to show in the centralized modal queue.
+  pendingPraise: string | null;
+  setPendingPraise: (praise: string | null) => void;
 
   // Premium trial (7 days)
   premiumTrialExpiry: string | null; // ISO date string
@@ -197,7 +194,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   streakFreezeWeekKey: null,
   earnedBadges: [],
   newBadgeEarned: null,
-  globalModalCount: 0,
+  pendingPraise: null,
   premiumTrialExpiry: null,
   premiumTrialUsed: false,
   quoteFontSizeMultiplier: 1.0,
@@ -925,8 +922,7 @@ export const useUserStore = create<UserState>((set, get) => ({
 
   setPendingNewUserSignIn: (user) => set({ pendingNewUserSignIn: user }),
 
-  pushGlobalModal: () => set((s) => ({ globalModalCount: s.globalModalCount + 1 })),
-  popGlobalModal: () => set((s) => ({ globalModalCount: Math.max(0, s.globalModalCount - 1) })),
+  setPendingPraise: (praise) => set({ pendingPraise: praise }),
 
   refreshCloudData: async () => {
     const uid = get().uid;

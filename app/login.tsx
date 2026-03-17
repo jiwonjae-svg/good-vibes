@@ -13,8 +13,6 @@ import { useUserStore } from '../stores/useUserStore';
 import { signInWithGoogleNative } from '../services/authService';
 import { appLog } from '../services/logger';
 import SparkleAnimation from '../components/SparkleAnimation';
-import GoogleSignInConfirmModal from '../components/GoogleSignInConfirmModal';
-import ProfileSetupModal from '../components/ProfileSetupModal';
 
 export default function LoginScreen() {
   const { t } = useTranslation();
@@ -23,21 +21,12 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const setAuth = useUserStore((s) => s.setAuth);
   const setAuthCompleted = useUserStore((s) => s.setAuthCompleted);
-  const setProfile = useUserStore((s) => s.setProfile);
   const hasSeenOnboarding = useUserStore((s) => s.hasSeenOnboarding);
   const isDarkMode = useUserStore((s) => s.isDarkMode);
-  const pushGlobalModal = useUserStore((s) => s.pushGlobalModal);
-  const popGlobalModal = useUserStore((s) => s.popGlobalModal);
+  const setPendingNewUserSignIn = useUserStore((s) => s.setPendingNewUserSignIn);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  // Confirmation modal (shown to NEW users after sign-in, before profile setup)
-  const [confirmVisible, setConfirmVisible] = useState(false);
-  const [knownEmail, setKnownEmail] = useState<string | null>(null);
-  // Profile setup modal (for new users)
-  const [profileVisible, setProfileVisible] = useState(false);
-  const [pendingUser, setPendingUser] = useState<{ uid: string; displayName: string | null; email: string | null; photoURL: string | null } | null>(null);
-  const [isNewUser, setIsNewUser] = useState(false);
 
   const handleGoogleButtonPress = async () => {
     setErrorMsg(null);
@@ -57,12 +46,13 @@ export default function LoginScreen() {
         // Check if new user (no username in Firestore yet)
         const currentUsername = useUserStore.getState().username;
         if (!currentUsername) {
-          // New user — show info/consent modal first, then profile setup
-          setPendingUser({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL });
-          setIsNewUser(true);
-          setKnownEmail(user.email);
-          setConfirmVisible(true);
-          pushGlobalModal();
+          // New user — let _layout.tsx modal queue handle confirm + profile modals
+          setPendingNewUserSignIn({
+            uid: user.uid,
+            displayName: user.displayName,
+            email: user.email,
+            photoURL: user.photoURL,
+          });
         } else {
           await setAuthCompleted();
           appLog.log('[login] existing user, navigating');
@@ -82,37 +72,6 @@ export default function LoginScreen() {
     }
   };
 
-  const handleConfirmAgree = () => {
-    setConfirmVisible(false);
-    setProfileVisible(true);
-    // globalModalCount stays at 1 — transitioning between modals
-  };
-
-  const handleProfileComplete = async (displayName: string, username: string) => {
-    await setProfile(displayName, username);
-    await setAuthCompleted();
-    setProfileVisible(false);
-    popGlobalModal();
-    appLog.log('[login] profile saved, navigating');
-    if (hasSeenOnboarding) router.replace('/(tabs)');
-  };
-
-  const handleProfileSkip = async () => {
-    // Generate a random username so the user always has an @handle
-    const randomSuffix = Date.now().toString(36).slice(-6);
-    const randomUsername = `user_${randomSuffix}`;
-    const name = pendingUser?.displayName ?? 'User';
-    try {
-      await setProfile(name, randomUsername);
-    } catch {
-      // best-effort; proceed even if save fails
-    }
-    await setAuthCompleted();
-    setProfileVisible(false);
-    popGlobalModal();
-    if (hasSeenOnboarding) router.replace('/(tabs)');
-  };
-
   const handleSkip = async () => {
     await setAuthCompleted();
     if (hasSeenOnboarding) {
@@ -123,75 +82,57 @@ export default function LoginScreen() {
   const s = makeStyles(colors);
 
   return (
-    <>
-      <LinearGradient
-        colors={[colors.background, colors.primary + '22', colors.surfaceAlt]}
-        start={{ x: 0.15, y: 0 }}
-        end={{ x: 0.85, y: 1 }}
-        style={s.container}
-      >
-        {/* Header: logo + sparkle */}
-        <View style={[s.header, { paddingTop: insets.top + Spacing.xxl + Spacing.lg }]}>
-          <View style={s.sparkleWrapper}>
-            <SparkleAnimation />
-          </View>
-          <Text style={s.appName}>DailyGlow</Text>
-          <Text style={s.tagline}>{t('login.tagline')}</Text>
+    <LinearGradient
+      colors={[colors.background, colors.primary + '22', colors.surfaceAlt]}
+      start={{ x: 0.15, y: 0 }}
+      end={{ x: 0.85, y: 1 }}
+      style={s.container}
+    >
+      {/* Header: logo + sparkle */}
+      <View style={[s.header, { paddingTop: insets.top + Spacing.xxl + Spacing.lg }]}>
+        <View style={s.sparkleWrapper}>
+          <SparkleAnimation />
         </View>
+        <Text style={s.appName}>DailyGlow</Text>
+        <Text style={s.tagline}>{t('login.tagline')}</Text>
+      </View>
 
-        {/* Auth actions */}
-        <View style={[s.actions, { paddingBottom: insets.bottom + Spacing.xxl }]}>
-          {errorMsg && (
-            <Text style={[s.errorText, { color: colors.error }]}>{errorMsg}</Text>
+      {/* Auth actions */}
+      <View style={[s.actions, { paddingBottom: insets.bottom + Spacing.xxl }]}>
+        {errorMsg && (
+          <Text style={[s.errorText, { color: colors.error }]}>{errorMsg}</Text>
+        )}
+
+        <Pressable
+          style={[
+            s.googleBtn,
+            {
+              backgroundColor: isDarkMode ? colors.surfaceAlt : '#fff',
+              borderColor: isDarkMode ? colors.grass0 : '#dadce0',
+            },
+          ]}
+          onPress={handleGoogleButtonPress}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#EA4335" />
+          ) : (
+            <>
+              <Ionicons name="logo-google" size={22} color="#EA4335" />
+              <Text style={[s.googleBtnText, { color: colors.textPrimary }]}>
+                {t('login.signInWithGoogle')}
+              </Text>
+            </>
           )}
+        </Pressable>
 
-          <Pressable
-            style={[
-              s.googleBtn,
-              {
-                backgroundColor: isDarkMode ? colors.surfaceAlt : '#fff',
-                borderColor: isDarkMode ? colors.grass0 : '#dadce0',
-              },
-            ]}
-            onPress={handleGoogleButtonPress}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#EA4335" />
-            ) : (
-              <>
-                <Ionicons name="logo-google" size={22} color="#EA4335" />
-                <Text style={[s.googleBtnText, { color: colors.textPrimary }]}>
-                  {t('login.signInWithGoogle')}
-                </Text>
-              </>
-            )}
-          </Pressable>
-
-          <Pressable style={s.skipBtn} onPress={handleSkip} disabled={loading}>
-            <Text style={[s.skipText, { color: colors.textMuted }]}>
-              {t('login.continueWithoutAccount')}
-            </Text>
-          </Pressable>
-        </View>
-      </LinearGradient>
-
-      {/* Google sign-in confirmation modal */}
-      <GoogleSignInConfirmModal
-        visible={confirmVisible}
-        email={knownEmail}
-        onConfirm={handleConfirmAgree}
-        onCancel={() => { setConfirmVisible(false); popGlobalModal(); }}
-      />
-
-      {/* Profile setup modal for new users */}
-      <ProfileSetupModal
-        visible={profileVisible}
-        initialDisplayName={pendingUser?.displayName}
-        onComplete={handleProfileComplete}
-        onSkip={handleProfileSkip}
-      />
-    </>
+        <Pressable style={s.skipBtn} onPress={handleSkip} disabled={loading}>
+          <Text style={[s.skipText, { color: colors.textMuted }]}>
+            {t('login.continueWithoutAccount')}
+          </Text>
+        </Pressable>
+      </View>
+    </LinearGradient>
   );
 }
 

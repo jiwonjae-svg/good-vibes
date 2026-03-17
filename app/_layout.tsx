@@ -18,6 +18,7 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import MilestoneBadgeModal from '../components/MilestoneBadgeModal';
 import GoogleSignInConfirmModal from '../components/GoogleSignInConfirmModal';
 import ProfileSetupModal from '../components/ProfileSetupModal';
+import PraiseModal from '../components/PraiseModal';
 import { appLog } from '../services/logger';
 
 // Module-level flag: ensures the splash plays only once per JS runtime session,
@@ -46,20 +47,20 @@ export default function RootLayout() {
   const setPendingNewUserSignIn = useUserStore((s) => s.setPendingNewUserSignIn);
   const setProfile = useUserStore((s) => s.setProfile);
   const setAuthCompleted = useUserStore((s) => s.setAuthCompleted);
-  const globalModalCount = useUserStore((s) => s.globalModalCount);
+  const pendingPraise = useUserStore((s) => s.pendingPraise);
+  const setPendingPraise = useUserStore((s) => s.setPendingPraise);
 
   // ── Modal queue: ensures at most one modal is visible at any time ──────────
   // Modals are enqueued by type and shown in FIFO order. When the front modal
   // is dismissed, the next one becomes visible automatically.
-  // The queue is blocked while any local screen modal is active (globalModalCount > 0).
   type ModalEntry =
     | { type: 'googleConfirm' }
     | { type: 'profileSetup' }
-    | { type: 'badge'; badgeId: string };
+    | { type: 'badge'; badgeId: string }
+    | { type: 'praise'; praise: string };
 
   const [modalQueue, setModalQueue] = useState<ModalEntry[]>([]);
-  // Only show the front modal when no screen-local modals are present
-  const activeModal = globalModalCount === 0 ? (modalQueue[0] ?? null) : null;
+  const activeModal = modalQueue[0] ?? null;
 
   const dismissFrontModal = useCallback(() => {
     setModalQueue((q) => q.slice(1));
@@ -83,6 +84,18 @@ export default function RootLayout() {
       return [...q, { type: 'badge', badgeId: newBadgeEarned }];
     });
   }, [newBadgeEarned]);
+
+  // Enqueue praise modal when pendingPraise is set (activity completion)
+  useEffect(() => {
+    if (!pendingPraise) return;
+    setModalQueue((q) => {
+      if (q.some((m) => m.type === 'praise')) return q;
+      // Insert praise before any badge modals so the user sees activity feedback first
+      const badges = q.filter((m) => m.type === 'badge');
+      const rest = q.filter((m) => m.type !== 'badge');
+      return [...rest, { type: 'praise', praise: pendingPraise }, ...badges];
+    });
+  }, [pendingPraise]);
 
   const handleNewUserConfirmAgree = useCallback(() => {
     // Replace the googleConfirm entry with profileSetup so it shows next
@@ -296,6 +309,12 @@ export default function RootLayout() {
           initialDisplayName={pendingNewUserSignIn?.displayName}
           onComplete={handleNewUserProfileComplete}
           onSkip={handleNewUserProfileSkip}
+        />
+        {/* Praise modal — shown via modal queue after activity completion */}
+        <PraiseModal
+          visible={activeModal?.type === 'praise'}
+          praise={activeModal?.type === 'praise' ? activeModal.praise : ''}
+          onClose={() => { setPendingPraise(null); dismissFrontModal(); }}
         />
       </GestureHandlerRootView>
     </ErrorBoundary>

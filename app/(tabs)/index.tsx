@@ -24,7 +24,6 @@ import QuoteCard, { CARD_HEIGHT } from '../../components/QuoteCard';
 import SpeakAlongSheet from '../../components/SpeakAlongSheet';
 import WriteAlongSheet from '../../components/WriteAlongSheet';
 import TypeAlongSheet from '../../components/TypeAlongSheet';
-import PraiseModal from '../../components/PraiseModal';
 import LoginPromptModal from '../../components/LoginPromptModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DailyQuoteModal, { getDailyQuote } from '../../components/DailyQuoteModal';
@@ -59,8 +58,6 @@ export default function HomeScreen() {
 
   const [activeSheet, setActiveSheet] = useState<SheetType>(null);
   const [activeQuoteIndex, setActiveQuoteIndex] = useState(0);
-  const [praiseVisible, setPraiseVisible] = useState(false);
-  const [praiseText, setPraiseText] = useState('');
   const [loginPromptVisible, setLoginPromptVisible] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [searchVisible, setSearchVisible] = useState(false);
@@ -453,9 +450,7 @@ export default function HomeScreen() {
       let praise: string;
       try { praise = await getPraise(); }
       catch { praise = t('praise.fallback'); }
-      setPraiseText(praise);
-      setPraiseVisible(true);
-      useUserStore.getState().pushGlobalModal();
+      useUserStore.getState().setPendingPraise(praise);
 
       if (isGuest && !loginPromptShown.current) {
         loginPromptShown.current = true;
@@ -582,7 +577,6 @@ export default function HomeScreen() {
           setSearchVisible(false);
         }}
       />
-      <PraiseModal visible={praiseVisible} praise={praiseText} onClose={() => { setPraiseVisible(false); useUserStore.getState().popGlobalModal(); }} />
       <LoginPromptModal
         visible={loginPromptVisible}
         onClose={() => setLoginPromptVisible(false)}

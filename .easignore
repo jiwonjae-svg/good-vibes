@@ -36,6 +36,7 @@ coverage/
 __tests__/
 Thumbs.db
 repomix-output.xml
+*.apk
 
 # Include Firebase config (must be in archive for prebuild)
 !google-services.json

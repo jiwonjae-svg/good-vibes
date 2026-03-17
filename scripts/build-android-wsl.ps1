@@ -27,6 +27,9 @@ export ANDROID_HOME="$HOME/Android/Sdk"
 export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
 export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin"
 
+# Gradle JVM 메모리 설정 (OOM 방지)
+export GRADLE_OPTS="-Xmx6144m -XX:MaxMetaspaceSize=1024m"
+
 # 프로젝트 디렉토리로 이동 (경로는 아래 sed 로 치환됨)
 cd 'WSLPATH_PLACEHOLDER' || exit 1
 

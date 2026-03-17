@@ -78,7 +78,7 @@ export default {
           android: {
             // Increase JVM heap to prevent OutOfMemoryError during D8 dex merging
             extraGradleProperties: {
-              'org.gradle.jvmargs': '-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError',
+              'org.gradle.jvmargs': '-Xmx6144m -XX:MaxMetaspaceSize=1024m',
             },
           },
         },

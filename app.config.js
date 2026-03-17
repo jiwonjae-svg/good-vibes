@@ -73,16 +73,8 @@ export default {
       ["expo-navigation-bar", { visibility: "visible" }],
       "@react-native-firebase/app",
       './plugins/withWidget',
-      [        'expo-build-properties',
-        {
-          android: {
-            // Increase JVM heap to prevent OutOfMemoryError during D8 dex merging
-            extraGradleProperties: {
-              'org.gradle.jvmargs': '-Xmx6144m -XX:MaxMetaspaceSize=1024m',
-            },
-          },
-        },
-      ],
+      './plugins/withGradleMemory',
+      'expo-build-properties',
       [        "react-native-google-mobile-ads",
         {
           androidAppId: "ca-app-pub-3940256099942544~3347511713",

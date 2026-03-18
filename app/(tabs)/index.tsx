@@ -12,7 +12,7 @@ import { useQuoteStore, Quote } from '../../stores/useQuoteStore';
 import { useUserStore } from '../../stores/useUserStore';
 import { useGrassStore } from '../../stores/useGrassStore';
 import { useAutoPlayStore } from '../../stores/useAutoPlayStore';
-import { getInitialQuotes, fetchQuoteBatch, findQuoteById } from '../../services/quoteService';
+import { getInitialQuotes, fetchQuoteBatch, findQuoteById, getAllQuotesForSearch } from '../../services/quoteService';
 import { getPraise } from '../../services/praiseService';
 import { saveQuoteForWidget, saveStreakForWidget, saveQuotesBufferForWidget, WidgetQuoteData } from '../../services/widgetService';
 import { logActivityCompletion, fetchFollowedUserIds } from '../../services/firestoreUserService';
@@ -61,6 +61,7 @@ export default function HomeScreen() {
   const [loginPromptVisible, setLoginPromptVisible] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [searchVisible, setSearchVisible] = useState(false);
+  const [searchPool, setSearchPool] = useState<Quote[]>([]);
   const [showDailyModal, setShowDailyModal] = useState(false);
   const [submitVisible, setSubmitVisible] = useState(false);
   const [profileTarget, setProfileTarget] = useState<{ uid: string; name: string; photoURL?: string | null } | null>(null);
@@ -593,7 +594,12 @@ export default function HomeScreen() {
       {/* Floating search button */}
       <Pressable
         style={[styles.searchBtn, { backgroundColor: colors.surface, top: insets.top + 8 }]}
-        onPress={() => { appLog.log('[home] search modal opened'); setSearchVisible(true); }}
+        onPress={() => {
+          appLog.log('[home] search modal opened');
+          setSearchVisible(true);
+          // Lazily build the full search corpus so author lookups work across all quotes
+          getAllQuotesForSearch().then(setSearchPool).catch(() => {});
+        }}
       >
         <Ionicons name="search-outline" size={22} color={colors.textPrimary} />
       </Pressable>
@@ -622,13 +628,20 @@ export default function HomeScreen() {
 
       <QuoteSearchModal
         visible={searchVisible}
-        quotes={quotes}
+        quotes={searchPool.length > 0 ? searchPool : quotes}
         onClose={() => { appLog.log('[home] search modal closed'); setSearchVisible(false); }}
         onSelect={(q) => {
+          setSearchVisible(false);
           const idx = quotes.findIndex((x) => x.id === q.id);
           appLog.log('[home] search quote selected', { id: q.id, idx });
-          if (idx >= 0) flatListRef.current?.scrollToIndex({ index: idx, animated: true });
-          setSearchVisible(false);
+          if (idx >= 0) {
+            flatListRef.current?.scrollToIndex({ index: idx, animated: true });
+          } else {
+            // Quote is in search pool but not yet in the FlatList batch —
+            // prepend it so it appears at position 0 and scroll there.
+            setQuotes([q, ...quotes]);
+            setTimeout(() => flatListRef.current?.scrollToIndex({ index: 0, animated: true }), 50);
+          }
         }}
       />
       <LoginPromptModal

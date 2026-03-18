@@ -233,6 +233,23 @@ export async function getInitialQuotes(): Promise<Quote[]> {
 }
 
 /**
+ * Returns all quotes (client + cached server) in the current language.
+ * Used for full-corpus search so author/text lookup works across the entire dataset.
+ * Does NOT trigger a Firestore fetch — only uses the on-device cache.
+ */
+export async function getAllQuotesForSearch(): Promise<Quote[]> {
+  const lang = i18n.language;
+  let serverQuotes: CrawledQuote[] = [];
+  try {
+    const raw = await AsyncStorage.getItem(SERVER_QUOTES_CACHE_KEY);
+    if (raw) serverQuotes = JSON.parse(raw) as CrawledQuote[];
+  } catch { /* silent */ }
+  return [...clientQuotes, ...serverQuotes]
+    .map((q) => makeQuote(q, lang))
+    .filter((q): q is Quote => q !== null);
+}
+
+/**
  * Look up a single quote by ID from the full source pool (client + cached server).
  * Used by the widget deep-link handler when the quote isn't in the current session store.
  */

@@ -14,6 +14,7 @@ import { useQuoteStore } from '../../stores/useQuoteStore';
 import { useCommunityStore } from '../../stores/useCommunityStore';
 import { useTTS } from '../../hooks/useTTS';
 import { shareQuoteText } from '../../services/shareService';
+import { findQuoteById } from '../../services/quoteService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ACTION_BG_LIGHT = 'rgba(255,255,255,0.92)';
@@ -140,7 +141,7 @@ export default function MyScreen() {
   const { t } = useTranslation();
   const colors = useThemeColors();
   const router = useRouter();
-  const { bookmarkedQuoteIds, todayViewedQuoteIds, toggleBookmark, uid } = useUserStore();
+  const { bookmarkedQuoteIds, todayViewedQuoteIds, toggleBookmark, uid, language } = useUserStore();
   const quotes = useQuoteStore((s) => s.quotes);
   const communityQuotes = useCommunityStore((s) => s.communityQuotes);
   const isGuest = !uid;
@@ -148,7 +149,14 @@ export default function MyScreen() {
   const [selectedQuote, setSelectedQuote] = useState<{ id: string; text: string; author?: string; source?: string; gradientIndex: number } | null>(null);
   const [activeTab, setActiveTab] = useState<'bookmarked' | 'today'>('bookmarked');
 
-  // Build a lookup map from the loaded quote store for metadata recovery
+  // Community quotes lookup — only as fallback for bookmarks not in source data
+  const communityQuoteMap = React.useMemo(() => {
+    const m = new Map<string, { text: string; author?: string; source?: string; gradientIndex: number }>();
+    communityQuotes.forEach((cq, i) => m.set(cq.id, { text: cq.text, author: cq.author || undefined, source: 'community', gradientIndex: i % 8 }));
+    return m;
+  }, [communityQuotes]);
+
+  // quoteStoreMap kept only for todayViewedQuotes recovery
   const quoteStoreMap = React.useMemo(() => {
     const m = new Map<string, { text: string; author?: string; source?: string; gradientIndex: number }>();
     quotes.forEach((q) => m.set(q.id, { text: q.text, author: q.author || undefined, source: q.source, gradientIndex: q.gradientIndex }));
@@ -156,15 +164,35 @@ export default function MyScreen() {
     return m;
   }, [quotes, communityQuotes]);
 
-  // Bookmarks: include both regular and community quotes
-  const bookmarkedQuotes = React.useMemo(() => {
-    const result: Array<{ id: string; text: string; author?: string; source?: string; gradientIndex: number }> = [];
-    for (const id of bookmarkedQuoteIds) {
-      const q = quoteStoreMap.get(id);
-      if (q) result.push({ id, ...q });
+  // Resolve bookmarks from source data (client JSON + server cache) so they
+  // survive quote-store resets triggered by language changes.
+  // Falls back to communityQuoteMap for community-submitted quotes.
+  const [bookmarkedQuotes, setBookmarkedQuotes] = useState<
+    Array<{ id: string; text: string; author?: string; source?: string; gradientIndex: number }>
+  >([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    async function resolve() {
+      const resolved = await Promise.all(
+        bookmarkedQuoteIds.map(async (id) => {
+          const q = await findQuoteById(id);
+          if (q) return { id, text: q.text, author: q.author || undefined, source: q.source, gradientIndex: q.gradientIndex };
+          // Fallback for community quotes not present in the quote source files
+          const fallback = communityQuoteMap.get(id);
+          return fallback ? { id, ...fallback } : null;
+        })
+      );
+      if (!cancelled) {
+        setBookmarkedQuotes(
+          resolved.filter((q): q is { id: string; text: string; author?: string; source?: string; gradientIndex: number } => q !== null)
+        );
+      }
     }
-    return result;
-  }, [bookmarkedQuoteIds, quoteStoreMap]);
+    resolve();
+    return () => { cancelled = true; };
+  // Re-run when IDs change or when language changes (so text refreshes to new lang)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookmarkedQuoteIds, language]);
 
   const todayQuotes = React.useMemo(() => todayViewedQuoteIds.map((entry, idx) => {
     const parts = entry.split('|');

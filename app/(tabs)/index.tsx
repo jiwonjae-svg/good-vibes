@@ -179,7 +179,10 @@ export default function HomeScreen() {
   const scrollToQuoteById = useCallback(async (id: string): Promise<boolean> => {
     const idx = displayedQuotesRef.current.findIndex((q) => q.id === id);
     if (idx >= 0) {
-      flatListRef.current?.scrollToIndex({ index: idx, animated: false });
+      // Skip scroll if the user is already viewing this quote
+      if (idx !== activeQuoteIndexRef.current) {
+        flatListRef.current?.scrollToIndex({ index: idx, animated: false });
+      }
       return true;
     }
     // Quote not in displayedQuotes (e.g. different category filter) —
@@ -353,19 +356,23 @@ export default function HomeScreen() {
       const loaded = await getInitialQuotes();
       appLog.log('[home] quotes loaded', { count: loaded.length });
 
-      // If a deep-link quote ID is pending, find it and prepend it to the
-      // loaded batch so it appears at index 0 and doesn't get lost.
+      // If a deep-link quote ID is pending, ensure it appears at index 0.
       const deepLinkId = pendingQuoteIdRef.current;
-      if (deepLinkId && !loaded.some((q) => q.id === deepLinkId)) {
-        const deepQuote = await findQuoteById(deepLinkId);
-        if (deepQuote) {
-          loaded.unshift(deepQuote);
-          pendingQuoteIdRef.current = null;
-          appLog.log('[home] deep-link quote prepended', { id: deepLinkId });
+      if (deepLinkId) {
+        pendingQuoteIdRef.current = null; // always clear to prevent double-handling
+        const existingIdx = loaded.findIndex((q) => q.id === deepLinkId);
+        if (existingIdx >= 0) {
+          // Already in the batch — move to front
+          const [target] = loaded.splice(existingIdx, 1);
+          loaded.unshift(target);
+          appLog.log('[home] deep-link quote moved to front', { id: deepLinkId });
+        } else {
+          const deepQuote = await findQuoteById(deepLinkId);
+          if (deepQuote) {
+            loaded.unshift(deepQuote);
+            appLog.log('[home] deep-link quote prepended', { id: deepLinkId });
+          }
         }
-      } else if (deepLinkId) {
-        // Quote is already in the loaded batch — just scroll to it after render
-        // (handled by the displayedQuotes.length effect)
       }
 
       setQuotes(loaded);
@@ -378,12 +385,18 @@ export default function HomeScreen() {
     }
   };
 
-  // Show daily quote modal once per day when quotes are first loaded
+  // Show daily quote modal once per day when quotes are first loaded.
+  // Defer it until any queued modals (badge/praise/consent) have been dismissed
+  // so two modals never overlap.
+  const pendingPraise = useUserStore((s) => s.pendingPraise);
+  const pendingNewUserSignIn_home = useUserStore((s) => s.pendingNewUserSignIn);
   useEffect(() => {
     if (quotes.length === 0 || dailyModalShownRef.current) return;
+    // Wait for any queue-managed modals to finish before showing
+    if (newBadgeEarned || pendingPraise || pendingNewUserSignIn_home) return;
     const today = todayString();
     AsyncStorage.getItem('dailyModalDate').then((stored) => {
-      if (stored !== today) {
+      if (stored !== today && !dailyModalShownRef.current) {
         dailyModalShownRef.current = true;
         // Record the daily quote as viewed immediately on modal open
         const dailyQuote = getDailyQuote(quotes);
@@ -394,7 +407,7 @@ export default function HomeScreen() {
         setShowDailyModal(true);
       }
     });
-  }, [quotes.length]);
+  }, [quotes.length, newBadgeEarned, pendingPraise, pendingNewUserSignIn_home]);
 
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {

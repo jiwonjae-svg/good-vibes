@@ -340,7 +340,7 @@ export default {
     bookmark5Title: '💛 북마크 5개!',
     bookmark5Desc: '마음에 드는 명언을 5개나 저장했어요.',
     bookmark20Title: '🌟 북마크 20개!',
-    bookmark20Desc: '묵려 20개나 저장! 탈월한 취향이네요!',
+    bookmark20Desc: '묵려 20개나 저장! 탁월한 취향이네요!',
     community1Title: '✍️ 첫 번째 글 작성!',
     community1Desc: '커뮤니티에 첫 번째 명언을 작성했어요!',
     community5Title: '📣 글 5개 작성!',

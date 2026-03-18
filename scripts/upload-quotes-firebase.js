@@ -43,7 +43,19 @@ console.log(`Loaded ${quotes.length} server quotes`);
 
 const CHUNK_SIZE = 450;
 
+async function deleteCollection() {
+  const snap = await db.collection('quotes_catalog').get();
+  if (snap.empty) return;
+  console.log(`Deleting ${snap.size} existing documents...`);
+  const batch = db.batch();
+  snap.forEach((doc) => batch.delete(doc.ref));
+  await batch.commit();
+  console.log('  Existing collection cleared.');
+}
+
 async function uploadChunks() {
+  await deleteCollection();
+
   const chunks = [];
   for (let i = 0; i < quotes.length; i += CHUNK_SIZE) {
     chunks.push(quotes.slice(i, i + CHUNK_SIZE));

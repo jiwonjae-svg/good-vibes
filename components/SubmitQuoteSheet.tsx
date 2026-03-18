@@ -122,6 +122,8 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [textTouched, setTextTouched] = useState(false);
+  // Badge earned during submission — deferred until sheet closes so modals don't overlap
+  const pendingBadgeRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (visible) {
@@ -134,8 +136,20 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
       setSubmitted(false);
       setError(null);
       setTextTouched(false);
+      pendingBadgeRef.current = null;
     }
   }, [visible]);
+
+  // When the sheet closes, trigger the deferred badge modal if one was earned
+  const handleClose = () => {
+    const badge = pendingBadgeRef.current;
+    pendingBadgeRef.current = null;
+    onClose();
+    if (badge) {
+      // Schedule after the sheet dismissal animation completes
+      setTimeout(() => useUserStore.setState({ newBadgeEarned: badge }), 350);
+    }
+  };
 
   const toggleTheme = (key: string) => {
     setExpandedThemes((prev) =>
@@ -181,18 +195,27 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
       );
       if (result.success) {
         setSubmitted(true);
-        // Award community submission badges
+        // Award community submission badges — save to earnedBadges immediately
+        // (for persistence) but defer the newBadgeEarned trigger until the sheet
+        // closes so the badge modal doesn't overlap the success UI.
         const store = useUserStore.getState();
         const todayStr = new Date().toISOString().split('T')[0];
         if (!store.earnedBadges.includes('community_1')) {
           const newBadges = [...store.earnedBadges, 'community_1'];
           const newDates = { ...store.earnedBadgeDates, community_1: todayStr };
-          useUserStore.setState({ earnedBadges: newBadges, newBadgeEarned: 'community_1', earnedBadgeDates: newDates });
-          // Save to Firestore so the badge persists across logout/login
+          useUserStore.setState({ earnedBadges: newBadges, earnedBadgeDates: newDates });
+          pendingBadgeRef.current = 'community_1';
           if (store.uid) saveUserBadges(store.uid, newBadges, newDates).catch(() => {});
         }
-        // Increment submission count (awards community_5 badge at 5 total)
+        // Increment submission count (awards community_5 badge at 5 total).
+        // Capture any badge it awards so we can defer the modal trigger.
+        const prevBadge = useUserStore.getState().newBadgeEarned;
         useUserStore.getState().incrementCommunitySubmitCount();
+        const afterBadge = useUserStore.getState().newBadgeEarned;
+        if (afterBadge && afterBadge !== prevBadge) {
+          useUserStore.getState().clearNewBadge();
+          pendingBadgeRef.current = afterBadge;
+        }
       } else if (result.error === 'xssBlocked') {
         setError(t('community.xssBlocked'));
       } else if (result.error === 'tooShort') {
@@ -214,9 +237,9 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
       transparent
       visible={visible}
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <Pressable style={styles.overlay} onPress={handleClose}>
         <KeyboardAvoidingView
           behavior="padding"
           style={styles.kavWrapper}
@@ -230,7 +253,7 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
               <Text style={[styles.title, { color: colors.textPrimary }]}>
                 {t('community.submit')}
               </Text>
-              <Pressable onPress={onClose} hitSlop={8}>
+              <Pressable onPress={handleClose} hitSlop={8}>
                 <Ionicons name="close" size={24} color={colors.textMuted} />
               </Pressable>
             </View>
@@ -243,7 +266,7 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
                 </Text>
                 <Pressable
                   style={[styles.closeBtn, { backgroundColor: colors.primary }]}
-                  onPress={onClose}
+                  onPress={handleClose}
                 >
                   <Text style={styles.closeBtnText}>{t('common.ok')}</Text>
                 </Pressable>

@@ -24,7 +24,16 @@ export default function QuoteDeepLink() {
         // Also set the store so the home screen reacts even on warm starts
         useQuoteStore.getState().setPendingDeepLinkQuoteId(id);
       }
-      router.replace('/(tabs)');
+      // On warm starts the existing (tabs) screen is already below in the stack;
+      // using replace would create a SECOND tabs instance. Use back() so we
+      // return to the existing instance (which will pick up the deep-link via
+      // the Zustand pendingDeepLinkQuoteId effect).  On cold starts there is
+      // nothing to go back to, so replace is correct.
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)');
+      }
     };
     navigate();
   }, []);

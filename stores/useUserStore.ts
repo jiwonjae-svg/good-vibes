@@ -366,7 +366,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   shouldShowAd: () => {
     const { isPremium, scrollCount } = get();
     if (isPremium) return false;
-    return scrollCount > 0 && scrollCount % 5 === 0;
+    return scrollCount > 0 && scrollCount % 25 === 0;
   },
 
   setDarkMode: async (dark) => {

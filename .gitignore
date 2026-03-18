@@ -71,6 +71,9 @@ Deployment.md
 # Do NOT stage or commit anything under docs/ — internal use only.
 docs/
 
+# Agent documentation (local-only project docs for AI assistants)
+agents/
+
 # Repomix output
 repomix-output.xml
 

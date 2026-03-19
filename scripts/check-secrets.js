@@ -43,6 +43,9 @@ const BLOCKED_FILES = [
   'google-services.json',
   'GoogleService-Info.plist',
   '.sentryclirc',
+  'eas.json',
+  'eas.local.json',
+  'serviceAccount.json',
 ];
 
 function getStagedFiles() {

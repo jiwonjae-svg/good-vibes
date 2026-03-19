@@ -154,6 +154,8 @@ export default function MyScreen() {
     return m;
   }, [communityQuotes]);
 
+  // quoteStoreMap removed — todayQuotes now resolved from source data like bookmarks
+
   // Resolve bookmarks from source data (client JSON + server cache) so they
   // survive quote-store resets triggered by language changes.
   // Falls back to communityQuoteMap for community-submitted quotes.
@@ -184,8 +186,8 @@ export default function MyScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookmarkedQuoteIds, language]);
 
-  // Resolve today-viewed quotes from source data so they always show in the
-  // current language, same approach as bookmarks.
+  // Resolve today-viewed quotes from source data so displayed text always
+  // matches the *current* language, not the language active when the quote was viewed.
   const [todayQuotes, setTodayQuotes] = useState<
     Array<{ id: string; text: string; author?: string; source?: string; gradientIndex: number }>
   >([]);
@@ -197,12 +199,13 @@ export default function MyScreen() {
           const id = entry.split('|')[0];
           const q = await findQuoteById(id);
           if (q) return { id, text: q.text, author: q.author || undefined, source: q.source, gradientIndex: q.gradientIndex };
-          // Fallback: use stored text when quote is not in source data
+          const fallback = communityQuoteMap.get(id);
+          if (fallback) return { id, ...fallback };
+          // Last resort: use baked-in text from the entry (may be stale language)
           const parts = entry.split('|');
           if (parts.length >= 4) {
-            const [, author, source, ...restParts] = parts;
-            const text = restParts.join('|');
-            if (text) return { id, author: author || undefined, source: source || undefined, text, gradientIndex: idx % colors.cardGradients.length };
+            const [, author, source, ...rest] = parts;
+            return { id, author: author || undefined, source: source || undefined, text: rest.join('|'), gradientIndex: idx % 8 };
           }
           return null;
         })

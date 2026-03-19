@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -9,12 +9,18 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { Fonts, FontSize, Spacing, BorderRadius } from '../constants/theme';
+import ProfileAvatar from './ProfileAvatar';
+import {
+  searchUsersByUsername,
+  type PublicUserProfile,
+} from '../services/firestoreUserService';
 import type { Quote } from '../stores/useQuoteStore';
 
 interface Props {
@@ -22,14 +28,45 @@ interface Props {
   quotes: Quote[];
   onClose: () => void;
   onSelect: (quote: Quote) => void;
+  onUserSelect?: (user: PublicUserProfile) => void;
 }
 
-export default function QuoteSearchModal({ visible, quotes, onClose, onSelect }: Props) {
+export default function QuoteSearchModal({ visible, quotes, onClose, onSelect, onUserSelect }: Props) {
   const { t } = useTranslation();
   const colors = useThemeColors();
   const [query, setQuery] = useState('');
+  const [userResults, setUserResults] = useState<PublicUserProfile[]>([]);
+  const [userSearchLoading, setUserSearchLoading] = useState(false);
+
+  const isUserSearch = query.trim().startsWith('@');
+
+  // Debounced user search when query starts with @
+  useEffect(() => {
+    if (!isUserSearch) {
+      setUserResults([]);
+      return;
+    }
+    const uq = query.trim().slice(1).toLowerCase();
+    if (!uq) {
+      setUserResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setUserSearchLoading(true);
+      try {
+        const results = await searchUsersByUsername(uq, 20);
+        setUserResults(results);
+      } catch {
+        setUserResults([]);
+      } finally {
+        setUserSearchLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, isUserSearch]);
 
   const results = useMemo(() => {
+    if (isUserSearch) return [];
     const q = query.trim().toLowerCase();
     if (!q) return [];
     return quotes.filter(
@@ -37,10 +74,11 @@ export default function QuoteSearchModal({ visible, quotes, onClose, onSelect }:
         quote.text.toLowerCase().includes(q) ||
         (quote.author && quote.author.toLowerCase().includes(q)),
     ).slice(0, 50);
-  }, [query, quotes]);
+  }, [query, quotes, isUserSearch]);
 
   const handleClose = useCallback(() => {
     setQuery('');
+    setUserResults([]);
     onClose();
   }, [onClose]);
 
@@ -80,6 +118,60 @@ export default function QuoteSearchModal({ visible, quotes, onClose, onSelect }:
           </View>
 
           {/* Results */}
+          {isUserSearch ? (
+            userSearchLoading ? (
+              <View style={styles.emptyContainer}>
+                <ActivityIndicator size="large" color={colors.primary} />
+              </View>
+            ) : (
+              <FlatList
+                data={userResults}
+                keyExtractor={(item) => item.uid}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.listContent}
+                ListEmptyComponent={
+                  query.trim().length > 1 ? (
+                    <View style={styles.emptyContainer}>
+                      <Ionicons name="person-outline" size={40} color={colors.textMuted} />
+                      <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                        {t('home.searchEmpty')}
+                      </Text>
+                    </View>
+                  ) : null
+                }
+                renderItem={({ item }) => (
+                  <Pressable
+                    style={[styles.userResultItem, { borderBottomColor: colors.surfaceAlt }]}
+                    onPress={() => {
+                      if (onUserSelect) {
+                        setQuery('');
+                        setUserResults([]);
+                        onUserSelect(item);
+                      }
+                    }}
+                  >
+                    <ProfileAvatar
+                      photoURL={item.photoURL}
+                      displayName={item.displayName}
+                      size={40}
+                      backgroundColor={colors.primary + '40'}
+                      textColor={colors.primary}
+                    />
+                    <View style={styles.userResultInfo}>
+                      <Text style={[styles.userResultName, { color: colors.textPrimary }]} numberOfLines={1}>
+                        {item.displayName ?? item.uid}
+                      </Text>
+                      {item.username ? (
+                        <Text style={[styles.userResultHandle, { color: colors.textSecondary }]} numberOfLines={1}>
+                          @{item.username}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </Pressable>
+                )}
+              />
+            )
+          ) : (
           <FlatList
             data={results}
             keyExtractor={(item) => item.id}
@@ -111,6 +203,7 @@ export default function QuoteSearchModal({ visible, quotes, onClose, onSelect }:
               </Pressable>
             )}
           />
+          )}
         </KeyboardAvoidingView>
       </SafeAreaView>
     </Modal>
@@ -160,4 +253,15 @@ const styles = StyleSheet.create({
   },
   resultText: { ...Fonts.body, fontSize: FontSize.md, lineHeight: 22 },
   resultAuthor: { ...Fonts.body, fontSize: FontSize.sm, fontStyle: 'italic' },
+  userResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    gap: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  userResultInfo: { flex: 1, gap: 2 },
+  userResultName: { ...Fonts.heading, fontSize: FontSize.sm },
+  userResultHandle: { ...Fonts.body, fontSize: FontSize.xs },
 });

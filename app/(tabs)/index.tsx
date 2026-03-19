@@ -643,6 +643,10 @@ export default function HomeScreen() {
             setTimeout(() => flatListRef.current?.scrollToIndex({ index: 0, animated: true }), 50);
           }
         }}
+        onUserSelect={(user) => {
+          setSearchVisible(false);
+          setProfileTarget({ uid: user.uid, name: user.displayName ?? '', photoURL: user.photoURL });
+        }}
       />
       <LoginPromptModal
         visible={loginPromptVisible}

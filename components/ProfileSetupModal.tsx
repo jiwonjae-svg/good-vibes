@@ -9,15 +9,17 @@ import { useThemeColors } from '../hooks/useThemeColors';
 import { Fonts, FontSize, Spacing, BorderRadius } from '../constants/theme';
 import { isUsernameAvailable, isValidUsername, isValidDisplayName } from '../services/firestoreUserService';
 
-// XSS-safe: strip any HTML/script tags from text
+// XSS-safe: strip HTML tags, control characters, and non-allowed special characters
 function sanitize(text: string): string {
-  return text.replace(/[<>"'&]/g, '');
+  return text
+    .replace(/<[^>]*>/g, '') // strip HTML tags
+    .replace(/[\x00-\x1F\x7F]/g, '') // strip control chars
+    .trim();
 }
 
-// Filter display name: allow letters (any script), digits, spaces, hyphens, underscores
+// Filter display name: allow only Unicode letters, digits, spaces, '-', '_'
 function filterDisplayName(text: string): string {
-  // Remove special chars except - and _ (and all Unicode letters/digits/spaces allowed)
-  return sanitize(text).replace(/[!@#$%^&*()+={}\[\]|\\:;"<>,.?/~`]/g, '');
+  return sanitize(text).replace(/[^\p{L}\p{N}\s\-_]/gu, '').slice(0, 30);
 }
 
 // Filter username: only a-z A-Z 0-9 - _

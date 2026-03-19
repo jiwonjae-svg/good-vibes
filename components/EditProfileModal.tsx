@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { Fonts, FontSize, Spacing, BorderRadius } from '../constants/theme';
-import { isUsernameAvailable, isValidUsername } from '../services/firestoreUserService';
+import { isUsernameAvailable, isValidUsername, sanitizeBio } from '../services/firestoreUserService';
 import { BADGE_CONFIG } from '../constants/badges';
 import ProfileAvatar from './ProfileAvatar';
 import { useUserStore } from '../stores/useUserStore';
@@ -17,13 +17,23 @@ function filterUsername(text: string): string {
   return text.replace(/[^a-zA-Z0-9\-_]/g, '');
 }
 
+// Sanitize display name: allow only Unicode letters, digits, spaces, '-', '_'
+function sanitizeDisplayName(text: string): string {
+  return text
+    .replace(/<[^>]*>/g, '') // strip HTML tags
+    .replace(/[\x00-\x1F\x7F]/g, '') // strip control chars
+    .replace(/[^\p{L}\p{N}\s\-_]/gu, '') // keep only letters, digits, spaces, -, _
+    .slice(0, 30);
+}
+
 interface EditProfileModalProps {
   visible: boolean;
   onClose: () => void;
   displayName: string;
   username: string;
   photoURL?: string | null;
-  onSave: (displayName: string, username: string, photoURL?: string) => Promise<void>;
+  bio?: string | null;
+  onSave: (displayName: string, username: string, photoURL?: string, bio?: string) => Promise<void>;
 }
 
 export default function EditProfileModal({
@@ -32,6 +42,7 @@ export default function EditProfileModal({
   displayName,
   username,
   photoURL,
+  bio,
   onSave,
 }: EditProfileModalProps) {
   const { t } = useTranslation();
@@ -40,6 +51,7 @@ export default function EditProfileModal({
   const [editName, setEditName] = useState(displayName);
   const [editUsername, setEditUsername] = useState(username);
   const [editPhotoURL, setEditPhotoURL] = useState<string | undefined>(photoURL ?? undefined);
+  const [editBio, setEditBio] = useState(bio ?? '');
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
@@ -52,6 +64,7 @@ export default function EditProfileModal({
       setEditName(displayName);
       setEditUsername(username);
       setEditPhotoURL(photoURL ?? undefined);
+      setEditBio(bio ?? '');
       setUsernameAvailable(null);
       setUsernameError(null);
       setChecking(false);
@@ -100,7 +113,7 @@ export default function EditProfileModal({
     }
     setSaving(true);
     try {
-      await onSave(trimmedName, trimmedUsername, editPhotoURL);
+      await onSave(trimmedName, trimmedUsername, editPhotoURL, sanitizeBio(editBio));
       onClose();
     } finally {
       setSaving(false);
@@ -179,7 +192,7 @@ export default function EditProfileModal({
                 <Text style={[s.label, { color: colors.textSecondary }]}>{t('settings.editProfileName')}</Text>
                 <TextInput
                   value={editName}
-                  onChangeText={setEditName}
+                  onChangeText={(text) => setEditName(sanitizeDisplayName(text))}
                   placeholder={t('profile.namePlaceholder')}
                   placeholderTextColor={colors.textMuted}
                   style={[s.input, { color: colors.textPrimary, borderColor: colors.grass0, backgroundColor: colors.surfaceAlt }]}
@@ -222,6 +235,20 @@ export default function EditProfileModal({
                   <Text style={[s.statusText, { color: colors.success }]}>{t('profile.usernameAvailable')}</Text>
                 ) : null}
               </View>
+              <View>
+                <Text style={[s.label, { color: colors.textSecondary }]}>{t('profile.bio')}</Text>
+                <TextInput
+                  value={editBio}
+                  onChangeText={(text) => setEditBio(text.slice(0, 200))}
+                  placeholder={t('profile.bioPlaceholder')}
+                  placeholderTextColor={colors.textMuted}
+                  multiline
+                  numberOfLines={3}
+                  maxLength={200}
+                  style={[s.input, s.bioInput, { color: colors.textPrimary, borderColor: colors.grass0, backgroundColor: colors.surfaceAlt }]}
+                />
+                <Text style={[s.bioCounter, { color: colors.textMuted }]}>{editBio.length}/200</Text>
+              </View>
             </View>
 
             <Pressable
@@ -256,6 +283,8 @@ function makeStyles(colors: any) {
     fields: { width: '100%', gap: Spacing.md },
     label: { ...Fonts.body, fontSize: FontSize.sm, marginBottom: 4 },
     input: { width: '100%', borderWidth: 1, borderRadius: BorderRadius.md, padding: Spacing.sm, ...Fonts.body, fontSize: FontSize.md },
+    bioInput: { minHeight: 72, textAlignVertical: 'top' },
+    bioCounter: { ...Fonts.body, fontSize: FontSize.xs, textAlign: 'right', marginTop: 2 },
     usernameRow: { flexDirection: 'row', alignItems: 'center' },
     usernameInput: { flex: 1 },
     statusIcon: { position: 'absolute', right: Spacing.sm },

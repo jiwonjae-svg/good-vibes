@@ -25,26 +25,33 @@ let db: Firestore | null = null;
 
 /**
  * AsyncStorage-backed persistence for Firebase Auth.
- * Replaces the removed getReactNativePersistence from firebase/auth (dropped in v12).
+ *
+ * Firebase v12 internally calls `_getInstance(cls)` which does `new cls()` on
+ * the provided persistence value. A plain-object literal is NOT a constructor
+ * and would throw TypeError, causing Firebase to silently fall back to in-memory
+ * persistence (no session saved). The persistence must be a CLASS so that
+ * `new AsyncStoragePersistenceClass()` produces a valid instance.
  */
-const asyncStoragePersistence = {
-  type: 'LOCAL' as const,
+class AsyncStoragePersistenceClass {
+  readonly type = 'LOCAL' as const;
   async _isAvailable() {
     return true;
-  },
+  }
   async _set(key: string, value: unknown) {
     await AsyncStorage.setItem(key, JSON.stringify(value));
-  },
+  }
   async _get(key: string) {
     const raw = await AsyncStorage.getItem(key);
     return raw ? JSON.parse(raw) : null;
-  },
+  }
   async _remove(key: string) {
     await AsyncStorage.removeItem(key);
-  },
-  _addListener() {},
-  _removeListener() {},
-} as unknown as Persistence;
+  }
+  _addListener() {}
+  _removeListener() {}
+}
+// Pass the CLASS (not an instance) — Firebase calls `new AsyncStoragePersistenceClass()` internally.
+const asyncStoragePersistence = AsyncStoragePersistenceClass as unknown as Persistence;
 
 function isConfigured(): boolean {
   return (

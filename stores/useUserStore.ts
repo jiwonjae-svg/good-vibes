@@ -61,6 +61,7 @@ interface UserState {
   email: string | null;
   photoURL: string | null;
   username: string | null;
+  bio: string | null;
 
   // Streak
   currentStreak: number;
@@ -135,7 +136,7 @@ interface UserState {
   toggleBookmark: (quoteId: string) => Promise<void>;
   isBookmarked: (quoteId: string) => boolean;
   setAuth: (user: { uid: string; displayName: string | null; email: string | null; photoURL: string | null } | null) => Promise<void>;
-  setProfile: (displayName: string, username: string, photoURL?: string) => Promise<void>;
+  setProfile: (displayName: string, username: string, photoURL?: string, bio?: string) => Promise<void>;
   incrementShareCount: () => Promise<void>;
   updateStreak: (todayStr: string) => Promise<void>;
   startPremiumTrial: () => Promise<void>;
@@ -190,6 +191,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   email: null,
   photoURL: null,
   username: null,
+  bio: null,
   currentStreak: 0,
   lastActiveDate: null,
   streakFreezeCount: 0,
@@ -249,6 +251,7 @@ export const useUserStore = create<UserState>((set, get) => ({
           email: d.email ?? null,
           photoURL: d.photoURL ?? null,
           username: d.username ?? null,
+          bio: d.bio ?? null,
           currentStreak: d.currentStreak ?? 0,
           lastActiveDate: d.lastActiveDate ?? null,
           streakFreezeCount: d.streakFreezeCount ?? 0,
@@ -303,6 +306,7 @@ export const useUserStore = create<UserState>((set, get) => ({
         email: s.email,
         photoURL: s.photoURL,
         username: s.username,
+        bio: s.bio,
         currentStreak: s.currentStreak,
         lastActiveDate: s.lastActiveDate,
         streakFreezeCount: s.streakFreezeCount,
@@ -451,13 +455,13 @@ export const useUserStore = create<UserState>((set, get) => ({
     saveUserBadges(uid, newBadges, newDates).catch(() => {});
   },
 
-  setProfile: async (displayName, username, photoURL) => {
+  setProfile: async (displayName, username, photoURL, bio) => {
     const uid = get().uid;
     const previousUsername = get().username ?? undefined;
-    set({ displayName, username, ...(photoURL !== undefined && { photoURL }) });
+    set({ displayName, username, ...(photoURL !== undefined && { photoURL }), ...(bio !== undefined && { bio }) });
     await get().persistUser();
     if (uid) {
-      await saveUserProfile(uid, displayName, username, previousUsername, photoURL);
+      await saveUserProfile(uid, displayName, username, previousUsername, photoURL, bio);
     }
   },
 
@@ -630,7 +634,7 @@ export const useUserStore = create<UserState>((set, get) => ({
       // badges don't bleed into the next session; they are restored from
       // Firestore when the same (or a new) user signs in again.
       set({
-        uid: null, displayName: null, email: null, photoURL: null, username: null,
+        uid: null, displayName: null, email: null, photoURL: null, username: null, bio: null,
         isPremium: false,
         followerCount: 0,
         followingCount: 0,
@@ -956,7 +960,7 @@ export const useUserStore = create<UserState>((set, get) => ({
       ]);
       if (premiumStatus) set({ isPremium: true });
       if (socialProfile) {
-        set({ followerCount: socialProfile.followerCount, followingCount: socialProfile.followingCount });
+        set({ followerCount: socialProfile.followerCount, followingCount: socialProfile.followingCount, bio: socialProfile.bio ?? null });
       }
       if (cloudStreak && cloudStreak.current > get().currentStreak) {
         set({ currentStreak: cloudStreak.current, lastActiveDate: cloudStreak.lastActiveDate });

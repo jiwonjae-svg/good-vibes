@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
@@ -62,7 +62,7 @@ export default function SpeakAlongSheet({ visible, quoteText, onClose, onSuccess
           </View>
 
           <Pressable style={[styles.micButton, { backgroundColor: isListening ? colors.error : colors.primary }]} onPress={handleToggle}>
-            {isListening ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="mic" size={32} color="#fff" />}
+            {isListening ? <Ionicons name="stop" size={32} color="#fff" /> : <Ionicons name="play" size={32} color="#fff" />}
           </Pressable>
 
           <Pressable style={styles.closeButton} onPress={onClose}>

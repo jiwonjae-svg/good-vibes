@@ -197,6 +197,9 @@ export default function RootLayout() {
           signOutTimer = null;
           if (!getCurrentUser() && useUserStore.getState().uid) {
             setAuth(null);
+            // Also clear GoogleSignin cache so the account-picker appears on the
+            // next login attempt instead of silently re-signing in.
+            logOut().catch(() => {});
           }
         }, 3000);
       }

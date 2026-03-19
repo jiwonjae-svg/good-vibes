@@ -8,8 +8,13 @@ import {
   query,
   where,
   limit,
+  orderBy,
+  startAfter,
   serverTimestamp,
   Timestamp,
+  type QueryDocumentSnapshot,
+  type DocumentData,
+  type QueryConstraint,
 } from 'firebase/firestore';
 import { getDb, initFirebase } from './firebaseConfig';
 import type { User } from 'firebase/auth';
@@ -471,11 +476,35 @@ export function isValidUsername(username: string): boolean {
   return /^[a-zA-Z0-9\-_]{3,20}$/.test(username);
 }
 
-/** Validation: display name — allows letters, numbers, spaces, - and _ only. Max 30 chars. */
+/** Validation: display name — allows Unicode letters (any language), digits,
+ *  spaces, hyphens, and underscores only. Rejects all other special characters
+ *  and known XSS patterns. Max 30 chars. */
 export function isValidDisplayName(name: string): boolean {
-  // Rejects anything that is not a letter (any script), digit, space, hyphen or underscore
-  return /^[^\x00-\x1F\x7F!@#$%^&*()+={}\[\]|\\:;"'<>,.?/~`]{1,30}$/.test(name) &&
-    !/[!@#$%^&*()+={}\[\]|\\:;"'<>,.?/~`]/.test(name);
+  if (!name || name.length === 0 || name.length > 30) return false;
+  // Reject control characters
+  if (/[\x00-\x1F\x7F]/.test(name)) return false;
+  // Reject known XSS patterns
+  if (/<script[\s>/]/i.test(name)) return false;
+  if (/javascript\s*:/i.test(name)) return false;
+  if (/on\w+\s*=/i.test(name)) return false;
+  if (/<[a-z/]/i.test(name)) return false;
+  // Allow only Unicode letters (\p{L}), digits (\p{N}), spaces, hyphens, underscores
+  if (!/^[\p{L}\p{N}\s\-_]+$/u.test(name)) return false;
+  return true;
+}
+
+const BIO_MAX_LENGTH = 200;
+
+/**
+ * Sanitize bio text: strip HTML/script tags, control characters, and trim to max length.
+ */
+export function sanitizeBio(bio: string): string {
+  let s = bio
+    .replace(/<[^>]*>/g, '')          // strip HTML tags
+    .replace(/[\x00-\x1F\x7F]/g, '') // strip control characters
+    .trim();
+  if (s.length > BIO_MAX_LENGTH) s = s.slice(0, BIO_MAX_LENGTH);
+  return s;
 }
 
 /**
@@ -506,6 +535,7 @@ export async function saveUserProfile(
   username: string,
   previousUsername?: string,
   photoURL?: string,
+  bio?: string,
 ): Promise<{ success: boolean; error?: 'taken' | 'invalid' | 'unknown' }> {
   try {
     if (!isValidUsername(username)) return { success: false, error: 'invalid' };
@@ -523,7 +553,12 @@ export async function saveUserProfile(
     const { setDoc: setDocFn } = await import('firebase/firestore');
     await setDocFn(
       userRef,
-      { displayName, username: lowerUsername, ...(photoURL !== undefined && { photoURL }) },
+      {
+        displayName,
+        username: lowerUsername,
+        ...(photoURL !== undefined && { photoURL }),
+        ...(bio !== undefined && { bio: sanitizeBio(bio) }),
+      },
       { merge: true },
     );
 
@@ -663,6 +698,7 @@ export interface PublicUserProfile {
   displayName: string | null;
   username: string | null;
   photoURL: string | null;
+  bio: string | null;
   followerCount: number;
   followingCount: number;
 }
@@ -680,11 +716,50 @@ export async function fetchPublicUserProfile(targetUid: string): Promise<PublicU
       displayName: d.displayName ?? null,
       username: d.username ?? null,
       photoURL: d.photoURL ?? null,
+      bio: d.bio ?? null,
       followerCount: d.followerCount ?? 0,
       followingCount: d.followingCount ?? 0,
     };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Search users by username prefix (case-insensitive, lowercase comparison).
+ * Returns up to `maxResults` matching public profiles.
+ */
+export async function searchUsersByUsername(
+  usernameQuery: string,
+  maxResults = 20,
+): Promise<PublicUserProfile[]> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return [];
+    const lq = usernameQuery.toLowerCase();
+    const end = lq.slice(0, -1) + String.fromCharCode(lq.charCodeAt(lq.length - 1) + 1);
+    const q = query(
+      collection(db, 'users'),
+      where('username', '>=', lq),
+      where('username', '<', end),
+      limit(maxResults),
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => {
+      const data = d.data() as any;
+      return {
+        uid: d.id,
+        displayName: data.displayName ?? null,
+        username: data.username ?? null,
+        photoURL: data.photoURL ?? null,
+        bio: data.bio ?? null,
+        followerCount: data.followerCount ?? 0,
+        followingCount: data.followingCount ?? 0,
+      };
+    });
+  } catch {
+    return [];
   }
 }
 
@@ -844,6 +919,261 @@ export async function fetchFollowingList(myUid: string, maxLimit = 50): Promise<
     return _batchFetchPublicProfiles(db, uids);
   } catch {
     return [];
+  }
+}
+
+// =============================================================================
+// Admin Functions
+// =============================================================================
+
+/**
+ * Checks if the given user is an admin by reading `isAdmin` from their Firestore doc.
+ * Never cached locally — always fetches fresh from Firestore.
+ */
+export async function checkIsAdmin(uid: string): Promise<boolean> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return false;
+    const snap = await getDoc(doc(db, 'users', uid));
+    if (!snap.exists()) return false;
+    return snap.data()?.isAdmin === true;
+  } catch {
+    return false;
+  }
+}
+
+export interface AdminUser {
+  uid: string;
+  displayName: string | null;
+  username: string | null;
+  email: string | null;
+  photoURL: string | null;
+  isDisabled: boolean;
+  createdAt?: number;
+}
+
+/**
+ * Fetches a paginated list of all users for admin panel.
+ */
+export async function adminFetchUsers(
+  pageLimit = 20,
+  cursor?: QueryDocumentSnapshot<DocumentData> | null,
+): Promise<{ users: AdminUser[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return { users: [], lastDoc: null };
+    const constraints: QueryConstraint[] = [
+      orderBy('lastLogin', 'desc'),
+      limit(pageLimit),
+    ];
+    if (cursor) constraints.push(startAfter(cursor));
+    const q = query(collection(db, 'users'), ...constraints);
+    const snap = await getDocs(q);
+    const users: AdminUser[] = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        uid: d.id,
+        displayName: data.displayName ?? null,
+        username: data.username ?? null,
+        email: data.email ?? null,
+        photoURL: data.photoURL ?? null,
+        isDisabled: data.isDisabled === true,
+        createdAt: data.createdAt?.toMillis?.() ?? undefined,
+      };
+    });
+    return { users, lastDoc: snap.docs[snap.docs.length - 1] ?? null };
+  } catch (e) {
+    appLog.error('[admin] fetchUsers failed', e);
+    return { users: [], lastDoc: null };
+  }
+}
+
+/**
+ * Toggles the disabled status of a user (admin action).
+ */
+export async function adminSetUserDisabled(uid: string, disabled: boolean): Promise<void> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return;
+    await setDoc(doc(db, 'users', uid), { isDisabled: disabled }, { merge: true });
+    appLog.log('[admin] setUserDisabled', { uid, disabled });
+  } catch (e) {
+    appLog.error('[admin] setUserDisabled failed', e);
+  }
+}
+
+export interface AdminCommunityQuote {
+  id: string;
+  text: string;
+  author: string;
+  submitterId: string;
+  submitterName: string;
+  status: string;
+  likeCount: number;
+  reportCount: number;
+  createdAt: number;
+  isDisabled: boolean;
+}
+
+/**
+ * Fetches community quotes for admin panel (all statuses).
+ */
+export async function adminFetchCommunityQuotes(
+  pageLimit = 20,
+  cursor?: QueryDocumentSnapshot<DocumentData> | null,
+): Promise<{ quotes: AdminCommunityQuote[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return { quotes: [], lastDoc: null };
+    const constraints: QueryConstraint[] = [
+      orderBy('createdAt', 'desc'),
+      limit(pageLimit),
+    ];
+    if (cursor) constraints.push(startAfter(cursor));
+    const q = query(collection(db, 'community_quotes'), ...constraints);
+    const snap = await getDocs(q);
+    const quotes: AdminCommunityQuote[] = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        text: data.text ?? '',
+        author: data.author ?? '',
+        submitterId: data.submitterId ?? '',
+        submitterName: data.submitterName ?? '',
+        status: data.status ?? 'approved',
+        likeCount: data.likeCount ?? 0,
+        reportCount: data.reportCount ?? 0,
+        createdAt: data.createdAt?.toMillis?.() ?? Date.now(),
+        isDisabled: data.isDisabled === true,
+      };
+    });
+    return { quotes, lastDoc: snap.docs[snap.docs.length - 1] ?? null };
+  } catch (e) {
+    appLog.error('[admin] fetchCommunityQuotes failed', e);
+    return { quotes: [], lastDoc: null };
+  }
+}
+
+/**
+ * Fetches community quotes by a specific user (admin panel).
+ */
+export async function adminFetchUserQuotes(
+  submitterId: string,
+  pageLimit = 20,
+  cursor?: QueryDocumentSnapshot<DocumentData> | null,
+): Promise<{ quotes: AdminCommunityQuote[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return { quotes: [], lastDoc: null };
+    const constraints: QueryConstraint[] = [
+      where('submitterId', '==', submitterId),
+      orderBy('createdAt', 'desc'),
+      limit(pageLimit),
+    ];
+    if (cursor) constraints.push(startAfter(cursor));
+    const q = query(collection(db, 'community_quotes'), ...constraints);
+    const snap = await getDocs(q);
+    const quotes: AdminCommunityQuote[] = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        text: data.text ?? '',
+        author: data.author ?? '',
+        submitterId: data.submitterId ?? '',
+        submitterName: data.submitterName ?? '',
+        status: data.status ?? 'approved',
+        likeCount: data.likeCount ?? 0,
+        reportCount: data.reportCount ?? 0,
+        createdAt: data.createdAt?.toMillis?.() ?? Date.now(),
+        isDisabled: data.isDisabled === true,
+      };
+    });
+    return { quotes, lastDoc: snap.docs[snap.docs.length - 1] ?? null };
+  } catch (e) {
+    appLog.error('[admin] fetchUserQuotes failed', e);
+    return { quotes: [], lastDoc: null };
+  }
+}
+
+/**
+ * Toggles the disabled status of a community quote (admin action).
+ */
+export async function adminSetQuoteDisabled(quoteId: string, disabled: boolean): Promise<void> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return;
+    const { updateDoc: upd } = await import('firebase/firestore');
+    await upd(doc(db, 'community_quotes', quoteId), { isDisabled: disabled });
+    appLog.log('[admin] setQuoteDisabled', { quoteId, disabled });
+  } catch (e) {
+    appLog.error('[admin] setQuoteDisabled failed', e);
+  }
+}
+
+export interface AdminReport {
+  id: string;
+  userId: string;
+  quoteId: string;
+  reason: string;
+  createdAt: number;
+  resolved: boolean;
+}
+
+/**
+ * Fetches community reports for admin panel.
+ */
+export async function adminFetchReports(
+  pageLimit = 20,
+  cursor?: QueryDocumentSnapshot<DocumentData> | null,
+): Promise<{ reports: AdminReport[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return { reports: [], lastDoc: null };
+    const constraints: QueryConstraint[] = [
+      orderBy('createdAt', 'desc'),
+      limit(pageLimit),
+    ];
+    if (cursor) constraints.push(startAfter(cursor));
+    const q = query(collection(db, 'community_reports'), ...constraints);
+    const snap = await getDocs(q);
+    const reports: AdminReport[] = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        userId: data.userId ?? '',
+        quoteId: data.quoteId ?? '',
+        reason: data.reason ?? '',
+        createdAt: data.createdAt?.toMillis?.() ?? Date.now(),
+        resolved: data.resolved === true,
+      };
+    });
+    return { reports, lastDoc: snap.docs[snap.docs.length - 1] ?? null };
+  } catch (e) {
+    appLog.error('[admin] fetchReports failed', e);
+    return { reports: [], lastDoc: null };
+  }
+}
+
+/**
+ * Toggles the resolved status of a report (admin action).
+ */
+export async function adminSetReportResolved(reportId: string, resolved: boolean): Promise<void> {
+  try {
+    initFirebase();
+    const db = getDb();
+    if (!db) return;
+    const { updateDoc: upd } = await import('firebase/firestore');
+    await upd(doc(db, 'community_reports', reportId), { resolved });
+    appLog.log('[admin] setReportResolved', { reportId, resolved });
+  } catch (e) {
+    appLog.error('[admin] setReportResolved failed', e);
   }
 }
 

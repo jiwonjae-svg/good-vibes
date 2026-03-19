@@ -10,13 +10,16 @@ import { Fonts, FontSize, Spacing, BorderRadius, Shadows } from '../../constants
 import { useUserStore } from '../../stores/useUserStore';
 import { LANGUAGES, type LanguageCode } from '../../i18n';
 import { signInWithGoogleNative, logOut } from '../../services/authService';
-import { logActivity } from '../../services/firestoreUserService';
+import { logActivity, checkIsAdmin } from '../../services/firestoreUserService';
 import { scheduleSmartNotifications, cancelDailyReminder, saveFCMToken } from '../../services/notificationService';
 import { appLog } from '../../services/logger';
 import LanguagePickerModal from '../../components/LanguagePickerModal';
 import CategoryPickerModal from '../../components/CategoryPickerModal';
 import LogStatusModal from '../../components/LogStatusModal';
 import EditProfileModal from '../../components/EditProfileModal';
+import AdminUserListModal from '../../components/AdminUserListModal';
+import AdminUserPostsModal from '../../components/AdminUserPostsModal';
+import AdminReportsModal from '../../components/AdminReportsModal';
 import { BADGE_CONFIG } from '../../constants/badges';
 import ProfileAvatar from '../../components/ProfileAvatar';
 
@@ -45,6 +48,7 @@ export default function SettingsScreen() {
     showCommunityQuotes, setShowCommunityQuotes,
     earnedBadges, earnedBadgeDates,
     photoURL,
+    bio,
     setAuthCompleted,
     setPendingNewUserSignIn,
   } = useUserStore();
@@ -64,17 +68,54 @@ export default function SettingsScreen() {
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [badgeModalVisible, setBadgeModalVisible] = useState(false);
 
-  const handlePremiumPurchase = async () => {
-    // TODO: Replace with real IAP via RevenueCat or Google Play Billing.
-    // This currently starts a free trial as a placeholder — no payment is collected.
-    // SECURITY: server-side receipt validation must be added before going live.
-    appLog.log('[settings] premium trial started (IAP not yet integrated)', { uid });
-    if (premiumTrialUsed) {
-      // Trial already used — directly activate premium for testing until real IAP is wired up.
-      await setPremium(true);
+  // Admin state — fetched fresh from Firestore, never cached locally
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminUserListVisible, setAdminUserListVisible] = useState(false);
+  const [adminUserPostsVisible, setAdminUserPostsVisible] = useState(false);
+  const [adminReportsVisible, setAdminReportsVisible] = useState(false);
+  const [adminPostsAuthorId, setAdminPostsAuthorId] = useState<string | null>(null);
+
+  // IAP — dynamic pricing from store
+  const [localizedPrice, setLocalizedPrice] = useState<string | null>(null);
+
+  // Check admin status on mount / uid change
+  useEffect(() => {
+    if (uid) {
+      checkIsAdmin(uid).then(setIsAdmin);
     } else {
-      await startPremiumTrial();
+      setIsAdmin(false);
     }
+  }, [uid]);
+
+  // Load IAP product price
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getSubscriptions, initConnection, endConnection } = require('react-native-iap');
+        await initConnection();
+        const products = await getSubscriptions({ skus: ['dailyglow_glow_plus_monthly'] });
+        if (!cancelled && products.length > 0) {
+          setLocalizedPrice(products[0].localizedPrice ?? null);
+        }
+        // endConnection is called on unmount
+      } catch {
+        // IAP not available in dev/simulator — price stays null, fallback used
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handlePremiumPurchase = async () => {
+    if (isAdmin) {
+      // Admin can freely toggle Glow+
+      await setPremium(!isPremium);
+      setPremiumModalVisible(false);
+      return;
+    }
+    // Real IAP flow — requires RevenueCat / Google Play Billing integration
+    // TODO: integrate real IAP via react-native-iap
+    appLog.log('[settings] premium purchase attempted (IAP pending)', { uid });
     setPremiumModalVisible(false);
   };
 
@@ -82,8 +123,8 @@ export default function SettingsScreen() {
     setEditProfileVisible(true);
   };
 
-  const handleSaveProfile = async (name: string, uname: string, photo?: string) => {
-    await setProfile(name, uname, photo);
+  const handleSaveProfile = async (name: string, uname: string, photo?: string, newBio?: string) => {
+    await setProfile(name, uname, photo, newBio);
   };
 
   const handleLanguage = () => setLangModalVisible(true);
@@ -152,6 +193,33 @@ export default function SettingsScreen() {
       />
       <LogStatusModal visible={logModalVisible} onClose={() => setLogModalVisible(false)} />
 
+      {/* Admin Modals */}
+      <AdminUserListModal
+        visible={adminUserListVisible}
+        onClose={() => setAdminUserListVisible(false)}
+        onViewUserPosts={(uid) => {
+          setAdminUserListVisible(false);
+          setAdminPostsAuthorId(uid);
+          setAdminUserPostsVisible(true);
+        }}
+      />
+      <AdminUserPostsModal
+        visible={adminUserPostsVisible}
+        onClose={() => {
+          setAdminUserPostsVisible(false);
+          // If we came from user list, re-open it
+          if (adminPostsAuthorId) {
+            setAdminPostsAuthorId(null);
+            setAdminUserListVisible(true);
+          }
+        }}
+        initialAuthorId={adminPostsAuthorId}
+      />
+      <AdminReportsModal
+        visible={adminReportsVisible}
+        onClose={() => setAdminReportsVisible(false)}
+      />
+
       {/* Badge Modal */}
       <Modal transparent visible={badgeModalVisible} animationType="slide" onRequestClose={() => setBadgeModalVisible(false)}>
         <View style={s.modalOverlay}>
@@ -196,6 +264,7 @@ export default function SettingsScreen() {
         displayName={displayName ?? ''}
         username={username ?? ''}
         photoURL={photoURL}
+        bio={bio}
         onSave={handleSaveProfile}
       />
 
@@ -233,7 +302,11 @@ export default function SettingsScreen() {
               style={[s.purchaseBtn, { backgroundColor: colors.primary }]}
               onPress={handlePremiumPurchase}
             >
-              <Text style={s.purchaseBtnText}>{t('premium.purchase')}</Text>
+              <Text style={s.purchaseBtnText}>
+                {localizedPrice
+                  ? t('premium.purchaseDynamic', { price: localizedPrice })
+                  : t('premium.purchase')}
+              </Text>
             </Pressable>
             <Pressable style={s.laterBtn} onPress={() => setPremiumModalVisible(false)}>
               <Text style={[s.laterBtnText, { color: colors.textMuted }]}>{t('premium.later')}</Text>
@@ -353,7 +426,26 @@ export default function SettingsScreen() {
           <View style={s.section}>
             <Text style={s.sectionTitle}>{t('settings.subscription')}</Text>
             <View style={s.card}>
-              {isEffectivelyPremium() ? (
+              {isAdmin ? (
+                /* Admin: free toggle for Glow+ */
+                <View style={s.row}>
+                  <View style={s.rowLeft}>
+                    <Ionicons name="diamond" size={22} color={colors.primary} />
+                    <View>
+                      <Text style={s.rowTitle}>Glow+ ({t('admin.title')})</Text>
+                      <Text style={s.rowSubtitle}>{isPremium ? t('premium.active') : t('premium.upgrade')}</Text>
+                    </View>
+                  </View>
+                  <Switch
+                    value={isPremium}
+                    onValueChange={async (val) => {
+                      await setPremium(val);
+                    }}
+                    trackColor={{ false: colors.grass0, true: colors.primaryLight }}
+                    thumbColor={isPremium ? colors.primary : '#f4f3f4'}
+                  />
+                </View>
+              ) : isEffectivelyPremium() ? (
                 <View style={s.row}>
                   <View style={s.rowLeft}>
                     <Ionicons name="diamond" size={22} color={colors.primary} />
@@ -628,6 +720,58 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Admin Section — only visible to admin accounts */}
+        {isAdmin && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>{t('admin.title')}</Text>
+            <View style={s.card}>
+              <Pressable style={s.row} onPress={() => setLogModalVisible(true)}>
+                <View style={s.rowLeft}>
+                  <Ionicons name="terminal-outline" size={22} color={colors.textSecondary} />
+                  <View>
+                    <Text style={s.rowTitle}>{t('settings.logStatus')}</Text>
+                    <Text style={s.rowSubtitle}>{t('settings.logStatusDesc')}</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </Pressable>
+              <View style={s.divider} />
+              <Pressable style={s.row} onPress={() => setAdminUserListVisible(true)}>
+                <View style={s.rowLeft}>
+                  <Ionicons name="people-outline" size={22} color={colors.textSecondary} />
+                  <View>
+                    <Text style={s.rowTitle}>{t('admin.userList')}</Text>
+                    <Text style={s.rowSubtitle}>{t('admin.userListDesc')}</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </Pressable>
+              <View style={s.divider} />
+              <Pressable style={s.row} onPress={() => { setAdminPostsAuthorId(null); setAdminUserPostsVisible(true); }}>
+                <View style={s.rowLeft}>
+                  <Ionicons name="document-text-outline" size={22} color={colors.textSecondary} />
+                  <View>
+                    <Text style={s.rowTitle}>{t('admin.userPosts')}</Text>
+                    <Text style={s.rowSubtitle}>{t('admin.userPostsDesc')}</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </Pressable>
+              <View style={s.divider} />
+              <Pressable style={s.row} onPress={() => setAdminReportsVisible(true)}>
+                <View style={s.rowLeft}>
+                  <Ionicons name="flag-outline" size={22} color={colors.textSecondary} />
+                  <View>
+                    <Text style={s.rowTitle}>{t('admin.reports')}</Text>
+                    <Text style={s.rowSubtitle}>{t('admin.reportsDesc')}</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </Pressable>
+            </View>
+          </View>
+        )}
+
         {/* Info */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>{t('settings.info')}</Text>
@@ -658,17 +802,6 @@ export default function SettingsScreen() {
               </View>
               <Text style={s.rowValue}>DailyGlow Team</Text>
             </View>
-            <View style={s.divider} />
-            <Pressable style={s.row} onPress={() => setLogModalVisible(true)}>
-              <View style={s.rowLeft}>
-                <Ionicons name="terminal-outline" size={22} color={colors.textSecondary} />
-                <View>
-                  <Text style={s.rowTitle}>{t('settings.logStatus')}</Text>
-                  <Text style={s.rowSubtitle}>{t('settings.logStatusDesc')}</Text>
-                </View>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-            </Pressable>
           </View>
         </View>
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, Modal, Pressable, ScrollView,
-  StyleSheet, ActivityIndicator, Alert,
+  StyleSheet, ActivityIndicator, Alert, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,6 +42,7 @@ export default function UserProfileModal({
   const myUsername = useUserStore((s) => s.username);
   const myStorePhotoURL = useUserStore((s) => s.photoURL);
   const myFollowerCount = useUserStore((s) => s.followerCount);
+  const myBio = useUserStore((s) => s.bio);
 
   const [profile, setProfile] = useState<PublicUserProfile | null>(null);
   const [quotes, setQuotes] = useState<CommunityQuote[]>([]);
@@ -54,6 +55,8 @@ export default function UserProfileModal({
   const [followListType, setFollowListType] = useState<'followers' | 'following' | null>(null);
   const [followList, setFollowList] = useState<FollowUser[]>([]);
   const [followListLoading, setFollowListLoading] = useState(false);
+  const [followSearchQuery, setFollowSearchQuery] = useState('');
+  const [quoteSearchQuery, setQuoteSearchQuery] = useState('');
 
   const isOwnProfile = myUid === targetUid;
 
@@ -61,6 +64,7 @@ export default function UserProfileModal({
     if (!visible || !targetUid) return;
     setLoading(true);
     setLoadError(false);
+    setQuoteSearchQuery('');
     const loadAll = async () => {
       try {
         const [prof, qs, following] = await Promise.all([
@@ -79,6 +83,7 @@ export default function UserProfileModal({
           displayName: myDisplayName,
           username: myUsername,
           photoURL: myStorePhotoURL,
+          bio: myBio ?? null,
           followerCount: myFollowerCount ?? 0,
           followingCount: 0,
         } : null));
@@ -94,6 +99,7 @@ export default function UserProfileModal({
             displayName: myDisplayName,
             username: myUsername,
             photoURL: myStorePhotoURL,
+            bio: myBio ?? null,
             followerCount: myFollowerCount ?? 0,
             followingCount: 0,
           });
@@ -138,6 +144,7 @@ export default function UserProfileModal({
     setFollowListType(type);
     setFollowList([]);
     setFollowListLoading(true);
+    setFollowSearchQuery('');
     try {
       const list = type === 'followers'
         ? await fetchFollowerList(targetUid)
@@ -189,7 +196,7 @@ export default function UserProfileModal({
                 <ProfileAvatar
                   photoURL={photoURL}
                   displayName={displayName}
-                  size={72}
+                  size={80}
                   backgroundColor={colors.primary + '40'}
                   textColor={colors.primary}
                   style={s.avatar}
@@ -207,6 +214,9 @@ export default function UserProfileModal({
               <Text style={[s.displayName, { color: colors.textPrimary }]}>{displayName}</Text>
               {username ? (
                 <Text style={[s.username, { color: colors.textSecondary }]}>@{username}</Text>
+              ) : null}
+              {profile?.bio ? (
+                <Text style={[s.bioText, { color: colors.textSecondary }]}>{profile.bio}</Text>
               ) : null}
 
               {/* Follower / Following counts — tappable */}
@@ -255,13 +265,34 @@ export default function UserProfileModal({
             {/* Quotes list */}
             <View style={s.quotesSection}>
               <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>{t('profile.myQuotes')}</Text>
+              <View style={[s.followSearchBox, { backgroundColor: colors.surface, borderColor: colors.grass0 }]}>
+                <Ionicons name="search" size={16} color={colors.textMuted} />
+                <TextInput
+                  style={[s.followSearchInput, { color: colors.textPrimary }]}
+                  placeholder={t('profile.searchQuotesPlaceholder')}
+                  placeholderTextColor={colors.textMuted}
+                  value={quoteSearchQuery}
+                  onChangeText={setQuoteSearchQuery}
+                  autoCorrect={false}
+                  returnKeyType="search"
+                />
+                {quoteSearchQuery.length > 0 && (
+                  <Pressable onPress={() => setQuoteSearchQuery('')} hitSlop={8}>
+                    <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+                  </Pressable>
+                )}
+              </View>
               {quotes.length === 0 ? (
                 <View style={s.emptyQuotes}>
                   <Ionicons name="document-text-outline" size={36} color={colors.textMuted} />
                   <Text style={[s.emptyText, { color: colors.textMuted }]}>{t('profile.noQuotes')}</Text>
                 </View>
               ) : (
-                quotes.map((q) => (
+                quotes.filter((q) => {
+                  const sq = quoteSearchQuery.trim().toLowerCase();
+                  if (!sq) return true;
+                  return q.text.toLowerCase().includes(sq) || (q.author && q.author.toLowerCase().includes(sq));
+                }).map((q) => (
                   <View key={q.id} style={[s.quoteCard, { backgroundColor: colors.surface }]}>
                     <Text style={[s.quoteText, { color: colors.textPrimary }]} numberOfLines={4}>
                       "{q.text}"
@@ -299,6 +330,24 @@ export default function UserProfileModal({
           </Text>
           <View style={{ width: 24 }} />
         </View>
+        <View style={[s.followSearchBox, { backgroundColor: colors.surface, borderColor: colors.grass0 }]}>
+          <Ionicons name="search" size={16} color={colors.textMuted} />
+          <TextInput
+            style={[s.followSearchInput, { color: colors.textPrimary }]}
+            placeholder={t('profile.searchFollowPlaceholder')}
+            placeholderTextColor={colors.textMuted}
+            value={followSearchQuery}
+            onChangeText={setFollowSearchQuery}
+            autoCorrect={false}
+            autoCapitalize="none"
+            returnKeyType="search"
+          />
+          {followSearchQuery.length > 0 && (
+            <Pressable onPress={() => setFollowSearchQuery('')} hitSlop={8}>
+              <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+            </Pressable>
+          )}
+        </View>
         {followListLoading ? (
           <View style={s.centered}>
             <ActivityIndicator size="large" color={colors.primary} />
@@ -312,7 +361,15 @@ export default function UserProfileModal({
           </View>
         ) : (
           <ScrollView contentContainerStyle={{ paddingVertical: Spacing.sm }}>
-            {followList.map((user) => (
+            {followList.filter((user) => {
+              const q = followSearchQuery.trim().toLowerCase();
+              if (!q) return true;
+              if (q.startsWith('@')) {
+                const uq = q.slice(1);
+                return user.username ? user.username.toLowerCase().includes(uq) : false;
+              }
+              return (user.displayName?.toLowerCase().includes(q)) || (user.username?.toLowerCase().includes(q));
+            }).map((user) => (
               <Pressable
                 key={user.uid}
                 style={[s.followUserRow, { borderBottomColor: colors.grass0 }]}
@@ -397,6 +454,7 @@ function makeStyles(colors: any) {
     },
     displayName: { ...Fonts.heading, fontSize: FontSize.xl, marginTop: Spacing.sm },
     username: { ...Fonts.body, fontSize: FontSize.sm },
+    bioText: { ...Fonts.body, fontSize: FontSize.sm, textAlign: 'center', paddingHorizontal: Spacing.lg, marginTop: Spacing.xs },
     statsRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -445,5 +503,22 @@ function makeStyles(colors: any) {
     followUserInfo: { flex: 1, gap: 2 },
     followUserName: { ...Fonts.heading, fontSize: FontSize.sm },
     followUserHandle: { ...Fonts.body, fontSize: FontSize.xs },
+    followSearchBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginHorizontal: Spacing.lg,
+      marginBottom: Spacing.sm,
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: Spacing.xs,
+      borderRadius: BorderRadius.md,
+      borderWidth: 1,
+      gap: Spacing.xs,
+    },
+    followSearchInput: {
+      flex: 1,
+      ...Fonts.body,
+      fontSize: FontSize.sm,
+      paddingVertical: 4,
+    },
   });
 }

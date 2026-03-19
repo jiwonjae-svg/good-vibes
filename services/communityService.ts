@@ -97,6 +97,14 @@ export async function submitCommunityQuote(
   const db = getDb();
   if (!db) return { success: false, error: 'offline' };
 
+  // Check if user is disabled by admin
+  try {
+    const userSnap = await getDoc(doc(db, 'users', uid));
+    if (userSnap.exists() && userSnap.data()?.isDisabled === true) {
+      return { success: false, error: 'userDisabled' };
+    }
+  } catch { /* proceed if check fails */ }
+
   // XSS defence — check raw input before any processing
   if (containsXss(text) || containsXss(author)) {
     appLog.warn('[communityService] XSS attempt blocked', { uid });
@@ -159,7 +167,9 @@ export async function fetchApprovedCommunityQuotes(
     const q = query(col, ...constraints);
     const snap = await getDocs(q);
 
-    const quotes: CommunityQuote[] = snap.docs.map((d) => ({
+    const quotes: CommunityQuote[] = snap.docs
+      .filter((d) => d.data().isDisabled !== true) // exclude admin-disabled quotes
+      .map((d) => ({
       id: d.id,
       ...(d.data() as Omit<CommunityQuote, 'id' | 'createdAt'>),
       createdAt: d.data().createdAt?.toMillis?.() ?? Date.now(),

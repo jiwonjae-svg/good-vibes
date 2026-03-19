@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  ActivityIndicator, Alert, Modal,
+  ActivityIndicator, Alert, Modal, TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -28,6 +28,7 @@ export default function ProfileScreen() {
   const displayName = useUserStore((s) => s.displayName);
   const username = useUserStore((s) => s.username);
   const photoURL = useUserStore((s) => s.photoURL);
+  const bio = useUserStore((s) => s.bio);
   const isDark = useUserStore((s) => s.isDarkMode);
 
   const setAuth = useUserStore((s) => s.setAuth);
@@ -52,8 +53,10 @@ export default function ProfileScreen() {
   const [followListType, setFollowListType] = useState<'followers' | 'following' | null>(null);
   const [followList, setFollowList] = useState<FollowUser[]>([]);
   const [followListLoading, setFollowListLoading] = useState(false);
+  const [followSearchQuery, setFollowSearchQuery] = useState('');
   // Quote detail modal
   const [selectedQuote, setSelectedQuote] = useState<CommunityQuote | null>(null);
+  const [quoteSearchQuery, setQuoteSearchQuery] = useState('');
 
   const initial = (displayName || username || '?').charAt(0).toUpperCase();
 
@@ -133,8 +136,8 @@ export default function ProfileScreen() {
     setEditProfileVisible(true);
   };
 
-  const handleSaveProfile = async (name: string, uname: string, photo?: string) => {
-    await setProfile(name, uname, photo);
+  const handleSaveProfile = async (name: string, uname: string, photo?: string, newBio?: string) => {
+    await setProfile(name, uname, photo, newBio);
   };
 
   const handleOpenFollowList = async (type: 'followers' | 'following') => {
@@ -142,6 +145,7 @@ export default function ProfileScreen() {
     setFollowListType(type);
     setFollowList([]);
     setFollowListLoading(true);
+    setFollowSearchQuery('');
     try {
       const list = type === 'followers'
         ? await fetchFollowerList(uid)
@@ -227,6 +231,7 @@ export default function ProfileScreen() {
         displayName={displayName ?? ''}
         username={username ?? ''}
         photoURL={photoURL}
+        bio={bio}
         onSave={handleSaveProfile}
       />
 
@@ -247,6 +252,24 @@ export default function ProfileScreen() {
             </Text>
             <View style={{ width: 24 }} />
           </View>
+          {/* Search bar */}
+          <View style={[s.followSearchBox, { backgroundColor: colors.surfaceAlt }]}>
+            <Ionicons name="search" size={16} color={colors.textMuted} />
+            <TextInput
+              style={[s.followSearchInput, { color: colors.textPrimary }]}
+              placeholder={t('profile.searchFollowPlaceholder')}
+              placeholderTextColor={colors.textMuted}
+              value={followSearchQuery}
+              onChangeText={setFollowSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {followSearchQuery.length > 0 && (
+              <Pressable onPress={() => setFollowSearchQuery('')} hitSlop={8}>
+                <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+              </Pressable>
+            )}
+          </View>
           {followListLoading ? (
             <View style={s.centered}>
               <ActivityIndicator size="large" color={colors.primary} />
@@ -260,7 +283,15 @@ export default function ProfileScreen() {
             </View>
           ) : (
             <ScrollView contentContainerStyle={{ paddingVertical: Spacing.sm }}>
-              {followList.map((user) => (
+              {followList.filter((user) => {
+                const q = followSearchQuery.trim().toLowerCase();
+                if (!q) return true;
+                if (q.startsWith('@')) {
+                  const uq = q.slice(1);
+                  return user.username ? user.username.toLowerCase().includes(uq) : false;
+                }
+                return (user.displayName?.toLowerCase().includes(q)) || (user.username?.toLowerCase().includes(q));
+              }).map((user) => (
                 <View key={user.uid} style={[s.followUserRow, { borderBottomColor: colors.grass0 }]}>
                   <ProfileAvatar
                     photoURL={user.photoURL}
@@ -350,6 +381,9 @@ export default function ProfileScreen() {
           {username ? (
             <Text style={[s.username, { color: colors.textSecondary }]}>@{username}</Text>
           ) : null}
+          {bio ? (
+            <Text style={[s.bioText, { color: colors.textSecondary }]}>{bio}</Text>
+          ) : null}
 
           <View style={s.statsRow}>
             <Pressable style={s.statItem} onPress={() => handleOpenFollowList('followers')} hitSlop={8}>
@@ -372,6 +406,23 @@ export default function ProfileScreen() {
         {/* My quotes section */}
         <View style={s.quotesSection}>
           <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>{t('community.myQuotes')}</Text>
+          <View style={[s.followSearchBox, { backgroundColor: colors.surface, borderColor: colors.grass0 }]}>
+            <Ionicons name="search" size={16} color={colors.textMuted} />
+            <TextInput
+              style={[s.followSearchInput, { color: colors.textPrimary }]}
+              placeholder={t('profile.searchQuotesPlaceholder')}
+              placeholderTextColor={colors.textMuted}
+              value={quoteSearchQuery}
+              onChangeText={setQuoteSearchQuery}
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {quoteSearchQuery.length > 0 && (
+              <Pressable onPress={() => setQuoteSearchQuery('')} hitSlop={8}>
+                <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+              </Pressable>
+            )}
+          </View>
           {loading ? (
             <View style={s.centered}>
               <ActivityIndicator size="large" color={colors.primary} />
@@ -382,7 +433,11 @@ export default function ProfileScreen() {
               <Text style={[s.emptyText, { color: colors.textMuted }]}>{t('profile.noQuotes')}</Text>
             </View>
           ) : (
-            quotes.map((q) => (
+            quotes.filter((q) => {
+              const sq = quoteSearchQuery.trim().toLowerCase();
+              if (!sq) return true;
+              return q.text.toLowerCase().includes(sq) || (q.author && q.author.toLowerCase().includes(sq));
+            }).map((q) => (
               <Pressable key={q.id} style={[s.quoteCard, { backgroundColor: colors.surface }]} onPress={() => setSelectedQuote(q)}>
                 <Text style={[s.quoteText, { color: colors.textPrimary }]} numberOfLines={4}>
                   "{q.text}"
@@ -427,6 +482,7 @@ function makeStyles(colors: any) {
     editBadge: { position: 'absolute', bottom: 2, right: 2, width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
     displayName: { ...Fonts.heading, fontSize: FontSize.xl, marginTop: Spacing.sm },
     username: { ...Fonts.body, fontSize: FontSize.sm },
+    bioText: { ...Fonts.body, fontSize: FontSize.sm, textAlign: 'center', paddingHorizontal: Spacing.lg, marginTop: Spacing.xs },
     statsRow: { flexDirection: 'row', alignItems: 'center', marginVertical: Spacing.md, gap: Spacing.lg },
     statItem: { alignItems: 'center', gap: 2 },
     statCount: { ...Fonts.heading, fontSize: FontSize.lg },
@@ -447,6 +503,8 @@ function makeStyles(colors: any) {
     // Follow list modal
     followModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderBottomWidth: 1 },
     followModalTitle: { ...Fonts.heading, fontSize: FontSize.md },
+    followSearchBox: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginHorizontal: Spacing.lg, marginVertical: Spacing.sm, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs + 2, borderRadius: BorderRadius.lg },
+    followSearchInput: { flex: 1, ...Fonts.body, fontSize: FontSize.sm, padding: 0 },
     followUserRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth },
     followUserInfo: { flex: 1 },
     followUserName: { ...Fonts.heading, fontSize: FontSize.sm },

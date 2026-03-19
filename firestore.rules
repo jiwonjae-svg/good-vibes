@@ -2,6 +2,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ── 관리자 헬퍼 ─────────────────────────────────────────────────────
+    function isAdmin() {
+      return request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
     // ── 기존 컬렉션 ─────────────────────────────────────────────────────
 
     // 서버 명언 카탈로그: 공개 읽기 전용
@@ -25,7 +31,10 @@ service cloud.firestore {
         || (request.auth != null
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followingCount'])
             && (request.resource.data.followingCount == resource.data.followingCount + 1
-                || request.resource.data.followingCount == resource.data.followingCount - 1));
+                || request.resource.data.followingCount == resource.data.followingCount - 1))
+        // 관리자: isDisabled 필드만 수정 가능
+        || (isAdmin()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isDisabled']));
     }
 
     // 사용자명 인덱스: 누구나 읽기(가용성 확인), 본인 uid로만 생성/삭제
@@ -56,6 +65,7 @@ service cloud.firestore {
 
       // 작성자 편집: text/author/updatedAt만 수정 허용
       // reportCount +1만 허용 (신고 시)
+      // 관리자: isDisabled 필드만 수정 가능
       allow update: if request.auth != null
         && (
           (
@@ -65,6 +75,10 @@ service cloud.firestore {
           || (
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reportCount'])
             && request.resource.data.reportCount == resource.data.reportCount + 1
+          )
+          || (
+            isAdmin()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isDisabled'])
           )
         );
 
@@ -88,18 +102,22 @@ service cloud.firestore {
       allow update: if false;
     }
 
-    // community_reports: 인증 사용자가 자기 신고만 생성, 수정/삭제 불가
+    // community_reports: 인증 사용자가 자기 신고만 생성
+    // 관리자: 전체 읽기 및 resolved 수정 가능
     // 문서 ID 규칙: {userId}_{quoteId}
     match /community_reports/{reportId} {
-      allow read: if request.auth != null
-        && resource.data.userId == request.auth.uid;
+      allow read: if (request.auth != null && resource.data.userId == request.auth.uid)
+        || isAdmin();
 
       allow create: if request.auth != null
         && reportId.matches(request.auth.uid + '_.*')
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.reason is string;
 
-      allow update, delete: if false;
+      // 관리자만 resolved 필드 수정 가능
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved']);
+      allow delete: if false;
     }
 
     // follows: 인증 사용자가 자기 팔로우만 생성/삭제

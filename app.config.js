@@ -77,8 +77,8 @@ export default {
       'expo-build-properties',
       [        "react-native-google-mobile-ads",
         {
-          androidAppId: "ca-app-pub-7299146158121007~3025660411",
-          iosAppId: "ca-app-pub-7299146158121007/8129128496",
+          androidAppId: process.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID || "ca-app-pub-3940256099942544~3347511713",
+          iosAppId: process.env.EXPO_PUBLIC_ADMOB_IOS_APP_ID || "ca-app-pub-3940256099942544~1458002511",
         },
       ],
     ],

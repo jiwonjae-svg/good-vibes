@@ -10,7 +10,6 @@ import { useRouter } from 'expo-router';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { Fonts, FontSize, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { useUserStore } from '../../stores/useUserStore';
-import { useQuoteStore } from '../../stores/useQuoteStore';
 import { useCommunityStore } from '../../stores/useCommunityStore';
 import { useTTS } from '../../hooks/useTTS';
 import { shareQuoteText } from '../../services/shareService';
@@ -142,7 +141,6 @@ export default function MyScreen() {
   const colors = useThemeColors();
   const router = useRouter();
   const { bookmarkedQuoteIds, todayViewedQuoteIds, toggleBookmark, uid, language } = useUserStore();
-  const quotes = useQuoteStore((s) => s.quotes);
   const communityQuotes = useCommunityStore((s) => s.communityQuotes);
   const isGuest = !uid;
 
@@ -155,14 +153,6 @@ export default function MyScreen() {
     communityQuotes.forEach((cq, i) => m.set(cq.id, { text: cq.text, author: cq.author || undefined, source: 'community', gradientIndex: i % 8 }));
     return m;
   }, [communityQuotes]);
-
-  // quoteStoreMap kept only for todayViewedQuotes recovery
-  const quoteStoreMap = React.useMemo(() => {
-    const m = new Map<string, { text: string; author?: string; source?: string; gradientIndex: number }>();
-    quotes.forEach((q) => m.set(q.id, { text: q.text, author: q.author || undefined, source: q.source, gradientIndex: q.gradientIndex }));
-    communityQuotes.forEach((cq, i) => m.set(cq.id, { text: cq.text, author: cq.author || undefined, source: 'community', gradientIndex: i % 8 }));
-    return m;
-  }, [quotes, communityQuotes]);
 
   // Resolve bookmarks from source data (client JSON + server cache) so they
   // survive quote-store resets triggered by language changes.
@@ -194,25 +184,39 @@ export default function MyScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookmarkedQuoteIds, language]);
 
-  const todayQuotes = React.useMemo(() => todayViewedQuoteIds.map((entry, idx) => {
-    const parts = entry.split('|');
-    if (parts.length >= 4) {
-      // new format: quoteId|author|source|quoteText
-      const [id, author, source, ...restParts] = parts;
-      const text = restParts.join('|');
-      if (text) return { id, author: author || undefined, source: source || undefined, text, gradientIndex: idx % colors.cardGradients.length };
+  // Resolve today-viewed quotes from source data so they always show in the
+  // current language, same approach as bookmarks.
+  const [todayQuotes, setTodayQuotes] = useState<
+    Array<{ id: string; text: string; author?: string; source?: string; gradientIndex: number }>
+  >([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    async function resolve() {
+      const resolved = await Promise.all(
+        todayViewedQuoteIds.map(async (entry, idx) => {
+          const id = entry.split('|')[0];
+          const q = await findQuoteById(id);
+          if (q) return { id, text: q.text, author: q.author || undefined, source: q.source, gradientIndex: q.gradientIndex };
+          // Fallback: use stored text when quote is not in source data
+          const parts = entry.split('|');
+          if (parts.length >= 4) {
+            const [, author, source, ...restParts] = parts;
+            const text = restParts.join('|');
+            if (text) return { id, author: author || undefined, source: source || undefined, text, gradientIndex: idx % colors.cardGradients.length };
+          }
+          return null;
+        })
+      );
+      if (!cancelled) {
+        setTodayQuotes(
+          resolved.filter((q): q is { id: string; text: string; author?: string; source?: string; gradientIndex: number } => q !== null)
+        );
+      }
     }
-    // plain id fallback — try to recover from quote store
-    const id = parts[0];
-    const storeQuote = quoteStoreMap.get(id);
-    if (storeQuote) {
-      return { id, author: storeQuote.author || undefined, source: storeQuote.source, text: storeQuote.text, gradientIndex: idx % colors.cardGradients.length };
-    }
-    // legacy format: quoteId|quoteText
-    const [, ...textParts] = parts;
-    const legacyText = textParts.join('|');
-    return legacyText ? { id, author: undefined as string | undefined, source: undefined as string | undefined, text: legacyText, gradientIndex: idx % colors.cardGradients.length } : null;
-  }).filter(Boolean) as Array<{ id: string; text: string; author?: string; source?: string; gradientIndex: number }>, [todayViewedQuoteIds, quoteStoreMap, colors.cardGradients.length]);
+    resolve();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayViewedQuoteIds, language]);
 
   const handleQuotePress = (quote: { id: string; text: string; author?: string; source?: string; gradientIndex: number }) => {
     setSelectedQuote(quote);

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Switch, Modal, Image,
 } from 'react-native';
+import * as Speech from 'expo-speech';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -45,6 +46,7 @@ export default function SettingsScreen() {
     premiumTrialUsed,
     notificationHours, setNotificationHours,
     ttsSpeed, setTtsSpeed,
+    ttsVoice, setTtsVoice,
     showCommunityQuotes, setShowCommunityQuotes,
     earnedBadges, earnedBadgeDates,
     photoURL,
@@ -67,6 +69,7 @@ export default function SettingsScreen() {
   const [logModalVisible, setLogModalVisible] = useState(false);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [badgeModalVisible, setBadgeModalVisible] = useState(false);
+  const [availableVoices, setAvailableVoices] = useState<Speech.Voice[]>([]);
 
   // Admin state — fetched fresh from Firestore, never cached locally
   const [isAdmin, setIsAdmin] = useState(false);
@@ -77,6 +80,13 @@ export default function SettingsScreen() {
 
   // IAP — dynamic pricing from store
   const [localizedPrice, setLocalizedPrice] = useState<string | null>(null);
+
+  // Load available TTS voices for the current device
+  useEffect(() => {
+    Speech.getAvailableVoicesAsync()
+      .then((voices) => setAvailableVoices(voices))
+      .catch(() => setAvailableVoices([]));
+  }, []);
 
   // Check admin status on mount / uid change
   useEffect(() => {
@@ -623,6 +633,61 @@ export default function SettingsScreen() {
                     <Text style={[s.rowTitle, { fontWeight: ttsSpeed === opt.value ? '600' : '400' }]}>{opt.label}</Text>
                   </Pressable>
                 ))}
+              </View>
+            </View>
+            <View style={s.divider} />
+            {/* TTS Voice */}
+            <View style={[s.row, { flexDirection: 'column', alignItems: 'flex-start', gap: Spacing.sm }]}>
+              <View style={s.rowLeft}>
+                <Ionicons name="mic-outline" size={22} color={colors.textSecondary} />
+                <View>
+                  <Text style={s.rowTitle}>{t('settings.ttsVoice')}</Text>
+                  <Text style={s.rowSubtitle}>{t('settings.ttsVoiceDesc')}</Text>
+                </View>
+              </View>
+              <View style={{ paddingLeft: Spacing.xxl + Spacing.xs, gap: Spacing.sm, width: '100%' }}>
+                {/* Default (system) option */}
+                <Pressable
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: 4 }}
+                  onPress={() => setTtsVoice(null)}
+                >
+                  <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2,
+                    borderColor: ttsVoice === null ? colors.primary : colors.textMuted,
+                    alignItems: 'center', justifyContent: 'center' }}>
+                    {ttsVoice === null && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary }} />}
+                  </View>
+                  <Text style={[s.rowTitle, { fontWeight: ttsVoice === null ? '600' : '400' }]}>
+                    {t('settings.ttsVoiceDefault')}
+                  </Text>
+                </Pressable>
+                {/* Voices matching the current app language */}
+                {availableVoices
+                  .filter((v) => v.language.toLowerCase().startsWith(language))
+                  .map((voice) => (
+                    <Pressable
+                      key={voice.identifier}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: 4 }}
+                      onPress={() => setTtsVoice(voice.identifier)}
+                    >
+                      <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2,
+                        borderColor: ttsVoice === voice.identifier ? colors.primary : colors.textMuted,
+                        alignItems: 'center', justifyContent: 'center' }}>
+                        {ttsVoice === voice.identifier && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary }} />}
+                      </View>
+                      <Text style={[s.rowTitle, { fontWeight: ttsVoice === voice.identifier ? '600' : '400' }]}>
+                        {voice.quality === 'Enhanced'
+                          ? `${voice.name} · ${t('settings.ttsVoiceHQ')}`
+                          : voice.name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                {/* No voices message — only shown when the async load finished but nothing matched */}
+                {availableVoices.length > 0 &&
+                  availableVoices.filter((v) => v.language.toLowerCase().startsWith(language)).length === 0 && (
+                  <Text style={[s.rowSubtitle, { color: colors.textMuted, marginTop: 2 }]}>
+                    {t('settings.ttsVoiceNone')}
+                  </Text>
+                )}
               </View>
             </View>
             <View style={s.divider} />

@@ -52,6 +52,8 @@ export default function HomeScreen() {
   const language = useUserStore((s) => s.language);
   const autoReadEnabled = useUserStore((s) => s.autoReadEnabled);
   const isPremium = useUserStore((s) => s.isPremium);
+  const isOffline = useUserStore((s) => s.isOffline);
+  const setIsOffline = useUserStore((s) => s.setIsOffline);
   const { recordActivity } = useGrassStore();
   const { tryShowAd } = useAdInterstitial();
   const { isAutoPlaying, setAutoPlaying, intervalSeconds } = useAutoPlayStore();
@@ -59,7 +61,7 @@ export default function HomeScreen() {
   const [activeSheet, setActiveSheet] = useState<SheetType>(null);
   const [activeQuoteIndex, setActiveQuoteIndex] = useState(0);
   const [loginPromptVisible, setLoginPromptVisible] = useState(false);
-  const [isOffline, setIsOffline] = useState(false);
+  const [offlineBannerVisible, setOfflineBannerVisible] = useState(false);
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchPool, setSearchPool] = useState<Quote[]>([]);
   const [showDailyModal, setShowDailyModal] = useState(false);
@@ -381,6 +383,7 @@ export default function HomeScreen() {
     } catch (err) {
       appLog.warn('[home] offline – failed to load quotes', { err: String(err) });
       setIsOffline(true);
+      setOfflineBannerVisible(true);
     } finally {
       setIsLoading(false);
     }
@@ -544,7 +547,7 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {isOffline && <OfflineBanner onDismiss={() => setIsOffline(false)} />}
+      {offlineBannerVisible && <OfflineBanner onDismiss={() => setOfflineBannerVisible(false)} />}
       <FlatList
         ref={flatListRef}
         data={displayedQuotes}

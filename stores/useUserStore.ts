@@ -4,6 +4,7 @@ import i18n, { LANGUAGES } from '../i18n';
 import * as Localization from 'expo-localization';
 import type { LanguageCode } from '../i18n';
 import { clearQuoteCache } from '../services/quoteService';
+import { AD_CONFIG } from '../constants/config';
 import { appLog } from '../services/logger';
 import { scheduleSmartNotifications } from '../services/notificationService';
 import { updatePremiumStatus, fetchPremiumStatus, logActivity, saveBookmarkedQuotes, fetchBookmarkedQuotes, logQuoteBookmarked, saveViewedQuotesForDate, fetchViewedQuotesForDate, saveStreakToFirestore, fetchStreakFromFirestore, saveUserSettings, fetchUserSettings, fetchUsername, saveUserProfile, saveUserBadges, fetchUserBadges, saveQuoteRating, fetchPublicUserProfile } from '../services/firestoreUserService';
@@ -70,6 +71,8 @@ interface UserState {
   // Streak Freeze (1 granted per ISO week, auto-used when 1 day missed)
   streakFreezeCount: number;
   streakFreezeWeekKey: string | null;
+  // Transient: true when a freeze was just granted (signup or weekly replenishment)
+  newFreezeGranted: boolean;
 
   // Badges
   earnedBadges: string[];
@@ -96,6 +99,10 @@ interface UserState {
 
   // TTS speed
   ttsSpeed: number; // 0.6 | 0.9 | 1.2
+  // TTS voice identifier (null = system default)
+  ttsVoice: string | null;
+  // Network/offline status — transient, not persisted to AsyncStorage
+  isOffline: boolean;
 
   // Badge earned dates
   earnedBadgeDates: Record<string, string>; // badgeId → YYYY-MM-DD
@@ -144,6 +151,7 @@ interface UserState {
   setFontSizeMultiplier: (mult: number) => Promise<void>;
   setFollowSystemDarkMode: (follow: boolean) => Promise<void>;
   clearNewBadge: () => void;
+  clearNewFreezeGranted: () => void;
   checkTrialExpiry: () => void;
   addViewedQuote: (quoteId: string, quoteText: string, author: string, source: string, todayStr: string) => Promise<void>;
   getTodayViewedQuotes: () => string[];
@@ -152,6 +160,8 @@ interface UserState {
   setNotificationHour: (hour: number) => Promise<void>;
   setNotificationHours: (hours: number[]) => Promise<void>;
   setTtsSpeed: (speed: number) => Promise<void>;
+  setTtsVoice: (voice: string | null) => Promise<void>;
+  setIsOffline: (v: boolean) => void;
   rateQuote: (quoteId: string, rating: 'like' | 'dislike') => Promise<void>;
   setShowCommunityQuotes: (show: boolean) => Promise<void>;
   incrementCommunitySubmitCount: () => Promise<void>;
@@ -196,6 +206,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   lastActiveDate: null,
   streakFreezeCount: 0,
   streakFreezeWeekKey: null,
+  newFreezeGranted: false,
   earnedBadges: [],
   newBadgeEarned: null,
   pendingPraise: null,
@@ -207,6 +218,8 @@ export const useUserStore = create<UserState>((set, get) => ({
   notificationHour: 9,
   notificationHours: [8],
   ttsSpeed: 0.9,
+  ttsVoice: null,
+  isOffline: false,
   earnedBadgeDates: {},
   likedQuoteIds: [],
   dislikedQuoteIds: [],
@@ -264,6 +277,7 @@ export const useUserStore = create<UserState>((set, get) => ({
           notificationHour: d.notificationHour ?? 9,
           notificationHours: d.notificationHours ?? (d.notificationHour ? [d.notificationHour] : [8]),
           ttsSpeed: d.ttsSpeed ?? 0.9,
+          ttsVoice: d.ttsVoice ?? null,
           earnedBadgeDates: d.earnedBadgeDates ?? {},
           likedQuoteIds: d.likedQuoteIds ?? [],
           dislikedQuoteIds: d.dislikedQuoteIds ?? [],
@@ -319,6 +333,7 @@ export const useUserStore = create<UserState>((set, get) => ({
         notificationHour: s.notificationHour,
         notificationHours: s.notificationHours,
         ttsSpeed: s.ttsSpeed,
+        ttsVoice: s.ttsVoice,
         earnedBadgeDates: s.earnedBadgeDates,
         likedQuoteIds: s.likedQuoteIds,
         dislikedQuoteIds: s.dislikedQuoteIds,
@@ -335,19 +350,23 @@ export const useUserStore = create<UserState>((set, get) => ({
     const n = get().scrollCount + 1;
     const t = get().totalQuotesViewed + 1;
     set({ scrollCount: n, totalQuotesViewed: t });
-    // Award quotes-viewed badges
-    const todayStr = new Date().toISOString().split('T')[0];
-    const currentBadges = get().earnedBadges;
+    // Award quotes-viewed badges only for logged-in users who are online.
+    // Guests and offline users must not receive badge notifications — badges
+    // require Firestore persistence and a valid uid to be meaningful.
     const uid = get().uid;
-    for (const threshold of QUOTE_BADGE_THRESHOLDS) {
-      const badgeId = `quotes_${threshold}`;
-      if (t >= threshold && !currentBadges.includes(badgeId)) {
-        const next = [...get().earnedBadges, badgeId];
-        const newDates = { ...get().earnedBadgeDates, [badgeId]: todayStr };
-        appLog.log('[badge] quotes milestone earned', { uid, badgeId, total: t });
-        set({ earnedBadges: next, newBadgeEarned: badgeId, earnedBadgeDates: newDates });
-        if (uid) saveUserBadges(uid, next, get().earnedBadgeDates).catch(() => {});
-        break;
+    if (uid && !get().isOffline) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const currentBadges = get().earnedBadges;
+      for (const threshold of QUOTE_BADGE_THRESHOLDS) {
+        const badgeId = `quotes_${threshold}`;
+        if (t >= threshold && !currentBadges.includes(badgeId)) {
+          const next = [...get().earnedBadges, badgeId];
+          const newDates = { ...get().earnedBadgeDates, [badgeId]: todayStr };
+          appLog.log('[badge] quotes milestone earned', { uid, badgeId, total: t });
+          set({ earnedBadges: next, newBadgeEarned: badgeId, earnedBadgeDates: newDates });
+          saveUserBadges(uid, next, get().earnedBadgeDates).catch(() => {});
+          break;
+        }
       }
     }
     await get().persistUser();
@@ -370,7 +389,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   shouldShowAd: () => {
     const { isPremium, scrollCount } = get();
     if (isPremium) return false;
-    return scrollCount > 0 && scrollCount % 25 === 0;
+    return scrollCount > 0 && scrollCount % AD_CONFIG.scrollsBeforeAd === 0;
   },
 
   setDarkMode: async (dark) => {
@@ -384,7 +403,8 @@ export const useUserStore = create<UserState>((set, get) => ({
     const uid = get().uid;
     const previousLanguage = get().language;
     i18n.changeLanguage(lang);
-    set({ language: lang });
+    // Voices are language-specific — reset selection when the language changes.
+    set({ language: lang, ttsVoice: null });
     await get().persistUser();
     // Language is a local-only setting — intentionally NOT synced to Firestore.
     // Clear quote cache so next fetch uses the new language
@@ -450,9 +470,20 @@ export const useUserStore = create<UserState>((set, get) => ({
     const newBadges = [...currentBadges, 'first_login'];
     const newDates = { ...get().earnedBadgeDates, first_login: todayStr };
     appLog.log('[badge] first_login earned (new user after consent)', { uid });
-    set({ earnedBadges: newBadges, earnedBadgeDates: newDates, newBadgeEarned: 'first_login' });
+    // Grant one signup streak freeze and mark the current ISO week so the
+    // weekly replenishment in updateStreak won't fire again this same week.
+    const grantFreezeWeekKey = getISOWeekKey(todayStr);
+    set({
+      earnedBadges: newBadges,
+      earnedBadgeDates: newDates,
+      newBadgeEarned: 'first_login',
+      streakFreezeCount: 1,
+      streakFreezeWeekKey: grantFreezeWeekKey,
+      newFreezeGranted: true,
+    });
     await get().persistUser();
     saveUserBadges(uid, newBadges, newDates).catch(() => {});
+    saveStreakToFirestore(uid, get().currentStreak, get().lastActiveDate ?? todayStr, 1, grantFreezeWeekKey).catch(() => {});
   },
 
   setProfile: async (displayName, username, photoURL, bio) => {
@@ -586,6 +617,11 @@ export const useUserStore = create<UserState>((set, get) => ({
           batch.currentStreak = cloudStreak.current;
           batch.lastActiveDate = cloudStreak.lastActiveDate;
         }
+        // Always restore freeze from Firestore — it is the authoritative source
+        if (cloudStreak.freezeCount !== undefined) {
+          batch.streakFreezeCount = cloudStreak.freezeCount;
+          batch.streakFreezeWeekKey = cloudStreak.freezeWeekKey ?? null;
+        }
       }
 
       // Restore displayName from Firestore so custom display names survive logout/re-login.
@@ -604,6 +640,7 @@ export const useUserStore = create<UserState>((set, get) => ({
         if (cloudSettings.autoReadEnabled != null) batch.autoReadEnabled = cloudSettings.autoReadEnabled;
         if (cloudSettings.dailyReminderEnabled != null) batch.dailyReminderEnabled = cloudSettings.dailyReminderEnabled;
         if (cloudSettings.ttsSpeed != null) batch.ttsSpeed = cloudSettings.ttsSpeed;
+        if (cloudSettings.ttsVoice !== undefined) batch.ttsVoice = cloudSettings.ttsVoice ?? null;
         if (cloudSettings.notificationHours != null) batch.notificationHours = cloudSettings.notificationHours;
         if (cloudSettings.quoteFontSizeMultiplier != null) batch.quoteFontSizeMultiplier = cloudSettings.quoteFontSizeMultiplier;
         if (cloudSettings.showCommunityQuotes != null) batch.showCommunityQuotes = cloudSettings.showCommunityQuotes;
@@ -646,10 +683,15 @@ export const useUserStore = create<UserState>((set, get) => ({
         lastActiveDate: null,
         streakFreezeCount: 0,
         streakFreezeWeekKey: null,
+        newFreezeGranted: false,
         newBadgeEarned: null,
         earnedBadges: [],
         earnedBadgeDates: {},
         pendingNewUserSignIn: null,
+        // Reset scroll counters so a different user doesn't inherit the previous
+        // user's quote-viewed count and falsely trigger badge milestones.
+        scrollCount: 0,
+        totalQuotesViewed: 0,
         // Clear categories so a different user's selections don't carry over.
         selectedCategories: [],
         // Clear trial expiry so a different user on the same device doesn't
@@ -661,6 +703,7 @@ export const useUserStore = create<UserState>((set, get) => ({
         autoReadEnabled: false,
         notificationHours: [8],
         ttsSpeed: 0.9,
+        ttsVoice: null,
         quoteFontSizeMultiplier: 1.0,
         showCommunityQuotes: true,
       });
@@ -679,7 +722,7 @@ export const useUserStore = create<UserState>((set, get) => ({
     const thisWeekKey = getISOWeekKey(todayStr);
     if (get().streakFreezeWeekKey !== thisWeekKey) {
       appLog.log('[streak] new week — freeze replenished', { uid, weekKey: thisWeekKey });
-      set({ streakFreezeCount: 1, streakFreezeWeekKey: thisWeekKey });
+      set({ streakFreezeCount: 1, streakFreezeWeekKey: thisWeekKey, newFreezeGranted: true });
     }
 
     const daysSince = dateDiffInDays(lastActiveDate, todayStr);
@@ -724,7 +767,7 @@ export const useUserStore = create<UserState>((set, get) => ({
     }
 
     await get().persistUser();
-    if (uid) saveStreakToFirestore(uid, newStreak, todayStr).catch(() => {});
+    if (uid) saveStreakToFirestore(uid, newStreak, todayStr, get().streakFreezeCount, get().streakFreezeWeekKey).catch(() => {});
 
     // Reschedule smart notifications so the near-milestone 08:30 slot is
     // added or removed correctly based on the updated streak value.
@@ -877,6 +920,16 @@ export const useUserStore = create<UserState>((set, get) => ({
     if (uid) saveUserSettings(uid, { ttsSpeed: speed }).catch(() => {});
   },
 
+  setTtsVoice: async (voice) => {
+    appLog.log('[settings] ttsVoice changed', { voice });
+    set({ ttsVoice: voice });
+    await get().persistUser();
+    const uid = get().uid;
+    if (uid) saveUserSettings(uid, { ttsVoice: voice }).catch(() => {});
+  },
+
+  setIsOffline: (v) => set({ isOffline: v }),
+
   rateQuote: async (quoteId, rating) => {
     const uid = get().uid;
     const liked = get().likedQuoteIds;
@@ -964,6 +1017,10 @@ export const useUserStore = create<UserState>((set, get) => ({
       }
       if (cloudStreak && cloudStreak.current > get().currentStreak) {
         set({ currentStreak: cloudStreak.current, lastActiveDate: cloudStreak.lastActiveDate });
+      }
+      // Silently restore freeze state from cloud (no modal on background refresh)
+      if (cloudStreak?.freezeCount !== undefined) {
+        set({ streakFreezeCount: cloudStreak.freezeCount, streakFreezeWeekKey: cloudStreak.freezeWeekKey ?? null });
       }
       const cloudBadges = cloudBadgesResult.badges;
       const cloudBadgeDates = cloudBadgesResult.badgeDates;

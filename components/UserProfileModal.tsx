@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, Modal, Pressable, ScrollView,
-  StyleSheet, ActivityIndicator, Alert, TextInput,
+  StyleSheet, ActivityIndicator, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +22,8 @@ import {
 } from '../services/firestoreUserService';
 import { fetchCommunityQuotesByUser, type CommunityQuote } from '../services/communityService';
 import { useUserStore } from '../stores/useUserStore';
+import { useCommunityStore } from '../stores/useCommunityStore';
+import SubmitQuoteSheet from './SubmitQuoteSheet';
 
 interface UserProfileModalProps {
   visible: boolean;
@@ -44,12 +46,18 @@ export default function UserProfileModal({
   const myFollowerCount = useUserStore((s) => s.followerCount);
   const myBio = useUserStore((s) => s.bio);
 
+  const { deleteQuote, updateQuote } = useCommunityStore();
+
   const [profile, setProfile] = useState<PublicUserProfile | null>(null);
   const [quotes, setQuotes] = useState<CommunityQuote[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+  // Delete / edit own posts
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingQuote, setEditingQuote] = useState<{ id: string; text: string; author: string; categories: string[] } | null>(null);
 
   // Follow list modal state
   const [followListType, setFollowListType] = useState<'followers' | 'following' | null>(null);
@@ -111,6 +119,21 @@ export default function UserProfileModal({
     loadAll();
   }, [visible, targetUid]);
 
+  const handleConfirmDelete = async () => {
+    if (!myUid || !deleteTargetId) return;
+    const id = deleteTargetId;
+    setDeleteTargetId(null);
+    setDeletingId(id);
+    try {
+      await deleteQuote(myUid, id);
+      setQuotes((prev) => prev.filter((q) => q.id !== id));
+    } catch {
+      // silently ignore
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const handleFollowToggle = async () => {
     if (!myUid || isOwnProfile) return;
     setFollowLoading(true);
@@ -134,7 +157,6 @@ export default function UserProfileModal({
         ...p,
         followerCount: wasFollowing ? p.followerCount + 1 : Math.max(0, p.followerCount - 1),
       } : p);
-      Alert.alert(t('common.error'), t('common.errorMessage'));
     } finally {
       setFollowLoading(false);
     }
@@ -163,6 +185,36 @@ export default function UserProfileModal({
 
   return (
     <>
+    {/* Quote edit sheet */}
+    <SubmitQuoteSheet
+      visible={!!editingQuote}
+      onClose={() => setEditingQuote(null)}
+      editQuote={editingQuote ?? undefined}
+    />
+
+    {/* Custom delete confirmation modal */}
+    <Modal
+      transparent
+      visible={!!deleteTargetId}
+      animationType="fade"
+      onRequestClose={() => setDeleteTargetId(null)}
+    >
+      <Pressable style={s.deleteOverlay} onPress={() => setDeleteTargetId(null)}>
+        <Pressable style={[s.deleteSheet, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
+          <Text style={[s.deleteTitle, { color: colors.textPrimary }]}>{t('community.delete')}</Text>
+          <Text style={[s.deleteMessage, { color: colors.textSecondary }]}>{t('community.deleteConfirm')}</Text>
+          <View style={s.deleteActions}>
+            <Pressable style={[s.deleteBtn, { borderColor: colors.grass0 }]} onPress={() => setDeleteTargetId(null)}>
+              <Text style={[s.deleteBtnText, { color: colors.textSecondary }]}>{t('common.cancel')}</Text>
+            </Pressable>
+            <Pressable style={[s.deleteBtn, s.deleteBtnDestructive, { backgroundColor: colors.error }]} onPress={handleConfirmDelete}>
+              <Text style={[s.deleteBtnText, { color: '#fff' }]}>{t('community.delete')}</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+
     <Modal
       visible={visible}
       animationType="slide"
@@ -300,9 +352,29 @@ export default function UserProfileModal({
                     {q.author ? (
                       <Text style={[s.quoteAuthor, { color: colors.textSecondary }]}>— {q.author}</Text>
                     ) : null}
-                    <View style={s.quoteFooter}>
-                      <Ionicons name="heart" size={12} color={colors.error} />
-                      <Text style={[s.quoteFooterText, { color: colors.textMuted }]}>{q.likeCount}</Text>
+                    <View style={[s.quoteFooter, isOwnProfile ? { justifyContent: 'space-between' } : {}]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Ionicons name="heart" size={12} color={colors.error} />
+                        <Text style={[s.quoteFooterText, { color: colors.textMuted }]}>{q.likeCount}</Text>
+                      </View>
+                      {isOwnProfile && (
+                        <View style={s.cardActions}>
+                          <Pressable
+                            onPress={() => setEditingQuote({ id: q.id, text: q.text, author: q.author ?? '', categories: q.categories ?? [] })}
+                            hitSlop={8}
+                            style={s.actionBtn}
+                          >
+                            <Ionicons name="pencil-outline" size={16} color={colors.textSecondary} />
+                          </Pressable>
+                          <Pressable
+                            onPress={() => setDeleteTargetId(q.id)}
+                            hitSlop={8}
+                            style={s.actionBtn}
+                          >
+                            <Ionicons name="trash-outline" size={16} color={colors.error} />
+                          </Pressable>
+                        </View>
+                      )}
                     </View>
                   </View>
                 ))
@@ -492,6 +564,17 @@ function makeStyles(colors: any) {
     quoteAuthor: { ...Fonts.body, fontSize: FontSize.sm, fontStyle: 'italic' },
     quoteFooter: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     quoteFooterText: { ...Fonts.body, fontSize: FontSize.xs },
+    cardActions: { flexDirection: 'row', gap: Spacing.sm },
+    actionBtn: { padding: 4 },
+    // Delete confirmation modal
+    deleteOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: Spacing.xl },
+    deleteSheet: { width: '100%', maxWidth: 320, borderRadius: BorderRadius.xl, padding: Spacing.xl, gap: Spacing.md },
+    deleteTitle: { ...Fonts.heading, fontSize: FontSize.md, textAlign: 'center' },
+    deleteMessage: { ...Fonts.body, fontSize: FontSize.sm, textAlign: 'center', lineHeight: 20 },
+    deleteActions: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.xs },
+    deleteBtn: { flex: 1, paddingVertical: Spacing.sm, borderRadius: BorderRadius.lg, alignItems: 'center', borderWidth: 1 },
+    deleteBtnDestructive: { borderWidth: 0 },
+    deleteBtnText: { ...Fonts.heading, fontSize: FontSize.sm },
     followUserRow: {
       flexDirection: 'row',
       alignItems: 'center',

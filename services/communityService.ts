@@ -115,7 +115,7 @@ export async function submitCommunityQuote(
   const trimmedAuthor = sanitizeText(author);
 
   // Client-side validation (also enforced server-side via security rules / Cloud Function)
-  if (trimmedText.length < 10) return { success: false, error: 'tooShort' };
+  if (trimmedText.length < 3) return { success: false, error: 'tooShort' };
   if (trimmedText.length > 500) return { success: false, error: 'tooLong' };
   if (/https?:\/\//i.test(trimmedText)) return { success: false, error: 'noUrls' };
 
@@ -350,6 +350,7 @@ export async function updateCommunityQuote(
   quoteId: string,
   text: string,
   author: string,
+  categories: string[],
 ): Promise<{ success: boolean; error?: string }> {
   const db = getDb();
   if (!db) return { success: false, error: 'offline' };
@@ -359,7 +360,7 @@ export async function updateCommunityQuote(
   }
   const trimmedText = sanitizeText(text);
   const trimmedAuthor = sanitizeText(author);
-  if (trimmedText.length < 10) return { success: false, error: 'tooShort' };
+  if (trimmedText.length < 3) return { success: false, error: 'tooShort' };
   if (trimmedText.length > 500) return { success: false, error: 'tooLong' };
   if (/https?:\/\//i.test(trimmedText)) return { success: false, error: 'noUrls' };
 
@@ -372,6 +373,7 @@ export async function updateCommunityQuote(
     await updateDoc(doc(db, COMMUNITY_QUOTES, quoteId), {
       text: trimmedText,
       author: trimmedAuthor,
+      categories,
       updatedAt: serverTimestamp(),
     });
     appLog.log('[communityService] updated', { quoteId, uid });

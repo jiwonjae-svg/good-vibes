@@ -19,6 +19,7 @@ import MilestoneBadgeModal from '../components/MilestoneBadgeModal';
 import GoogleSignInConfirmModal from '../components/GoogleSignInConfirmModal';
 import ProfileSetupModal from '../components/ProfileSetupModal';
 import PraiseModal from '../components/PraiseModal';
+import StreakFreezeGrantModal from '../components/StreakFreezeGrantModal';
 import { appLog } from '../services/logger';
 
 // Module-level flag: ensures the splash plays only once per JS runtime session,
@@ -50,6 +51,8 @@ export default function RootLayout() {
   const pendingPraise = useUserStore((s) => s.pendingPraise);
   const setPendingPraise = useUserStore((s) => s.setPendingPraise);
   const awardFirstLoginBadge = useUserStore((s) => s.awardFirstLoginBadge);
+  const newFreezeGranted = useUserStore((s) => s.newFreezeGranted);
+  const clearNewFreezeGranted = useUserStore((s) => s.clearNewFreezeGranted);
 
   // ── Modal queue: ensures at most one modal is visible at any time ──────────
   // Modals are enqueued by type and shown in FIFO order. When the front modal
@@ -58,7 +61,8 @@ export default function RootLayout() {
     | { type: 'googleConfirm' }
     | { type: 'profileSetup' }
     | { type: 'badge'; badgeId: string }
-    | { type: 'praise'; praise: string };
+    | { type: 'praise'; praise: string }
+    | { type: 'streakFreeze' };
 
   const [modalQueue, setModalQueue] = useState<ModalEntry[]>([]);
   const activeModal = modalQueue[0] ?? null;
@@ -97,6 +101,15 @@ export default function RootLayout() {
       return [...rest, { type: 'praise', praise: pendingPraise }, ...badges];
     });
   }, [pendingPraise]);
+
+  // Enqueue streak freeze modal after badge modals when a freeze is granted
+  useEffect(() => {
+    if (!newFreezeGranted) return;
+    setModalQueue((q) => {
+      if (q.some((m) => m.type === 'streakFreeze')) return q;
+      return [...q, { type: 'streakFreeze' }];
+    });
+  }, [newFreezeGranted]);
 
   const handleNewUserConfirmAgree = useCallback(() => {
     // Replace the googleConfirm entry with profileSetup so it shows next
@@ -326,6 +339,11 @@ export default function RootLayout() {
           visible={activeModal?.type === 'praise'}
           praise={activeModal?.type === 'praise' ? activeModal.praise : ''}
           onClose={() => { setPendingPraise(null); dismissFrontModal(); }}
+        />
+        {/* Streak freeze grant modal — shown after badge modals */}
+        <StreakFreezeGrantModal
+          visible={activeModal?.type === 'streakFreeze'}
+          onClose={() => { clearNewFreezeGranted(); dismissFrontModal(); }}
         />
       </GestureHandlerRootView>
     </ErrorBoundary>

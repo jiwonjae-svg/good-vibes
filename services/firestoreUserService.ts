@@ -329,29 +329,34 @@ export async function fetchViewedQuotesForDate(uid: string, date: string): Promi
 // =============================================================================
 
 /**
- * Saves the current streak to Firestore.
+ * Saves the current streak (and optional freeze state) to Firestore.
  */
 export async function saveStreakToFirestore(
   uid: string,
   currentStreak: number,
   lastActiveDate: string,
+  freezeCount?: number,
+  freezeWeekKey?: string | null,
 ): Promise<void> {
   try {
     initFirebase();
     const db = getDb();
     if (!db) return;
     const userRef = doc(db, 'users', uid);
-    await setDoc(userRef, { streak: { current: currentStreak, lastActiveDate } }, { merge: true });
+    const streakData: Record<string, unknown> = { current: currentStreak, lastActiveDate };
+    if (freezeCount !== undefined) streakData.freezeCount = freezeCount;
+    if (freezeWeekKey !== undefined) streakData.freezeWeekKey = freezeWeekKey ?? null;
+    await setDoc(userRef, { streak: streakData }, { merge: true });
   } catch { /* silent */ }
 }
 
 /**
- * Fetches the saved streak from Firestore.
+ * Fetches the saved streak from Firestore (including freeze state).
  * Returns null when no streak data exists yet.
  */
 export async function fetchStreakFromFirestore(
   uid: string,
-): Promise<{ current: number; lastActiveDate: string } | null> {
+): Promise<{ current: number; lastActiveDate: string; freezeCount?: number; freezeWeekKey?: string | null } | null> {
   try {
     initFirebase();
     const db = getDb();
@@ -360,7 +365,7 @@ export async function fetchStreakFromFirestore(
     const snap = await getDoc(userRef);
     if (snap.exists()) {
       const data = snap.data();
-      if (data?.streak) return data.streak as { current: number; lastActiveDate: string };
+      if (data?.streak) return data.streak as { current: number; lastActiveDate: string; freezeCount?: number; freezeWeekKey?: string | null };
     }
     return null;
   } catch {
@@ -429,6 +434,8 @@ export interface UserSettings {
   autoReadEnabled: boolean;
   dailyReminderEnabled: boolean;
   ttsSpeed: number;
+  /** Selected TTS voice identifier (null = system default) */
+  ttsVoice?: string | null;
   notificationHours: number[];
   quoteFontSizeMultiplier: number;
   showCommunityQuotes: boolean;

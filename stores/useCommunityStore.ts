@@ -89,7 +89,7 @@ interface CommunityState {
   ) => Promise<{ success: boolean; error?: string }>;
   reportQuote: (uid: string, quoteId: string, reason: string) => Promise<void>;
   deleteQuote: (uid: string, quoteId: string) => Promise<void>;
-  updateQuote: (uid: string, quoteId: string, text: string, author: string) => Promise<void>;
+  updateQuote: (uid: string, quoteId: string, text: string, author: string, categories: string[]) => Promise<void>;
   canSubmit: () => boolean;
 }
 
@@ -267,11 +267,11 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
     set((s) => ({ communityQuotes: s.communityQuotes.filter((q) => q.id !== quoteId) }));
   },
 
-  updateQuote: async (uid, quoteId, text, author) => {
-    await updateCommunityQuote(uid, quoteId, text, author);
+  updateQuote: async (uid, quoteId, text, author, categories) => {
+    await updateCommunityQuote(uid, quoteId, text, author, categories);
     set((s) => ({
       communityQuotes: s.communityQuotes.map((q) =>
-        q.id === quoteId ? { ...q, text, author } : q,
+        q.id === quoteId ? { ...q, text, author, categories } : q,
       ),
     }));
   },

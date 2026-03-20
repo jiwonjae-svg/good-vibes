@@ -21,6 +21,7 @@ interface SpeakOptions {
 
 export function useTTS(options: TTSOptions = {}) {
   const storedSpeed = useUserStore((s) => s.ttsSpeed);
+  const storedVoice = useUserStore((s) => s.ttsVoice);
   const { rate = storedSpeed, pitch = 1.0 } = options;
   const [isSpeaking, setIsSpeaking] = useState(false);
   const speakingRef = useRef(false);
@@ -64,7 +65,7 @@ export function useTTS(options: TTSOptions = {}) {
         },
       });
     },
-    [getLanguageCode, rate, pitch]
+    [getLanguageCode, rate, pitch, storedVoice]
   );
 
   const stop = useCallback(async () => {

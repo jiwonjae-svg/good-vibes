@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  ActivityIndicator, Alert, Modal, TextInput,
+  ActivityIndicator, Modal, TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +20,7 @@ import GoogleSignInConfirmModal from '../../components/GoogleSignInConfirmModal'
 import ProfileSetupModal from '../../components/ProfileSetupModal';
 import EditProfileModal from '../../components/EditProfileModal';
 import ProfileAvatar from '../../components/ProfileAvatar';
+import SubmitQuoteSheet from '../../components/SubmitQuoteSheet';
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
@@ -54,6 +55,10 @@ export default function ProfileScreen() {
   const [followList, setFollowList] = useState<FollowUser[]>([]);
   const [followListLoading, setFollowListLoading] = useState(false);
   const [followSearchQuery, setFollowSearchQuery] = useState('');
+  // Quote delete / edit state
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingQuote, setEditingQuote] = useState<{ id: string; text: string; author: string; categories: string[] } | null>(null);
   // Quote detail modal
   const [selectedQuote, setSelectedQuote] = useState<CommunityQuote | null>(null);
   const [quoteSearchQuery, setQuoteSearchQuery] = useState('');
@@ -157,26 +162,22 @@ export default function ProfileScreen() {
   };
 
   const handleDelete = (quoteId: string) => {
-    Alert.alert(
-      t('community.delete'),
-      t('community.deleteConfirm'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('community.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            if (!uid) return;
-            try {
-              await deleteQuote(uid, quoteId);
-              setQuotes((prev) => prev.filter((q) => q.id !== quoteId));
-            } catch {
-              Alert.alert(t('common.error'), t('common.errorMessage'));
-            }
-          },
-        },
-      ],
-    );
+    setDeleteTargetId(quoteId);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!uid || !deleteTargetId) return;
+    const id = deleteTargetId;
+    setDeleteTargetId(null);
+    setDeletingId(id);
+    try {
+      await deleteQuote(uid, id);
+      setQuotes((prev) => prev.filter((q) => q.id !== id));
+    } catch {
+      // silently ignore — the quote will still be visible until next refresh
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const s = makeStyles(colors);
@@ -234,6 +235,36 @@ export default function ProfileScreen() {
         bio={bio}
         onSave={handleSaveProfile}
       />
+
+      {/* Quote edit sheet */}
+      <SubmitQuoteSheet
+        visible={!!editingQuote}
+        onClose={() => setEditingQuote(null)}
+        editQuote={editingQuote ?? undefined}
+      />
+
+      {/* Custom delete confirmation modal */}
+      <Modal
+        transparent
+        visible={!!deleteTargetId}
+        animationType="fade"
+        onRequestClose={() => setDeleteTargetId(null)}
+      >
+        <Pressable style={s.deleteOverlay} onPress={() => setDeleteTargetId(null)}>
+          <Pressable style={[s.deleteSheet, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
+            <Text style={[s.deleteTitle, { color: colors.textPrimary }]}>{t('community.delete')}</Text>
+            <Text style={[s.deleteMessage, { color: colors.textSecondary }]}>{t('community.deleteConfirm')}</Text>
+            <View style={s.deleteActions}>
+              <Pressable style={[s.deleteBtn, { borderColor: colors.grass0 }]} onPress={() => setDeleteTargetId(null)}>
+                <Text style={[s.deleteBtnText, { color: colors.textSecondary }]}>{t('common.cancel')}</Text>
+              </Pressable>
+              <Pressable style={[s.deleteBtn, s.deleteBtnDestructive, { backgroundColor: colors.error }]} onPress={handleConfirmDelete}>
+                <Text style={[s.deleteBtnText, { color: '#fff' }]}>{t('community.delete')}</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Follow list modal */}
       <Modal
@@ -451,6 +482,13 @@ export default function ProfileScreen() {
                     <Text style={[s.footerText, { color: colors.textMuted }]}>{q.likeCount}</Text>
                   </View>
                   <View style={s.cardActions}>
+                    <Pressable
+                      onPress={(e) => { e.stopPropagation(); setEditingQuote({ id: q.id, text: q.text, author: q.author ?? '', categories: q.categories ?? [] }); }}
+                      hitSlop={8}
+                      style={s.actionBtn}
+                    >
+                      <Ionicons name="pencil-outline" size={16} color={colors.textSecondary} />
+                    </Pressable>
                     <Pressable onPress={(e) => { e.stopPropagation(); handleDelete(q.id); }} hitSlop={8} style={s.actionBtn}>
                       <Ionicons name="trash-outline" size={16} color={colors.error} />
                     </Pressable>
@@ -500,6 +538,15 @@ function makeStyles(colors: any) {
     footerText: { ...Fonts.body, fontSize: FontSize.xs },
     cardActions: { flexDirection: 'row', gap: Spacing.sm },
     actionBtn: { padding: 4 },
+    // Delete confirmation modal
+    deleteOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: Spacing.xl },
+    deleteSheet: { width: '100%', maxWidth: 320, borderRadius: BorderRadius.xl, padding: Spacing.xl, gap: Spacing.md },
+    deleteTitle: { ...Fonts.heading, fontSize: FontSize.md, textAlign: 'center' },
+    deleteMessage: { ...Fonts.body, fontSize: FontSize.sm, textAlign: 'center', lineHeight: 20 },
+    deleteActions: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.xs },
+    deleteBtn: { flex: 1, paddingVertical: Spacing.sm, borderRadius: BorderRadius.lg, alignItems: 'center', borderWidth: 1 },
+    deleteBtnDestructive: { borderWidth: 0 },
+    deleteBtnText: { ...Fonts.heading, fontSize: FontSize.sm },
     // Follow list modal
     followModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderBottomWidth: 1 },
     followModalTitle: { ...Fonts.heading, fontSize: FontSize.md },

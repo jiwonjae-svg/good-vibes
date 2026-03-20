@@ -33,6 +33,7 @@ export default function MySubmissionsModal({ visible, onClose, uid }: MySubmissi
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [editAuthor, setEditAuthor] = useState('');
+  const [editCategories, setEditCategories] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -57,13 +58,14 @@ export default function MySubmissionsModal({ visible, onClose, uid }: MySubmissi
     setEditingId(q.id);
     setEditText(q.text);
     setEditAuthor(q.author ?? '');
+    setEditCategories(q.categories ?? []);
   };
 
   const handleSaveEdit = async () => {
     if (!editingId || !editText.trim() || isSaving) return;
     setIsSaving(true);
     try {
-      await updateQuote(uid, editingId, editText.trim(), editAuthor.trim());
+      await updateQuote(uid, editingId, editText.trim(), editAuthor.trim(), editCategories);
       setQuotes((prev) =>
         prev.map((q) => (q.id === editingId ? { ...q, text: editText.trim(), author: editAuthor.trim() } : q)),
       );

@@ -99,9 +99,10 @@ function FireworksDisplay() {
 interface SubmitQuoteSheetProps {
   visible: boolean;
   onClose: () => void;
+  editQuote?: { id: string; text: string; author: string; categories: string[] };
 }
 
-export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetProps) {
+export default function SubmitQuoteSheet({ visible, onClose, editQuote }: SubmitQuoteSheetProps) {
   const { t } = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
@@ -109,7 +110,7 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
   const displayName = useUserStore((s) => s.displayName);
   const language = useUserStore((s) => s.language);
   const photoURL = useUserStore((s) => s.photoURL);
-  const { submitQuote, canSubmit } = useCommunityStore();
+  const { submitQuote, updateQuote, canSubmit } = useCommunityStore();
 
   // Use ref-based text tracking to avoid Korean IME issues on Android
   const textInputRef = useRef<TextInput>(null);
@@ -127,11 +128,23 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
 
   useEffect(() => {
     if (visible) {
-      textInputRef.current?.clear();
-      textValueRef.current = '';
-      setCharCount(0);
-      setAuthor('');
-      setSelectedCats([]);
+      if (editQuote) {
+        // Pre-fill for edit mode. Use setTimeout so the modal is rendered before
+        // setNativeProps runs (needed for the uncontrolled TextInput).
+        setTimeout(() => {
+          textInputRef.current?.setNativeProps({ text: editQuote.text });
+        }, 100);
+        textValueRef.current = editQuote.text;
+        setCharCount(editQuote.text.length);
+        setAuthor(editQuote.author);
+        setSelectedCats(editQuote.categories ?? []);
+      } else {
+        textInputRef.current?.clear();
+        textValueRef.current = '';
+        setCharCount(0);
+        setAuthor('');
+        setSelectedCats([]);
+      }
       setExpandedThemes([]);
       setSubmitted(false);
       setError(null);
@@ -170,14 +183,29 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
   const handleSubmit = async () => {
     if (!uid) return;
 
-    if (!canSubmit()) {
-      setError(t('community.rateLimit'));
+    const trimmed = textValueRef.current.trim();
+    if (trimmed.length < 3) {
+      setError(t('community.tooShort'));
       return;
     }
 
-    const trimmed = textValueRef.current.trim();
-    if (trimmed.length < 10) {
-      setError(t('community.tooShort'));
+    // Edit mode
+    if (editQuote) {
+      setSubmitting(true);
+      setError(null);
+      try {
+        await updateQuote(uid, editQuote.id, trimmed, author.trim(), selectedCats);
+        handleClose();
+      } catch {
+        setError(t('community.submitError'));
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    if (!canSubmit()) {
+      setError(t('community.rateLimit'));
       return;
     }
 
@@ -251,7 +279,7 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
             {/* Header */}
             <View style={styles.header}>
               <Text style={[styles.title, { color: colors.textPrimary }]}>
-                {t('community.submit')}
+                {editQuote ? t('community.editPost') : t('community.submit')}
               </Text>
               <Pressable onPress={handleClose} hitSlop={8}>
                 <Ionicons name="close" size={24} color={colors.textMuted} />
@@ -282,7 +310,7 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
                 <Text style={[styles.label, { color: colors.textSecondary }]}>
                   {t('community.textLabel')} *
                 </Text>
-                <View style={[styles.inputWrapper, { borderColor: textTouched && charCount > 0 && charCount < 10 ? colors.error : colors.grass0, backgroundColor: colors.surfaceAlt }]}>
+                <View style={[styles.inputWrapper, { borderColor: textTouched && charCount > 0 && charCount < 3 ? colors.error : colors.grass0, backgroundColor: colors.surfaceAlt }]}>
                   <TextInput
                     ref={textInputRef}
                     style={[styles.textArea, { color: colors.textPrimary }]}
@@ -381,10 +409,10 @@ export default function SubmitQuoteSheet({ visible, onClose }: SubmitQuoteSheetP
                 <Pressable
                   style={[
                     styles.submitBtn,
-                    { backgroundColor: charCount >= 10 ? colors.primary : colors.grass0 },
+                    { backgroundColor: charCount >= 3 ? colors.primary : colors.grass0 },
                   ]}
                   onPress={handleSubmit}
-                  disabled={submitting || charCount < 10}
+                  disabled={submitting || charCount < 3}
                 >
                   {submitting ? (
                     <ActivityIndicator color="#fff" />

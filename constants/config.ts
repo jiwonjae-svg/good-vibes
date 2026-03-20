@@ -124,7 +124,7 @@ export const AD_CONFIG: AdConfig = {
       'ca-app-pub-3940256099942544/4411468910',
     ),
   },
-  scrollsBeforeAd: 5,
+  scrollsBeforeAd: 20,
 };
 
 export const QUOTE_CONFIG: QuoteConfig = {

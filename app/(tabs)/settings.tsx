@@ -71,6 +71,39 @@ export default function SettingsScreen() {
   const [badgeModalVisible, setBadgeModalVisible] = useState(false);
   const [availableVoices, setAvailableVoices] = useState<Speech.Voice[]>([]);
 
+  // Friendly display names for Android TTS voice identifiers
+  const getVoiceFriendlyName = useCallback((voice: Speech.Voice): string => {
+    const id = voice.identifier.toLowerCase();
+    // Korean voices
+    if (id.includes('ko-kr-x-ism') || id.includes('ko-kr-x-kob')) return '미리 A';
+    if (id.includes('ko-kr-x-koc')) return '은하 B';
+    if (id.includes('ko-kr-x-kod')) return '하늘 C';
+    if (id.includes('ko-kr-language') || id.includes('ko-KR-language')) return '돌 D';
+    if (id.includes('kok-in') || id.includes('kok-IN')) return '달 E';
+    // English voices
+    if (id.includes('en-us-x-iob')) return 'Aria A';
+    if (id.includes('en-us-x-iom')) return 'Nova B';
+    if (id.includes('en-us-x-iol')) return 'Atlas C';
+    if (id.includes('en-us-x-iog')) return 'Echo D';
+    if (id.includes('en-us-language') || id.includes('en-US-language')) return 'River E';
+    // Japanese voices
+    if (id.includes('ja-jp-x-jab')) return 'さくら A';
+    if (id.includes('ja-jp-x-jac')) return 'ゆき B';
+    if (id.includes('ja-jp-x-jad')) return 'はる C';
+    if (id.includes('ja-jp-language') || id.includes('ja-JP-language')) return 'そら D';
+    // Chinese voices
+    if (id.includes('zh-cn-x-ccc')) return '晨光 A';
+    if (id.includes('zh-cn-x-ccd')) return '晴天 B';
+    if (id.includes('zh-cn-language') || id.includes('zh-CN-language')) return '微风 C';
+    // Spanish voices
+    if (id.includes('es-es-x-eef')) return 'Luna A';
+    if (id.includes('es-es-x-eeg')) return 'Sol B';
+    if (id.includes('es-es-language') || id.includes('es-ES-language')) return 'Cielo C';
+    // Fallback: extract a clean portion from the identifier
+    const parts = voice.name.split('-');
+    return parts.length > 3 ? `Voice ${parts[parts.length - 1].toUpperCase()}` : voice.name;
+  }, []);
+
   // Admin state — fetched fresh from Firestore, never cached locally
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminUserListVisible, setAdminUserListVisible] = useState(false);
@@ -676,8 +709,8 @@ export default function SettingsScreen() {
                       </View>
                       <Text style={[s.rowTitle, { fontWeight: ttsVoice === voice.identifier ? '600' : '400' }]}>
                         {voice.quality === 'Enhanced'
-                          ? `${voice.name} · ${t('settings.ttsVoiceHQ')}`
-                          : voice.name}
+                          ? `${getVoiceFriendlyName(voice)} · ${t('settings.ttsVoiceHQ')}`
+                          : getVoiceFriendlyName(voice)}
                       </Text>
                     </Pressable>
                   ))}

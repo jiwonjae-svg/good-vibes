@@ -47,6 +47,7 @@ export function useTTS(options: TTSOptions = {}) {
 
       Speech.speak(text, {
         language: langCode,
+        ...(storedVoice ? { voice: storedVoice } : {}),
         rate,
         pitch,
         onDone: () => {

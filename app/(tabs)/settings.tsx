@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Switch, Modal, Image,
 } from 'react-native';
@@ -71,38 +71,41 @@ export default function SettingsScreen() {
   const [badgeModalVisible, setBadgeModalVisible] = useState(false);
   const [availableVoices, setAvailableVoices] = useState<Speech.Voice[]>([]);
 
-  // Friendly display names for Android TTS voice identifiers
+  // Device-agnostic friendly names: assign sequential names per language
+  const VOICE_NAMES: Record<string, string[]> = {
+    ko: ['미리', '은하', '하늘', '소리', '달빛', '새벽', '이슬', '보미', '가을', '나래'],
+    en: ['Aria', 'Nova', 'Atlas', 'Echo', 'River', 'Luna', 'Sage', 'Iris', 'Finn', 'Skye'],
+    ja: ['さくら', 'ゆき', 'はる', 'そら', 'みなと', 'あおい', 'りん', 'かぜ'],
+    zh: ['晨光', '晴天', '微风', '星辰', '清泉', '雨露', '朝阳', '月影'],
+    es: ['Luna', 'Sol', 'Cielo', 'Río', 'Alba', 'Mar', 'Luz', 'Nube'],
+  };
+  const voiceNameCounterRef = useRef<Map<string, number>>(new Map());
   const getVoiceFriendlyName = useCallback((voice: Speech.Voice): string => {
-    const id = voice.identifier.toLowerCase();
-    // Korean voices
-    if (id.includes('ko-kr-x-ism') || id.includes('ko-kr-x-kob')) return '미리 A';
-    if (id.includes('ko-kr-x-koc')) return '은하 B';
-    if (id.includes('ko-kr-x-kod')) return '하늘 C';
-    if (id.includes('ko-kr-language') || id.includes('ko-KR-language')) return '돌 D';
-    if (id.includes('kok-in') || id.includes('kok-IN')) return '달 E';
-    // English voices
-    if (id.includes('en-us-x-iob')) return 'Aria A';
-    if (id.includes('en-us-x-iom')) return 'Nova B';
-    if (id.includes('en-us-x-iol')) return 'Atlas C';
-    if (id.includes('en-us-x-iog')) return 'Echo D';
-    if (id.includes('en-us-language') || id.includes('en-US-language')) return 'River E';
-    // Japanese voices
-    if (id.includes('ja-jp-x-jab')) return 'さくら A';
-    if (id.includes('ja-jp-x-jac')) return 'ゆき B';
-    if (id.includes('ja-jp-x-jad')) return 'はる C';
-    if (id.includes('ja-jp-language') || id.includes('ja-JP-language')) return 'そら D';
-    // Chinese voices
-    if (id.includes('zh-cn-x-ccc')) return '晨光 A';
-    if (id.includes('zh-cn-x-ccd')) return '晴天 B';
-    if (id.includes('zh-cn-language') || id.includes('zh-CN-language')) return '微风 C';
-    // Spanish voices
-    if (id.includes('es-es-x-eef')) return 'Luna A';
-    if (id.includes('es-es-x-eeg')) return 'Sol B';
-    if (id.includes('es-es-language') || id.includes('es-ES-language')) return 'Cielo C';
-    // Fallback: extract a clean portion from the identifier
-    const parts = voice.name.split('-');
-    return parts.length > 3 ? `Voice ${parts[parts.length - 1].toUpperCase()}` : voice.name;
-  }, []);
+    // Use a stable map keyed by identifier so repeated renders return the same name
+    const cached = voiceNameCounterRef.current.get(voice.identifier);
+    if (cached !== undefined) {
+      const lang = voice.language.slice(0, 2).toLowerCase();
+      const names = VOICE_NAMES[lang] ?? VOICE_NAMES['en'];
+      return names[cached % names.length];
+    }
+    // Assign next index for this language prefix
+    const lang = voice.language.slice(0, 2).toLowerCase();
+    const prefix = lang + '_';
+    let idx = 0;
+    voiceNameCounterRef.current.forEach((_, key) => {
+      if (key.startsWith(prefix) || voiceNameCounterRef.current.get(key) !== undefined) {
+        // count how many of this language already assigned
+      }
+    });
+    // Count existing entries for this language
+    idx = [...voiceNameCounterRef.current.entries()].filter(([k]) => {
+      // Match voices with same language prefix by checking stored voices
+      return availableVoices.find(v => v.identifier === k)?.language.slice(0, 2).toLowerCase() === lang;
+    }).length;
+    voiceNameCounterRef.current.set(voice.identifier, idx);
+    const names = VOICE_NAMES[lang] ?? VOICE_NAMES['en'];
+    return names[idx % names.length];
+  }, [availableVoices]);
 
   // Admin state — fetched fresh from Firestore, never cached locally
   const [isAdmin, setIsAdmin] = useState(false);

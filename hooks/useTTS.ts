@@ -45,9 +45,11 @@ export function useTTS(options: TTSOptions = {}) {
 
       const langCode = getLanguageCode();
 
+      // When a specific voice is selected, omit language — the voice identifier
+      // already implies the language, and on Android setLanguage() after setVoice()
+      // can reset the voice selection back to the default.
       Speech.speak(text, {
-        language: langCode,
-        ...(storedVoice ? { voice: storedVoice } : {}),
+        ...(storedVoice ? { voice: storedVoice } : { language: langCode }),
         rate,
         pitch,
         onDone: () => {

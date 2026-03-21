@@ -39,15 +39,28 @@ export async function signInWithGoogleNative(): Promise<User | null> {
     appLog.log('[authService] signInWithGoogleNative: start');
     const hasPlay = await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
     appLog.log('[authService] hasPlayServices', { hasPlay });
-    const userInfo = await GoogleSignin.signIn();
-    appLog.log('[authService] GoogleSignin.signIn success', {
-      email: userInfo.data?.user?.email,
-      hasIdToken: !!userInfo.data?.idToken,
+
+    // Clear any stale cached Google account so the picker always shows
+    // and a fresh idToken is requested each time.
+    try { await GoogleSignin.signOut(); } catch { /* ok */ }
+
+    const response = await GoogleSignin.signIn();
+    appLog.log('[authService] GoogleSignin.signIn response', {
+      type: (response as any).type,
+      email: response.data?.user?.email,
+      hasIdToken: !!response.data?.idToken,
     });
-    const idToken = userInfo.data?.idToken;
-    if (!idToken) {
-      appLog.error('[authService] No idToken in GoogleSignin response', userInfo);
+
+    // v13+ returns { type: 'cancelled' } instead of throwing
+    if ((response as any).type === 'cancelled') {
+      appLog.log('[authService] signInWithGoogleNative: user cancelled (v13+ response)');
       return null;
+    }
+
+    const idToken = response.data?.idToken;
+    if (!idToken) {
+      appLog.error('[authService] No idToken in GoogleSignin response — likely SHA-1 / webClientId mismatch', response);
+      throw new Error('NO_ID_TOKEN');
     }
     return await _firebaseSignIn(idToken);
   } catch (error: any) {

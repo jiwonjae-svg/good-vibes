@@ -1,5 +1,11 @@
-# Windows PowerShell: WSL을 통해 Android APK 로컬 빌드
-# 사용법: .\scripts\build-android-wsl.ps1
+# Windows PowerShell: WSL을 통해 Android 로컈 빌드 (APK 또는 AAB)
+# 사용법:
+#   .\scripts\build-android-wsl.ps1                           → APK (preview 프로필)
+#   .\scripts\build-android-wsl.ps1 -BuildProfile production → AAB (production 프로필)
+param(
+  [ValidateSet('preview', 'production')]
+  [string]$BuildProfile = 'preview'
+)
 
 $ProjectPath = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $drive = $ProjectPath.Substring(0,1).ToLower()
@@ -52,7 +58,7 @@ if [ -f GoogleService-Info.plist ]; then
 fi
 
 npm install --silent
-eas build --local --platform android --profile preview --non-interactive
+eas build --local --platform android --profile EAS_PROFILE_PLACEHOLDER --non-interactive
 BUILD_EXIT=$?
 
 [ -f eas.json.bak ] && cp eas.json.bak eas.json && rm eas.json.bak
@@ -61,6 +67,8 @@ exit $BUILD_EXIT
 
 # WSLPATH_PLACEHOLDER 를 실제 경로로 교체
 $BashContent = $BashContent -replace 'WSLPATH_PLACEHOLDER', $WslPath
+# EAS_PROFILE_PLACEHOLDER 를 선택한 프로필로 교체
+$BashContent = $BashContent -replace 'EAS_PROFILE_PLACEHOLDER', $BuildProfile
 
 # LF 줄끝으로 저장 (bash 에서 \r 오류 방지)
 [System.IO.File]::WriteAllText($TempScript, ($BashContent -replace "`r`n", "`n"))
@@ -76,9 +84,10 @@ $ExitCode = $LASTEXITCODE
 Remove-Item $TempScript -ErrorAction SilentlyContinue
 
 if ($ExitCode -eq 0) {
+  $artifact = if ($BuildProfile -eq 'production') { 'AAB' } else { 'APK' }
   Write-Host ""
   Write-Host "=== 빌드 성공! ===" -ForegroundColor Green
-  Write-Host "APK 파일이 프로젝트 루트에 생성됐습니다." -ForegroundColor Green
+  Write-Host "$artifact 파일이 프로젝트 루트에 생성딌습니다." -ForegroundColor Green
 } else {
   Write-Host ""
   Write-Host "=== 빌드 실패 (exit code: $ExitCode) ===" -ForegroundColor Red

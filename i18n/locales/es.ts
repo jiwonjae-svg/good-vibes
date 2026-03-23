@@ -188,7 +188,7 @@ export default {
     ttsSpeedFast: 'Rápido',
     ttsVoice: 'Voz de lectura',
     ttsVoiceDesc: 'Selecciona la voz a usar',
-    ttsVoiceDefault: 'Predeterminada (sistema)',
+    ttsVoiceDefault: 'Tipo A',
     ttsVoiceHQ: 'Mejorada',
     ttsVoiceNone: 'No hay voces disponibles para este idioma',
     notificationTime: 'Hora de notificación',

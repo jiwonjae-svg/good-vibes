@@ -186,7 +186,7 @@ export default {
     ttsSpeedFast: '빠르게',
     ttsVoice: '읽기 목소리',
     ttsVoiceDesc: '사용할 목소리를 선택합니다',
-    ttsVoiceDefault: '기본 (시스템)',
+    ttsVoiceDefault: '타입A',
     ttsVoiceHQ: '고품질',
     ttsVoiceNone: '이 언어에서 지원하는 목소리가 없습니다',
     notificationTime: '알림 시간',

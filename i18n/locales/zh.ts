@@ -187,7 +187,7 @@
     ttsSpeedNormal: '正常',
     ttsSpeedFast: '快',    ttsVoice: '朗读声音',
     ttsVoiceDesc: '选择使用的声音',
-    ttsVoiceDefault: '默认（系统）',
+    ttsVoiceDefault: '类型A',
     ttsVoiceHQ: '高品质',
     ttsVoiceNone: '没有适合此语言的声音',    notificationTime: '通知时间',
     notificationMorning: '早上',

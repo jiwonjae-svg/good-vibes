@@ -101,6 +101,7 @@ data/*.bak*
 data/*.bak
 scripts/serviceAccount.json
 *.apk
+*.aab
 
 # Cloud Functions build output
 functions/lib/

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, Switch, Modal, Image,
+  View, Text, StyleSheet, ScrollView, Pressable, Switch, Modal, Image, Alert,
 } from 'react-native';
 import * as Speech from 'expo-speech';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -418,8 +418,9 @@ export default function SettingsScreen() {
                           await setAuthCompleted();
                         }
                       }
-                    } catch (err) {
-                      console.error('[settings] Google sign-in failed:', err);
+                    } catch (err: any) {
+                      appLog.error('[settings] Google sign-in failed', { code: err?.code, message: err?.message });
+                      Alert.alert(t('login.signInFailed'));
                     }
                   }}
                 >
@@ -660,11 +661,12 @@ export default function SettingsScreen() {
                     {t('settings.ttsVoiceDefault')}
                   </Text>
                 </Pressable>
-                {/* Voices matching the current app language — labeled 타입 A/B/C/D in order */}
+                {/* Voices: only slots 2, 3, 4 of the language-matched list, labeled 타입B/C/D */}
                 {availableVoices
                   .filter((v) => v.language.toLowerCase().startsWith(language))
-                  .map((voice, idx) => {
-                    const label = `타입 ${'ABCDEFGHIJ'[idx] ?? idx + 1}`;
+                  .filter((_, idx) => idx === 2 || idx === 3 || idx === 4)
+                  .map((voice, subIdx) => {
+                    const label = `타입 ${'BCD'[subIdx]}`;
                     return (
                       <Pressable
                         key={voice.identifier}
@@ -677,7 +679,7 @@ export default function SettingsScreen() {
                           {ttsVoice === voice.identifier && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary }} />}
                         </View>
                         <Text style={[s.rowTitle, { fontWeight: ttsVoice === voice.identifier ? '600' : '400' }]}>
-                          {voice.quality === 'Enhanced' ? `${label} · ${t('settings.ttsVoiceHQ')}` : label}
+                          {label}
                         </Text>
                       </Pressable>
                     );

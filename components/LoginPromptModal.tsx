@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View, Text, Modal, Pressable, StyleSheet,
+  View, Text, Modal, Pressable, StyleSheet, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -43,8 +43,8 @@ export default function LoginPromptModal({
         }
         onClose();
       }
-    } catch {
-      // sign-in failed — modal stays open so user can retry
+    } catch (e: any) {
+      Alert.alert(t('login.signInFailed'));
     }
   };
 

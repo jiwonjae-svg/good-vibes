@@ -105,7 +105,7 @@ async function _firebaseSignIn(idToken: string): Promise<User | null> {
       code: error?.code,
       message: error?.message,
     });
-    return null;
+    throw error;
   }
 }
 

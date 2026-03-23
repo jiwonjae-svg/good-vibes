@@ -187,7 +187,7 @@ export default {
     ttsSpeedNormal: '普通',
     ttsSpeedFast: '速い',    ttsVoice: '読み上げ音声',
     ttsVoiceDesc: '使用する音声を選択します',
-    ttsVoiceDefault: 'デフォルト（システム）',
+    ttsVoiceDefault: 'タイプA',
     ttsVoiceHQ: '高品質',
     ttsVoiceNone: 'この言語で利用可能な音声がありません',    notificationTime: '通知時刻',
     notificationMorning: '朝',

@@ -2,6 +2,8 @@
 """
 Comprehensive quote audit and fix script.
 
+Workers: Victor Lin (Data Lead), Elena Rossi (Data Engineer), Mark Johnson (Data Scientist)
+
 Performs:
 1. Removes politically/religiously sensitive quotes from living politicians/religious leaders
 2. Detects and re-translates truncated/missing/wrong Korean, Japanese, Chinese translations
@@ -10,7 +12,7 @@ Performs:
 5. Splits output back into quotesClient.json + quotesServer.json
 6. Produces docs/QUOTE-AUDIT-REPORT.md with a full change log
 
-Requirements: pip install openai tqdm
+Requirements: pip install google-generativeai tqdm
 Usage: python scripts/audit_and_fix_quotes.py
 """
 
@@ -23,12 +25,14 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from openai import OpenAI
+    from google import genai
+    from google.genai import types as gentypes
     from tqdm import tqdm
 except ImportError:
     print("Installing required packages...")
-    os.system(f"{sys.executable} -m pip install openai tqdm -q")
-    from openai import OpenAI
+    os.system(f"{sys.executable} -m pip install google-genai tqdm -q")
+    from google import genai
+    from google.genai import types as gentypes
     from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
@@ -40,26 +44,26 @@ SERVER_JSON = BASE_DIR / "data" / "quotesServer.json"
 DOCS_DIR = BASE_DIR / "docs"
 REPORT_PATH = DOCS_DIR / "QUOTE-AUDIT-REPORT.md"
 
-# Grok API setup (xAI – OpenAI-compatible)
-API_KEY = os.environ.get("EXPO_PUBLIC_GROK_API_KEY", "")
-MODEL = os.environ.get("EXPO_PUBLIC_GROK_MODEL", "grok-3-mini-fast")
-BASE_URL = "https://api.x.ai/v1"
+# Gemini API setup
+API_KEY = os.environ.get("EXPO_PUBLIC_GEMINI_API_KEY", "")
+MODEL   = os.environ.get("EXPO_PUBLIC_GEMINI_MODEL", "gemini-1.5-flash-latest")
 
 # Load .env manually if key is empty
 if not API_KEY:
     env_path = BASE_DIR / ".env"
     if env_path.exists():
         for line in env_path.read_text(encoding="utf-8").splitlines():
-            if line.startswith("EXPO_PUBLIC_GROK_API_KEY="):
+            if line.startswith("EXPO_PUBLIC_GEMINI_API_KEY="):
                 API_KEY = line.split("=", 1)[1].strip()
-            if line.startswith("EXPO_PUBLIC_GROK_MODEL="):
+            if line.startswith("EXPO_PUBLIC_GEMINI_MODEL="):
                 MODEL = line.split("=", 1)[1].strip()
 
 if not API_KEY:
-    print("ERROR: EXPO_PUBLIC_GROK_API_KEY not found in environment or .env")
+    print("ERROR: EXPO_PUBLIC_GEMINI_API_KEY not found in environment or .env")
     sys.exit(1)
 
-client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
+genai_client = genai.Client(api_key=API_KEY)
+_gemini_client = genai_client
 
 # ---------------------------------------------------------------------------
 # SENSITIVITY LIST
@@ -192,7 +196,7 @@ STYLE_NOTES = {
 }
 
 def retranslate(quote_text: str, author: str, lang: str, current: str, issues: list[str]) -> str:
-    """Call Grok to produce a corrected translation."""
+    """Call Gemini to produce a corrected translation."""
     issue_desc = ", ".join(issues)
     prompt = (
         f"You are a professional literary translator. "
@@ -204,16 +208,18 @@ def retranslate(quote_text: str, author: str, lang: str, current: str, issues: l
     )
     for attempt in range(3):
         try:
-            resp = client.chat.completions.create(
+            response = _gemini_client.models.generate_content(
                 model=MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=500,
+                contents=prompt,
+                config=gentypes.GenerateContentConfig(
+                    temperature=0.3,
+                    max_output_tokens=1024,
+                ),
             )
-            return resp.choices[0].message.content.strip()
+            return response.text.strip()
         except Exception as e:
             if attempt == 2:
-                print(f"  [WARN] Grok failed after 3 attempts: {e}")
+                print(f"  [WARN] Gemini failed after 3 attempts: {e}")
                 return current
             time.sleep(2 ** attempt)
     return current
@@ -281,7 +287,7 @@ def main() -> None:
     # Phase 3: Re-translate (batch, with progress)
     # -----------------------------------------------------------------------
     if jobs:
-        print(f"\n=== Phase 3: Re-translating {len(jobs)} items via Grok ===")
+        print(f"\n=== Phase 3: Re-translating {len(jobs)} items via Gemini ({MODEL}) ===")
         log_idx = 0
         for idx_in_kept, lang, issues in tqdm(jobs, unit="item"):
             q = kept_quotes[idx_in_kept]

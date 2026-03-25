@@ -143,6 +143,26 @@ export const GRASS_CONFIG = {
   weeklyGoal: 5,
 } as const;
 
+/**
+ * RevenueCat public SDK key for Android.
+ * Set via EXPO_PUBLIC_RC_API_KEY_ANDROID or app.config.js extra.rcApiKeyAndroid.
+ */
+export const REVENUECAT_API_KEY_ANDROID = getEnvOrExtra(
+  'EXPO_PUBLIC_RC_API_KEY_ANDROID',
+  'rcApiKeyAndroid',
+  '',
+);
+
+/**
+ * RevenueCat public SDK key for iOS.
+ * Set via EXPO_PUBLIC_RC_API_KEY_IOS or app.config.js extra.rcApiKeyIos.
+ */
+export const REVENUECAT_API_KEY_IOS = getEnvOrExtra(
+  'EXPO_PUBLIC_RC_API_KEY_IOS',
+  'rcApiKeyIos',
+  '',
+);
+
 // =============================================================================
 // Unified Config Object
 // =============================================================================

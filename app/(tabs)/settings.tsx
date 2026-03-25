@@ -14,6 +14,9 @@ import { signInWithGoogleNative, logOut } from '../../services/authService';
 import { logActivity, checkIsAdmin } from '../../services/firestoreUserService';
 import { scheduleSmartNotifications, cancelDailyReminder, saveFCMToken } from '../../services/notificationService';
 import { appLog } from '../../services/logger';
+import {
+  getMonthlyPackage, purchasePackage, restoreAndCheckEntitlement, logOutFromPurchases,
+} from '../../services/purchaseService';
 import LanguagePickerModal from '../../components/LanguagePickerModal';
 import CategoryPickerModal from '../../components/CategoryPickerModal';
 import LogStatusModal from '../../components/LogStatusModal';
@@ -78,8 +81,9 @@ export default function SettingsScreen() {
   const [adminReportsVisible, setAdminReportsVisible] = useState(false);
   const [adminPostsAuthorId, setAdminPostsAuthorId] = useState<string | null>(null);
 
-  // IAP — dynamic pricing from store
+  // Purchase state — loaded from RevenueCat
   const [localizedPrice, setLocalizedPrice] = useState<string | null>(null);
+  const [isPurchasing, setIsPurchasing] = useState(false);
 
   // Load available TTS voices for the current device
   useEffect(() => {
@@ -97,24 +101,18 @@ export default function SettingsScreen() {
     }
   }, [uid]);
 
-  // Load IAP product price
+  // Load offering price from RevenueCat when the premium modal might be shown
   useEffect(() => {
+    if (isGuest || isAdmin) return;
     let cancelled = false;
     (async () => {
-      try {
-        const { getSubscriptions, initConnection, endConnection } = require('react-native-iap');
-        await initConnection();
-        const products = await getSubscriptions({ skus: ['dailyglow_glow_plus_monthly'] });
-        if (!cancelled && products.length > 0) {
-          setLocalizedPrice(products[0].localizedPrice ?? null);
-        }
-        // endConnection is called on unmount
-      } catch {
-        // IAP not available in dev/simulator — price stays null, fallback used
+      const pkg = await getMonthlyPackage();
+      if (!cancelled && pkg) {
+        setLocalizedPrice(pkg.product.priceString ?? null);
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [isGuest, isAdmin]);
 
   const handlePremiumPurchase = async () => {
     if (isAdmin) {
@@ -123,10 +121,25 @@ export default function SettingsScreen() {
       setPremiumModalVisible(false);
       return;
     }
-    // Real IAP flow — requires RevenueCat / Google Play Billing integration
-    // TODO: integrate real IAP via react-native-iap
-    appLog.log('[settings] premium purchase attempted (IAP pending)', { uid });
-    setPremiumModalVisible(false);
+
+    const pkg = await getMonthlyPackage();
+    if (!pkg) {
+      Alert.alert(t('premium.errorTitle'), t('premium.errorNoOffering'));
+      return;
+    }
+
+    setIsPurchasing(true);
+    const result = await purchasePackage(pkg);
+    setIsPurchasing(false);
+
+    if (result.success) {
+      await setPremium(true);
+      setPremiumModalVisible(false);
+      appLog.log('[settings] premium activated via RevenueCat', { uid });
+    } else if (!result.cancelled) {
+      Alert.alert(t('premium.errorTitle'), result.error ?? t('premium.errorGeneric'));
+    }
+    // user cancelled → do nothing
   };
 
   const handleOpenEditProfile = () => {
@@ -172,6 +185,7 @@ export default function SettingsScreen() {
   const handleLogout = async () => {
     appLog.log('[settings] logout', { uid });
     if (uid) await logActivity(uid, 'logout');
+    logOutFromPurchases().catch(() => {});
     await logOut();
     setAuth(null);
   };
@@ -309,17 +323,38 @@ export default function SettingsScreen() {
             </View>
 
             <Pressable
-              style={[s.purchaseBtn, { backgroundColor: colors.primary }]}
+              style={[s.purchaseBtn, { backgroundColor: isPurchasing ? colors.textMuted : colors.primary }]}
               onPress={handlePremiumPurchase}
+              disabled={isPurchasing}
             >
               <Text style={s.purchaseBtnText}>
-                {localizedPrice
-                  ? t('premium.purchaseDynamic', { price: localizedPrice })
-                  : t('premium.purchase')}
+                {isPurchasing
+                  ? t('premium.purchasing')
+                  : localizedPrice
+                    ? t('premium.purchaseDynamic', { price: localizedPrice })
+                    : t('premium.purchase')}
               </Text>
             </Pressable>
             <Pressable style={s.laterBtn} onPress={() => setPremiumModalVisible(false)}>
               <Text style={[s.laterBtnText, { color: colors.textMuted }]}>{t('premium.later')}</Text>
+            </Pressable>
+            <Pressable
+              style={s.laterBtn}
+              onPress={async () => {
+                setIsPurchasing(true);
+                const active = await restoreAndCheckEntitlement();
+                setIsPurchasing(false);
+                if (active) {
+                  await setPremium(true);
+                  setPremiumModalVisible(false);
+                  Alert.alert(t('premium.restoreSuccessTitle'), t('premium.restoreSuccessDesc'));
+                } else {
+                  Alert.alert(t('premium.restoreNoneTitle'), t('premium.restoreNoneDesc'));
+                }
+              }}
+              disabled={isPurchasing}
+            >
+              <Text style={[s.laterBtnText, { color: colors.textMuted }]}>{t('premium.restore')}</Text>
             </Pressable>
           </Pressable>
         </Pressable>

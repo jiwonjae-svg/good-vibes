@@ -8,6 +8,7 @@ import '../i18n';
 import { initFirebase } from '../services/firebaseConfig';
 import { initSentry } from '../services/sentryService';
 import { configureGoogleSignIn, onAuthChange, getCurrentUser, logOut } from '../services/authService';
+import { initializePurchases, logInToPurchases, checkEntitlement } from '../services/purchaseService';
 import { initNotificationHandler, validateAndRescheduleDailyReminder, checkFollowNotifications } from '../services/notificationService';
 import { saveStreakForWidget } from '../services/widgetService';
 import { useGrassStore } from '../stores/useGrassStore';
@@ -228,6 +229,7 @@ export default function RootLayout() {
     initFirebase();
     configureGoogleSignIn();
     initNotificationHandler();
+    initializePurchases().catch(() => {});
     loadGrass();
     loadUser();
     // Ensure the Android navigation bar stays visible (already set in app.config.js);
@@ -236,6 +238,19 @@ export default function RootLayout() {
       NavigationBar.setVisibilityAsync('visible').catch(() => {});
     }
   }, []);
+
+  // Sync RevenueCat user identity and refresh entitlement when the uid changes.
+  const uid = useUserStore((s) => s.uid);
+  useEffect(() => {
+    if (!isLoaded || !uid) return;
+    logInToPurchases(uid).catch(() => {});
+    // Reconcile local premium status with RevenueCat
+    checkEntitlement().then((active) => {
+      if (active && !useUserStore.getState().isPremium) {
+        useUserStore.getState().setPremium(true).catch(() => {});
+      }
+    }).catch(() => {});
+  }, [uid, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded || showSplash) return;

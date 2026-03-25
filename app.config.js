@@ -98,6 +98,9 @@ export default {
       googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
       googleIosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
       googleAndroidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+      // RevenueCat public SDK keys (not the secret REST API keys)
+      rcApiKeyAndroid: process.env.EXPO_PUBLIC_RC_API_KEY_ANDROID,
+      rcApiKeyIos: process.env.EXPO_PUBLIC_RC_API_KEY_IOS,
     },
   },
 };

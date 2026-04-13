@@ -3,21 +3,21 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
-    "eas-build-post-install": "node scripts/setup-google-services.js",
+    "eas-build-post-install": "node internal/scripts/setup-google-services.js",
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build:android:local": "eas build --local --platform android --profile preview",
     "build:android:local:production": "eas build --local --platform android --profile production",
-    "build:android:wsl": "powershell -ExecutionPolicy Bypass -File ./scripts/build-android-wsl.ps1",
+    "build:android:wsl": "powershell -ExecutionPolicy Bypass -File ./internal/scripts/build-android-wsl.ps1",
     "prepare": "husky",
-    "check:secrets": "node scripts/check-secrets.js",
+    "check:secrets": "node internal/scripts/check-secrets.js",
     "check:env": "node -e \"require('./constants/config.ts')\" || echo 'Run: npx ts-node constants/config.ts'"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,md}": [
-      "node scripts/check-secrets.js"
+      "node internal/scripts/check-secrets.js"
     ]
   },
   "dependencies": {
@@ -60,6 +60,8 @@
     "react-native-gesture-handler": "~2.28.0",
     "react-native-google-mobile-ads": "^16.0.3",
     "react-native-iap": "^14.7.16",
+    "react-native-purchases": "^9.14.0",
+    "react-native-purchases-ui": "^9.14.0",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",

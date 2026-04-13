@@ -17,14 +17,11 @@ export const widgetService = {
     try {
       await AsyncStorage.setItem(WIDGET_DATA_KEY, JSON.stringify(quote));
 
-      const streak = quote.streak ?? 0;
       if (Platform.OS === 'android' && NativeModules.WidgetModule) {
         await NativeModules.WidgetModule.saveQuoteData(quote.text, quote.author ?? '', quote.id ?? '');
-        if (streak > 0) await NativeModules.WidgetModule.saveStreakData(streak);
         await NativeModules.WidgetModule.updateWidget();
       } else if (Platform.OS === 'ios' && NativeModules.WidgetModule) {
         await NativeModules.WidgetModule.saveQuoteData(quote.text, quote.author ?? '', quote.id ?? '');
-        if (streak > 0) await NativeModules.WidgetModule.saveStreakData(streak);
         await NativeModules.WidgetModule.reloadAllTimelines();
       }
     } catch (error) {

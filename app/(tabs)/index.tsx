@@ -135,26 +135,27 @@ export default function HomeScreen() {
     fetchFollowedUserIds(uid).then(setFollowedUids).catch(() => {});
   }, [uid]);
 
-  // Save today's daily quote to widget when quotes first load (all users)
+  // Save today's daily quote to widget when quotes first load or language changes (all users)
   useEffect(() => {
     if (quotes.length === 0 || widgetSavedRef.current) return;
     widgetSavedRef.current = true;
     const daily = getDailyQuote(quotes);
     if (!daily) return;
     saveQuoteForWidget(daily.text, daily.author, daily.category, daily.id, currentStreak, isPremium);
-    // Seed the widget refresh buffer with 5 random quotes for free users so
-    // the refresh button cycles through varied content rather than staying stuck.
-    if (!isPremium && quotes.length > 1) {
+    // Seed the widget refresh buffer so the refresh button cycles through varied content.
+    // Premium: up to 30 quotes. Free: up to 5 quotes.
+    if (quotes.length > 1) {
+      const maxBuffer = isPremium ? 30 : 5;
       const others = quotes.filter((q) => q.id !== daily.id);
       const seed: WidgetQuoteData[] = [
         { id: daily.id, text: daily.text, author: daily.author, category: daily.category, updatedAt: Date.now() },
-        ...[...others].sort(() => Math.random() - 0.5).slice(0, 4).map((q) => ({
+        ...[...others].sort(() => Math.random() - 0.5).slice(0, maxBuffer - 1).map((q) => ({
           id: q.id, text: q.text, author: q.author, category: q.category, updatedAt: Date.now(),
         })),
       ];
       saveQuotesBufferForWidget(seed).catch(() => {});
     }
-  }, [quotes.length]);
+  }, [quotes.length, language]);
 
   // When streak loads from Firestore after login, update the widget streak value
   useEffect(() => {
@@ -166,11 +167,6 @@ export default function HomeScreen() {
   useEffect(() => {
     widgetSavedRef.current = false;
   }, [language]);
-
-  // When streak loads from Firestore (after login), update the widget streak value
-  useEffect(() => {
-    if (currentStreak > 0) saveStreakForWidget(currentStreak).catch(() => {});
-  }, [currentStreak]);
 
   // When language changes, reset the widget save flag so the new-language
   // quote gets persisted on the next quote load

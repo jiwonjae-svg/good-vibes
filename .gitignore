@@ -70,6 +70,7 @@ Deployment.md
 # These files were fully purged from git history using git-filter-repo.
 # Do NOT stage or commit anything under docs/ — internal use only.
 docs/
+internal/
 
 # Agent documentation (local-only project docs for AI assistants)
 agents/
@@ -94,12 +95,11 @@ Thumbs.db
 repomix-output.xml
 
 # Firebase service account key (DO NOT COMMIT)
-scripts/serviceAccount.json
+internal/scripts/serviceAccount.json
 
 # Data pipeline backup files (regeneratable)
 data/*.bak*
 data/*.bak
-scripts/serviceAccount.json
 *.apk
 *.aab
 

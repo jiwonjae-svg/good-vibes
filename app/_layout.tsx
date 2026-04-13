@@ -155,11 +155,12 @@ export default function RootLayout() {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
-        const { dailyReminderEnabled, uid, displayName, currentStreak, refreshCloudData } = useUserStore.getState();
+        const { dailyReminderEnabled, uid, displayName, currentStreak, notificationHours, refreshCloudData } = useUserStore.getState();
         validateAndRescheduleDailyReminder(dailyReminderEnabled, {
           uid: uid ?? undefined,
           userName: displayName ?? undefined,
           currentStreak,
+          notificationHours: notificationHours ?? [8],
         }).catch(() => {});
         // Re-sync badge/streak/social data when coming back to foreground.
         // This also recovers cloud data that was unavailable at login (offline scenario).

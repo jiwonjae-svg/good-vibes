@@ -743,6 +743,12 @@ export const useUserStore = create<UserState>((set, get) => ({
     set({ currentStreak: newStreak, lastActiveDate: todayStr });
     appLog.log('[streak] updated', { uid, newStreak, daysSince });
 
+    // Immediately sync the new streak to widget to prevent stale/max streak display
+    try {
+      const { saveStreakForWidget } = require('../services/widgetService');
+      saveStreakForWidget(newStreak).catch(() => {});
+    } catch { /* silent */ }
+
     // Award streak milestones
     const currentBadges = get().earnedBadges;
     for (const threshold of STREAK_BADGE_THRESHOLDS) {
@@ -771,13 +777,14 @@ export const useUserStore = create<UserState>((set, get) => ({
 
     // Reschedule smart notifications so the near-milestone 08:30 slot is
     // added or removed correctly based on the updated streak value.
-    const { dailyReminderEnabled, displayName } = get();
+    const { dailyReminderEnabled, displayName, notificationHours } = get();
     if (dailyReminderEnabled) {
       scheduleSmartNotifications({
         dailyReminderEnabled: true,
         uid: uid ?? undefined,
         userName: displayName ?? undefined,
         currentStreak: newStreak,
+        notificationHours: notificationHours ?? [8],
       }).catch(() => {});
     }
   },

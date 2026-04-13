@@ -1,2 +1,2 @@
-node scripts/check-secrets.js
+node internal/scripts/check-secrets.js
 npx lint-staged

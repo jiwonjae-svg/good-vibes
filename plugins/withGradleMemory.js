@@ -7,7 +7,7 @@ const { withGradleProperties } = require("expo/config-plugins");
  */
 module.exports = function withGradleMemory(config, { jvmArgs } = {}) {
   const args =
-    jvmArgs || "-Xmx6144m -XX:MaxMetaspaceSize=1024m";
+    jvmArgs || "-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -XX:+UseParallelGC";
 
   return withGradleProperties(config, (config) => {
     const props = config.modResults;
